@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-match-v1
+  namespace: monkeyswork-ai
+  labels:
+    app: ai-match-v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-match-v1
+  template:
+    metadata:
+      labels:
+        app: ai-match-v1
+        tier: ai-service
+    spec:
+      serviceAccountName: ai-match-v1
+      tolerations:
+        - key: "workload-type"
+          operator: "Equal"
+          value: "ai"
+          effect: "NoSchedule"
+      containers:
+        - name: ai-match-v1
+          image: ARTIFACT_REGISTRY_URL/ai-match-v1:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: feature-flags
+          env:
+            - name: SERVICE_NAME
+              value: "ai-match-v1"
+            - name: NODE_ENV
+              value: "production"
+            - name: LOG_LEVEL
+              value: "info"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+      nodeSelector:
+        workload-type: ai
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-match-v1
+  namespace: monkeyswork-ai
+spec:
+  selector:
+    app: ai-match-v1
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

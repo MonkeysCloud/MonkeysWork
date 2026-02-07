@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars and fill in values
+project_id          = "monkeyswork-dev"
+region              = "us-central1"
+zone                = "us-central1-a"
+environment         = "dev"
+gke_node_count      = 2
+gke_ai_node_count   = 1
+gke_machine_type    = "e2-standard-4"
+gke_ai_machine_type = "n1-standard-8"
+db_tier             = "db-custom-2-8192"
+db_password         = "CHANGE_ME_USE_SECRET_MANAGER"
+authorized_networks = []
+domain              = "monkeyswork.com"
+enable_vertex_ai    = true

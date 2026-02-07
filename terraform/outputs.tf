@@ -1,0 +1,48 @@
+output "gke_cluster_name" {
+  value = google_container_cluster.primary.name
+}
+
+output "gke_cluster_endpoint" {
+  value     = google_container_cluster.primary.endpoint
+  sensitive = true
+}
+
+output "cloudsql_instance_connection" {
+  value = google_sql_database_instance.postgres.connection_name
+}
+
+output "cloudsql_private_ip" {
+  value = google_sql_database_instance.postgres.private_ip_address
+}
+
+output "artifact_registry_url" {
+  value = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.services.repository_id}"
+}
+
+output "ml_artifacts_bucket" {
+  value = google_storage_bucket.ml_artifacts.name
+}
+
+output "uploads_bucket" {
+  value = google_storage_bucket.uploads.name
+}
+
+output "vpc_network_id" {
+  value = google_compute_network.main.id
+}
+
+output "vpc_connector_name" {
+  value = google_vpc_access_connector.connector.name
+}
+
+output "pubsub_topics" {
+  value = { for k, v in google_pubsub_topic.topics : k => v.id }
+}
+
+output "service_accounts" {
+  value = { for k, v in google_service_account.services : k => v.email }
+}
+
+output "wif_provider" {
+  value = google_iam_workload_identity_pool_provider.github.name
+}

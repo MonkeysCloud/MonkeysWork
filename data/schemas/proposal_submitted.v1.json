@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://monkeyswork.com/schemas/events/proposal_submitted.v1.json",
+  "title": "ProposalSubmitted",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "timestamp",
+    "idempotency_key",
+    "data"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "const": "proposal_submitted"
+    },
+    "event_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "proposal_id",
+        "job_id",
+        "freelancer_id",
+        "bid_amount",
+        "bid_type"
+      ],
+      "properties": {
+        "proposal_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "job_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "freelancer_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "bid_amount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "bid_type": {
+          "type": "string",
+          "enum": [
+            "fixed",
+            "hourly"
+          ]
+        },
+        "cover_letter": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "estimated_duration_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "milestones_proposed": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "ai_match_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "ai_match_model_version": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

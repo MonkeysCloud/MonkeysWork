@@ -1,0 +1,83 @@
+# Default deny all ingress in monkeyswork namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: monkeyswork
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress-ai
+  namespace: monkeyswork-ai
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Allow api-core to receive traffic from ingress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-api-core
+  namespace: monkeyswork
+spec:
+  podSelector:
+    matchLabels:
+      app: api-core
+  ingress:
+    - from: []
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Allow AI services to receive traffic only from api-core
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-core-to-ai
+  namespace: monkeyswork-ai
+spec:
+  podSelector:
+    matchLabels:
+      tier: ai-service
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: monkeyswork
+          podSelector:
+            matchLabels:
+              app: api-core
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# Allow all egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress
+  namespace: monkeyswork
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-ai
+  namespace: monkeyswork-ai
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - {}

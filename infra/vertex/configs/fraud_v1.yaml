@@ -1,0 +1,19 @@
+pipeline_name: mw-fraud-v1-pipeline
+model_name: mw-fraud-v1
+schedule: "0 4 * * 0"  # Weekly Sunday 4am
+
+parameters:
+  project_id: ${PROJECT_ID}
+  region: us-central1
+  traffic_percentage: 0
+
+quality_thresholds:
+  auc_roc: 0.90
+  precision_at_90_recall: 0.70
+  false_positive_rate: 0.10
+  detection_latency_p99_ms: 500
+
+serving:
+  machine_type: n1-standard-4
+  min_replicas: 1
+  max_replicas: 5

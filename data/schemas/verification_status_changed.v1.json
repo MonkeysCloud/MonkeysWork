@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://monkeyswork.com/schemas/events/verification_status_changed.v1.json",
+  "title": "VerificationStatusChanged",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "timestamp",
+    "idempotency_key",
+    "data"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "const": "verification_status_changed"
+    },
+    "event_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "verification_id",
+        "user_id",
+        "verification_type",
+        "previous_status",
+        "new_status"
+      ],
+      "properties": {
+        "verification_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "verification_type": {
+          "type": "string",
+          "enum": [
+            "identity",
+            "skill_assessment",
+            "portfolio",
+            "work_history",
+            "payment_method"
+          ]
+        },
+        "previous_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "in_review",
+            "auto_approved",
+            "auto_rejected",
+            "human_review",
+            "approved",
+            "rejected"
+          ]
+        },
+        "new_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "in_review",
+            "auto_approved",
+            "auto_rejected",
+            "human_review",
+            "approved",
+            "rejected"
+          ]
+        },
+        "confidence_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "model_version": {
+          "type": "string"
+        },
+        "reviewed_by": {
+          "type": "string"
+        },
+        "rejection_reason": {
+          "type": "string"
+        },
+        "decision_audit": {
+          "type": "object",
+          "properties": {
+            "model_name": {
+              "type": "string"
+            },
+            "model_version": {
+              "type": "string"
+            },
+            "prompt_version": {
+              "type": "string"
+            },
+            "features_used": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "explanation": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://monkeyswork.com/schemas/events/dispute_opened.v1.json",
+  "title": "DisputeOpened",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "timestamp",
+    "idempotency_key",
+    "data"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "const": "dispute_opened"
+    },
+    "event_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "dispute_id",
+        "contract_id",
+        "milestone_id",
+        "opened_by",
+        "reason"
+      ],
+      "properties": {
+        "dispute_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "contract_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "milestone_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "job_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "opened_by": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "against": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "quality",
+            "non_delivery",
+            "scope_change",
+            "payment",
+            "communication",
+            "other"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "amount_disputed": {
+          "type": "number",
+          "minimum": 0
+        },
+        "evidence_urls": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://monkeyswork.com/schemas/events/fraud_score_computed.v1.json",
+  "title": "FraudScoreComputed",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "timestamp",
+    "idempotency_key",
+    "data"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "const": "fraud_score_computed"
+    },
+    "event_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "account_id",
+        "fraud_score",
+        "risk_tier",
+        "recommended_action"
+      ],
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fraud_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "risk_tier": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "recommended_action": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "review",
+            "soft_block",
+            "hard_block"
+          ]
+        },
+        "top_risk_factors": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "model_version": {
+          "type": "string"
+        },
+        "enforcement_mode": {
+          "type": "string",
+          "enum": [
+            "shadow",
+            "log_only",
+            "soft_block",
+            "enforce"
+          ]
+        }
+      }
+    }
+  }
+}

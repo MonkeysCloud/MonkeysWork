@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://monkeyswork.com/schemas/events/job_created.v1.json",
+  "title": "JobCreated",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "timestamp",
+    "idempotency_key",
+    "data"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "const": "job_created"
+    },
+    "event_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "job_id",
+        "client_id",
+        "title",
+        "description",
+        "category",
+        "budget_type"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "client_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 10000
+        },
+        "category": {
+          "type": "string"
+        },
+        "skills_required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "budget_type": {
+          "type": "string",
+          "enum": [
+            "fixed",
+            "hourly"
+          ]
+        },
+        "budget_min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "budget_max": {
+          "type": "number",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "default": "USD"
+        },
+        "visibility": {
+          "type": "string",
+          "enum": [
+            "public",
+            "invite_only"
+          ],
+          "default": "public"
+        }
+      }
+    }
+  }
+}
