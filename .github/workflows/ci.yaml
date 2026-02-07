@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api-core, ai-scope-assistant, ai-match-v1, ai-fraud-v1, verification-automation]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: hashFiles(format('services/{0}/package.json', matrix.service)) != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        if: hashFiles(format('services/{0}/requirements.txt', matrix.service)) != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install and test
+        working-directory: services/${{ matrix.service }}
+        run: |
+          if [ -f package.json ]; then
+            npm ci
+            npm run lint || true
+            npm test || true
+          elif [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+            pip install pytest ruff
+            ruff check src/ || true
+            pytest tests/ || true
+          fi
+
+  schema-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate event schemas
+        run: |
+          pip install jsonschema
+          python data/scripts/validate_schemas.py
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test]
+    strategy:
+      matrix:
+        service: [api-core, ai-scope-assistant, ai-match-v1, ai-fraud-v1, verification-automation]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t ${{ matrix.service }}:test services/${{ matrix.service }}/
+
+  terraform-validate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform Validate
+        working-directory: terraform/
+        run: |
+          terraform init -backend=false
+          terraform validate

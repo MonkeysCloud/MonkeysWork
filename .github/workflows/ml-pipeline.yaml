@@ -1,0 +1,57 @@
+name: ML Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      pipeline:
+        description: 'Pipeline to run'
+        required: true
+        type: choice
+        options:
+          - scope_assistant
+          - match_v1
+          - fraud_v1
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install kfp google-cloud-aiplatform
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_VERTEX_SA }}
+
+      - name: Compile and submit pipeline
+        run: |
+          cd ml/${{ inputs.pipeline }}
+          python pipeline.py
+          # Submit to Vertex AI
+          gcloud ai pipelines runs create \
+            --region=${{ env.REGION }} \
+            --display-name="${{ inputs.pipeline }}-$(date +%Y%m%d)" \
+            --pipeline-spec="${{ inputs.pipeline }}_pipeline.json"

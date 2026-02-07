@@ -1,0 +1,65 @@
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfplan
+terraform/tfplan
+terraform/.terraform.lock.hcl
+*.tfvars
+!terraform.tfvars.example
+!environments/*/terraform.tfvars.example
+
+# Node
+node_modules/
+npm-debug.log*
+dist/
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+*.egg
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+
+# Docker
+.docker/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# ML artifacts
+ml/**/artifacts/
+ml/**/checkpoints/
+ml/**/outputs/
+*.h5
+*.pkl
+*.joblib
+*.onnx
+
+# Compiled pipelines
+*.json.pipeline
+*_pipeline.json
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db

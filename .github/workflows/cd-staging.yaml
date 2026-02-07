@@ -1,0 +1,50 @@
+name: CD Staging
+
+on:
+  push:
+    branches: [main]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  ENV: staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        service: [api-core, ai-scope-assistant, ai-match-v1, ai-fraud-v1, verification-automation]
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Build and Push
+        run: |
+          TAG="${{ github.sha }}"
+          REGISTRY="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/mw-${{ env.ENV }}-services"
+          docker build -t "$REGISTRY/${{ matrix.service }}:$TAG" services/${{ matrix.service }}/
+          docker push "$REGISTRY/${{ matrix.service }}:$TAG"
+
+      - name: Deploy to GKE
+        run: |
+          gcloud container clusters get-credentials "mw-${{ env.ENV }}-cluster" --zone us-central1-a
+          NAMESPACE="monkeyswork"
+          [[ "${{ matrix.service }}" == ai-* ]] && NAMESPACE="monkeyswork-ai"
+          kubectl set image "deployment/${{ matrix.service }}" \
+            "${{ matrix.service }}=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/mw-${{ env.ENV }}-services/${{ matrix.service }}:${{ github.sha }}" \
+            -n "$NAMESPACE"
+          kubectl rollout status "deployment/${{ matrix.service }}" -n "$NAMESPACE" --timeout=300s
