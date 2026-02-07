@@ -476,13 +476,14 @@ resource "google_pubsub_subscription" "subs" {
 # ─────────────────────────────────────────────────────
 locals {
   service_accounts = {
-    "api-core"       = "MonkeysWork API Core"
-    "ai-scope"       = "MonkeysWork AI Scope Assistant"
-    "ai-match"       = "MonkeysWork AI Match Engine"
-    "ai-fraud"       = "MonkeysWork AI Fraud Service"
-    "verification"   = "MonkeysWork Verification"
-    "vertex-pipe"    = "MonkeysWork Vertex Pipelines"
-    "github-deploy"  = "MonkeysWork GitHub Actions Deploy"
+    "api-core"         = "MonkeysWork API Core"
+    "ai-scope"         = "MonkeysWork AI Scope Assistant"
+    "ai-match"         = "MonkeysWork AI Match Engine"
+    "ai-fraud"         = "MonkeysWork AI Fraud Service"
+    "verification"     = "MonkeysWork Verification"
+    "vertex-pipe"      = "MonkeysWork Vertex Pipelines"
+    "github-deploy"    = "MonkeysWork GitHub Actions Deploy"
+    "github-terraform" = "MonkeysWork GitHub Actions Terraform"
   }
 }
 
@@ -638,7 +639,23 @@ resource "google_service_account_iam_binding" "github_deploy_wi" {
   service_account_id = google_service_account.services["github-deploy"].name
   role               = "roles/iam.workloadIdentityUser"
   members = [
-    "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/monkeyswork/monkeyswork",
+    "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}",
+  ]
+}
+
+resource "google_service_account_iam_binding" "github_terraform_wi" {
+  service_account_id = google_service_account.services["github-terraform"].name
+  role               = "roles/iam.workloadIdentityUser"
+  members = [
+    "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}",
+  ]
+}
+
+resource "google_service_account_iam_binding" "github_vertex_wi" {
+  service_account_id = google_service_account.services["vertex-pipe"].name
+  role               = "roles/iam.workloadIdentityUser"
+  members = [
+    "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}",
   ]
 }
 
@@ -652,6 +669,18 @@ resource "google_project_iam_member" "github_deploy_ar" {
   project = var.project_id
   role    = "roles/artifactregistry.writer"
   member  = "serviceAccount:${google_service_account.services["github-deploy"].email}"
+}
+
+resource "google_project_iam_member" "github_terraform_editor" {
+  project = var.project_id
+  role    = "roles/editor"
+  member  = "serviceAccount:${google_service_account.services["github-terraform"].email}"
+}
+
+resource "google_project_iam_member" "github_terraform_iam" {
+  project = var.project_id
+  role    = "roles/resourcemanager.projectIamAdmin"
+  member  = "serviceAccount:${google_service_account.services["github-terraform"].email}"
 }
 
 # ─────────────────────────────────────────────────────

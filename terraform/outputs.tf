@@ -46,3 +46,18 @@ output "service_accounts" {
 output "wif_provider" {
   value = google_iam_workload_identity_pool_provider.github.name
 }
+
+output "github_deploy_sa_email" {
+  description = "GitHub secret: GCP_DEPLOY_SA"
+  value       = google_service_account.services["github-deploy"].email
+}
+
+output "github_terraform_sa_email" {
+  description = "GitHub secret: GCP_TERRAFORM_SA"
+  value       = google_service_account.services["github-terraform"].email
+}
+
+output "github_vertex_sa_email" {
+  description = "GitHub secret: GCP_VERTEX_SA"
+  value       = google_service_account.services["vertex-pipe"].email
+}

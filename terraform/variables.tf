@@ -77,3 +77,9 @@ variable "enable_vertex_ai" {
   type        = bool
   default     = true
 }
+
+variable "github_repo" {
+  description = "GitHub repository in owner/repo format for WIF binding"
+  type        = string
+  default     = "MonkeysCloud/MonkeysWork"
+}

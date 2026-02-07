@@ -12,3 +12,4 @@ db_password         = "CHANGE_ME_USE_SECRET_MANAGER"
 authorized_networks = []
 domain              = "monkeyswork.com"
 enable_vertex_ai    = true
+github_repo         = "MonkeysCloud/MonkeysWork"
