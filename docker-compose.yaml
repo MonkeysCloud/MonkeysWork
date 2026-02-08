@@ -91,7 +91,7 @@ services:
   monkeyswork-api:
     build: ./services/monkeyswork-api
     ports:
-      - "8085:8080"
+      - "8086:8080"
     environment:
       APP_ENV: dev
       DB_HOST: postgres

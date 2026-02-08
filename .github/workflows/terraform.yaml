@@ -11,6 +11,8 @@ on:
 
 env:
   TF_VAR_project_id: monkeyswork
+  TF_VAR_environment: prod
+  TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
 
 jobs:
   plan:
