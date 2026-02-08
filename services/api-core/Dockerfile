@@ -2,7 +2,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --production=false
+RUN npm install
 COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
@@ -13,7 +13,7 @@ RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --production && npm cache clean --force
+RUN npm install --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 
 USER appuser
