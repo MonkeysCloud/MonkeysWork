@@ -73,9 +73,19 @@ jobs:
       - name: Deploy to GKE
         run: |
           gcloud container clusters get-credentials "mw-${{ env.ENV }}-cluster" --zone us-central1-a
+
+          # Create namespaces if they don't exist
+          kubectl apply -f k8s/namespaces.yaml
+
+          # Determine image
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/mw-${{ env.ENV }}-services/${{ matrix.service }}:${{ github.sha }}"
+
+          # Apply manifest with updated image
+          sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" k8s/services/${{ matrix.service }}.yaml | kubectl apply -f -
+
+          # Determine namespace
           NAMESPACE="monkeyswork"
           [[ "${{ matrix.service }}" == ai-* ]] && NAMESPACE="monkeyswork-ai"
-          kubectl set image "deployment/${{ matrix.service }}" \
-            "${{ matrix.service }}=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/mw-${{ env.ENV }}-services/${{ matrix.service }}:${{ github.sha }}" \
-            -n "$NAMESPACE"
+
+          # Wait for rollout
           kubectl rollout status "deployment/${{ matrix.service }}" -n "$NAMESPACE" --timeout=600s

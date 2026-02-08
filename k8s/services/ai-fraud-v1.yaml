@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-fraud-v1
+  namespace: monkeyswork-ai
+  labels:
+    app: ai-fraud-v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-fraud-v1
+  template:
+    metadata:
+      labels:
+        app: ai-fraud-v1
+    spec:
+      tolerations:
+        - key: workload-type
+          value: ai
+          effect: NoSchedule
+      nodeSelector:
+        workload-type: ai
+      containers:
+        - name: ai-fraud-v1
+          image: IMAGE_PLACEHOLDER
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-fraud-v1
+  namespace: monkeyswork-ai
+spec:
+  selector:
+    app: ai-fraud-v1
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP

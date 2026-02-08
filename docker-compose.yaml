@@ -92,11 +92,14 @@ services:
     build: ./services/monkeyswork-api
     ports:
       - "8086:8080"
+    volumes:
+      - ./services/monkeyswork-api:/app
+      - monkeyswork_api_vendor:/app/vendor
     environment:
       APP_ENV: dev
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: monkeyswork
+      DB_DATABASE: monkeyswork
       DB_USER: mw_app
       DB_PASSWORD: localdev
     depends_on:
@@ -107,6 +110,10 @@ services:
     build: ./services/frontend
     ports:
       - "3000:3000"
+    volumes:
+      - ./services/frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://monkeyswork-api:8080
@@ -115,3 +122,6 @@ services:
 
 volumes:
   postgres_data:
+  monkeyswork_api_vendor:
+  frontend_node_modules:
+  frontend_next:
