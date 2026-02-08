@@ -1,11 +1,13 @@
 name: CD Production
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       service:
-        description: 'Service to deploy'
-        required: true
+        description: "Service to deploy (leave empty for all on push)"
+        required: false
         type: choice
         options:
           - api-core
@@ -14,12 +16,12 @@ on:
           - ai-fraud-v1
           - verification-automation
       tag:
-        description: 'Image tag (commit SHA)'
-        required: true
+        description: "Image tag (commit SHA, defaults to current)"
+        required: false
         type: string
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  PROJECT_ID: monkeyswork
   REGION: us-central1
   ENV: prod
 
@@ -30,6 +32,16 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    strategy:
+      matrix:
+        service:
+          [
+            api-core,
+            ai-scope-assistant,
+            ai-match-v1,
+            ai-fraud-v1,
+            verification-automation,
+          ]
     steps:
       - uses: actions/checkout@v4
 
@@ -41,12 +53,22 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Build and Push
+        run: |
+          TAG="${{ github.sha }}"
+          REGISTRY="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/mw-${{ env.ENV }}-services"
+          docker build -t "$REGISTRY/${{ matrix.service }}:$TAG" services/${{ matrix.service }}/
+          docker push "$REGISTRY/${{ matrix.service }}:$TAG"
+
       - name: Deploy to GKE
         run: |
           gcloud container clusters get-credentials "mw-${{ env.ENV }}-cluster" --zone us-central1-a
           NAMESPACE="monkeyswork"
-          [[ "${{ inputs.service }}" == ai-* ]] && NAMESPACE="monkeyswork-ai"
-          kubectl set image "deployment/${{ inputs.service }}" \
-            "${{ inputs.service }}=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/mw-${{ env.ENV }}-services/${{ inputs.service }}:${{ inputs.tag }}" \
+          [[ "${{ matrix.service }}" == ai-* ]] && NAMESPACE="monkeyswork-ai"
+          kubectl set image "deployment/${{ matrix.service }}" \
+            "${{ matrix.service }}=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/mw-${{ env.ENV }}-services/${{ matrix.service }}:${{ github.sha }}" \
             -n "$NAMESPACE"
-          kubectl rollout status "deployment/${{ inputs.service }}" -n "$NAMESPACE" --timeout=600s
+          kubectl rollout status "deployment/${{ matrix.service }}" -n "$NAMESPACE" --timeout=600s

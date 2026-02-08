@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       pipeline:
-        description: 'Pipeline to run'
+        description: "Pipeline to run"
         required: true
         type: choice
         options:
@@ -12,7 +12,7 @@ on:
           - match_v1
           - fraud_v1
       environment:
-        description: 'Target environment'
+        description: "Target environment"
         required: true
         type: choice
         options:
@@ -21,7 +21,7 @@ on:
           - prod
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  PROJECT_ID: monkeyswork
   REGION: us-central1
 
 jobs:
@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: pip install kfp google-cloud-aiplatform

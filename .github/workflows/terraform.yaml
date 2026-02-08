@@ -3,14 +3,14 @@ name: Terraform
 on:
   pull_request:
     paths:
-      - 'terraform/**'
+      - "terraform/**"
   push:
     branches: [main]
     paths:
-      - 'terraform/**'
+      - "terraform/**"
 
 env:
-  TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+  TF_VAR_project_id: monkeyswork
 
 jobs:
   plan:
