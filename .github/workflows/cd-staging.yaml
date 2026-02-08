@@ -48,6 +48,9 @@ jobs:
           docker build -t "$REGISTRY/${{ matrix.service }}:$TAG" services/${{ matrix.service }}/
           docker push "$REGISTRY/${{ matrix.service }}:$TAG"
 
+      - name: Install GKE auth plugin
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+
       - name: Deploy to GKE
         run: |
           gcloud container clusters get-credentials "mw-${{ env.ENV }}-cluster" --zone us-central1-a

@@ -42,6 +42,8 @@ RUN apk add --no-cache \
     oniguruma-dev \
     postgresql-dev \
     linux-headers \
+    git \
+    unzip \
     && docker-php-ext-install \
     pdo_pgsql \
     pgsql \
@@ -52,6 +54,9 @@ RUN apk add --no-cache \
     pcntl \
     sockets \
     pdo_mysql
+
+# Install Composer in production image
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # PHP production config
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
