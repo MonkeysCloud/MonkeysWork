@@ -342,11 +342,6 @@ resource "google_sql_database_instance" "postgres" {
       value = "1000"
     }
 
-    # Enable pgvector
-    database_flags {
-      name  = "cloudsql.enable_pgvector"
-      value = "on"
-    }
 
     backup_configuration {
       enabled                        = true
@@ -500,6 +495,7 @@ resource "google_service_account_iam_binding" "api_core_wi" {
   members = [
     "serviceAccount:${var.project_id}.svc.id.goog[monkeyswork/api-core]",
   ]
+  depends_on = [google_container_cluster.primary]
 }
 
 resource "google_service_account_iam_binding" "ai_scope_wi" {
@@ -508,6 +504,7 @@ resource "google_service_account_iam_binding" "ai_scope_wi" {
   members = [
     "serviceAccount:${var.project_id}.svc.id.goog[monkeyswork-ai/ai-scope-assistant]",
   ]
+  depends_on = [google_container_cluster.primary]
 }
 
 resource "google_service_account_iam_binding" "ai_match_wi" {
@@ -516,6 +513,7 @@ resource "google_service_account_iam_binding" "ai_match_wi" {
   members = [
     "serviceAccount:${var.project_id}.svc.id.goog[monkeyswork-ai/ai-match-v1]",
   ]
+  depends_on = [google_container_cluster.primary]
 }
 
 resource "google_service_account_iam_binding" "ai_fraud_wi" {
@@ -524,6 +522,7 @@ resource "google_service_account_iam_binding" "ai_fraud_wi" {
   members = [
     "serviceAccount:${var.project_id}.svc.id.goog[monkeyswork-ai/ai-fraud-v1]",
   ]
+  depends_on = [google_container_cluster.primary]
 }
 
 resource "google_service_account_iam_binding" "verification_wi" {
@@ -532,6 +531,7 @@ resource "google_service_account_iam_binding" "verification_wi" {
   members = [
     "serviceAccount:${var.project_id}.svc.id.goog[monkeyswork/verification-automation]",
   ]
+  depends_on = [google_container_cluster.primary]
 }
 
 # Role bindings
@@ -629,6 +629,8 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.actor"      = "assertion.actor"
     "attribute.repository" = "assertion.repository"
   }
+
+  attribute_condition = "assertion.repository == \"${var.github_repo}\""
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"

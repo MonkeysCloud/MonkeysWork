@@ -1,0 +1,21 @@
+{
+  "name": "monkeyscloud/monkeyswork-api",
+  "description": "MonkeysWork PHP API built on MonkeysLegion",
+  "type": "project",
+  "require": {
+    "php": "^8.4",
+    "monkeyscloud/monkeyslegion-skeleton": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "src/"
+    }
+  },
+  "scripts": {
+    "post-create-project-cmd": [
+      "@php -r \"copy('.env.example', '.env');\""
+    ]
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}

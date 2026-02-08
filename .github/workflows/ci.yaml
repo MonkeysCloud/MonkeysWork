@@ -46,6 +46,8 @@ jobs:
             pip install pytest ruff
             ruff check src/ || true
             pytest tests/ || true
+          elif [ -f composer.json ]; then
+            echo "PHP service detected — skipping lint in CI"
           fi
 
   schema-validation:

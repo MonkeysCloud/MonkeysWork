@@ -88,5 +88,30 @@ services:
       LOG_LEVEL: debug
       PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
 
+  monkeyswork-api:
+    build: ./services/monkeyswork-api
+    ports:
+      - "8085:8080"
+    environment:
+      APP_ENV: dev
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: monkeyswork
+      DB_USER: mw_app
+      DB_PASSWORD: localdev
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./services/frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://monkeyswork-api:8080
+    depends_on:
+      - monkeyswork-api
+
 volumes:
   postgres_data:

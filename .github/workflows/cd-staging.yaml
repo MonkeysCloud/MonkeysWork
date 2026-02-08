@@ -24,6 +24,8 @@ jobs:
             ai-match-v1,
             ai-fraud-v1,
             verification-automation,
+            monkeyswork-api,
+            frontend,
           ]
     steps:
       - uses: actions/checkout@v4
