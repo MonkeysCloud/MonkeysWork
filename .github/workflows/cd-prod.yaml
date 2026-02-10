@@ -10,7 +10,6 @@ on:
         required: false
         type: choice
         options:
-          - api-core
           - ai-scope-assistant
           - ai-match-v1
           - ai-fraud-v1
@@ -38,7 +37,6 @@ jobs:
       matrix:
         service:
           [
-            api-core,
             ai-scope-assistant,
             ai-match-v1,
             ai-fraud-v1,
