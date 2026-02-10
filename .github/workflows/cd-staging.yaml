@@ -25,6 +25,7 @@ jobs:
             verification-automation,
             monkeyswork-api,
             frontend,
+            socket-server,
           ]
     steps:
       - uses: actions/checkout@v4

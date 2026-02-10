@@ -67,13 +67,25 @@ services:
       LOG_LEVEL: debug
       PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   monkeyswork-api:
     build: ./services/monkeyswork-api
     ports:
       - "8086:8080"
     volumes:
       - ./services/monkeyswork-api/www:/app/www
-      - monkeyswork_api_vendor:/app/www/vendor
+      - ./services/monkeyswork-api/www/vendor:/app/www/vendor
     environment:
       APP_ENV: dev
       DB_HOST: postgres
@@ -81,8 +93,27 @@ services:
       DB_DATABASE: monkeyswork
       DB_USER: mw_app
       DB_PASSWORD: localdev
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  socket-server:
+    build: ./services/socket-server
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./services/socket-server/src:/app/src
+    environment:
+      NODE_ENV: development
+      PORT: "3001"
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGIN: http://localhost:3000
+      JWT_SECRET: dev-secret-change-me
+    depends_on:
+      redis:
         condition: service_healthy
 
   frontend:
@@ -97,10 +128,12 @@ services:
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://monkeyswork-api:8080
+      NEXT_PUBLIC_SOCKET_URL: http://socket-server:3001
     depends_on:
       - monkeyswork-api
+      - socket-server
 
 volumes:
   postgres_data:
-  monkeyswork_api_vendor:
+  redis_data:
   frontend_node_modules:

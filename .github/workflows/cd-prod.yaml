@@ -16,6 +16,7 @@ on:
           - verification-automation
           - monkeyswork-api
           - frontend
+          - socket-server
       tag:
         description: "Image tag (commit SHA, defaults to current)"
         required: false
@@ -43,6 +44,7 @@ jobs:
             verification-automation,
             monkeyswork-api,
             frontend,
+            socket-server,
           ]
     steps:
       - uses: actions/checkout@v4

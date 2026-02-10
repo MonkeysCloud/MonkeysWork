@@ -10,7 +10,7 @@ ENV ?= dev
 REGISTRY = $(REGION)-docker.pkg.dev/$(PROJECT_ID)/mw-$(ENV)-services
 TAG ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "latest")
 
-SERVICES = ai-scope-assistant ai-match-v1 ai-fraud-v1 verification-automation
+SERVICES = ai-scope-assistant ai-match-v1 ai-fraud-v1 verification-automation socket-server
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
