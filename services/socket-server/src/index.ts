@@ -163,8 +163,8 @@ async function start(): Promise<void> {
         await setupRedisAdapter();
 
         // Setup Redis subscriber for PHP → Socket.IO bridge
-        const subscriber = createRedisSubscriber(io, REDIS_URL);
-        await subscriber.connect();
+        // Note: subscribe() inside createRedisSubscriber auto-connects
+        createRedisSubscriber(io, REDIS_URL);
 
         // Start HTTP server
         httpServer.listen(PORT, "0.0.0.0", () => {
@@ -177,7 +177,6 @@ async function start(): Promise<void> {
         const shutdown = async () => {
             console.log("[server] Shutting down...");
             io.close();
-            await subscriber.quit();
             httpServer.close();
             process.exit(0);
         };
