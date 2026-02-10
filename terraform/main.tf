@@ -17,6 +17,7 @@ locals {
     "monitoring.googleapis.com",
     "servicenetworking.googleapis.com",
     "vpcaccess.googleapis.com",
+    "redis.googleapis.com",
   ]
 }
 
@@ -833,4 +834,62 @@ resource "google_monitoring_alert_policy" "pod_restarts" {
   }
 
   notification_channels = [google_monitoring_notification_channel.email.id]
+}
+
+# ─────────────────────────────────────────────────────
+# 11. MEMORYSTORE — Redis
+# ─────────────────────────────────────────────────────
+resource "google_redis_instance" "main" {
+  name           = "mw-${var.environment}-redis"
+  tier           = var.environment == "prod" ? "STANDARD_HA" : "BASIC"
+  memory_size_gb = var.redis_memory_gb
+  region         = var.region
+  location_id    = var.zone
+
+  redis_version = "REDIS_7_0"
+
+  authorized_network = google_compute_network.main.id
+  connect_mode       = "PRIVATE_SERVICE_ACCESS"
+
+  redis_configs = {
+    maxmemory-policy = "allkeys-lru"
+  }
+
+  labels = {
+    environment = var.environment
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_service_networking_connection.private_vpc,
+  ]
+}
+
+# ─────────────────────────────────────────────────────
+# 12. KUBERNETES SECRETS — Redis + JWT for socket-server
+# ─────────────────────────────────────────────────────
+resource "kubernetes_secret_v1" "redis_credentials" {
+  metadata {
+    name      = "redis-credentials"
+    namespace = "monkeyswork"
+  }
+
+  data = {
+    url = "redis://${google_redis_instance.main.host}:${google_redis_instance.main.port}"
+  }
+
+  depends_on = [google_container_cluster.primary]
+}
+
+resource "kubernetes_secret_v1" "jwt_secret" {
+  metadata {
+    name      = "jwt-secret"
+    namespace = "monkeyswork"
+  }
+
+  data = {
+    secret = var.jwt_secret
+  }
+
+  depends_on = [google_container_cluster.primary]
 }

@@ -83,3 +83,15 @@ variable "github_repo" {
   type        = string
   default     = "MonkeysCloud/MonkeysWork"
 }
+
+variable "redis_memory_gb" {
+  description = "Memorystore Redis instance size in GB"
+  type        = number
+  default     = 1
+}
+
+variable "jwt_secret" {
+  description = "JWT signing secret for socket-server auth"
+  type        = string
+  sensitive   = true
+}

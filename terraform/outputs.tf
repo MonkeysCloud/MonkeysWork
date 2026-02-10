@@ -61,3 +61,13 @@ output "github_vertex_sa_email" {
   description = "GitHub secret: GCP_VERTEX_SA"
   value       = google_service_account.services["vertex-pipe"].email
 }
+
+output "redis_host" {
+  description = "Memorystore Redis private IP"
+  value       = google_redis_instance.main.host
+}
+
+output "redis_port" {
+  description = "Memorystore Redis port"
+  value       = google_redis_instance.main.port
+}

@@ -16,13 +16,13 @@ $dbPass     = $env['DB_PASSWORD']
     ?? '';
 
 return [
-    'default' => 'mysql',
+    'default' => 'postgresql',
 
     'connections' => [
-        'mysql' => [
+        'postgresql' => [
             'dsn'      => sprintf(
-                'mysql:host=%s;port=%s;dbname=%s;charset=%s',
-                $dbHost, $dbPort, $dbName, $dbCharset
+                'pgsql:host=%s;port=%s;dbname=%s',
+                $dbHost, $dbPort, $dbName
             ),
             'username' => $dbUser,
             'password' => $dbPass,
