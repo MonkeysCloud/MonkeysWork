@@ -1,0 +1,285 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Controller;
+
+use App\Event\ProposalAccepted;
+use App\Event\ProposalSubmitted;
+use App\Validator\ProposalValidator;
+use MonkeysLegion\Database\Contracts\ConnectionInterface;
+use MonkeysLegion\Http\Message\JsonResponse;
+use MonkeysLegion\Router\Attributes\Middleware;
+use MonkeysLegion\Router\Attributes\Route;
+use MonkeysLegion\Router\Attributes\RoutePrefix;
+use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Http\Message\ServerRequestInterface;
+
+#[RoutePrefix('/api/v1/proposals')]
+#[Middleware('auth')]
+final class ProposalController
+{
+    use ApiController;
+
+    public function __construct(
+        private ConnectionInterface $db,
+        private ProposalValidator $proposalValidator = new ProposalValidator(),
+        private ?EventDispatcherInterface $events = null,
+    ) {}
+
+    #[Route('POST', '', name: 'proposals.create', summary: 'Submit proposal', tags: ['Proposals'])]
+    public function create(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $data   = $this->body($request);
+
+        // Validate input
+        $validationError = $this->proposalValidator->validateOrFail($data);
+        if ($validationError) {
+            return $validationError;
+        }
+
+        // Check not already proposed
+        $dup = $this->db->pdo()->prepare(
+            'SELECT id FROM "proposal" WHERE job_id = :jid AND freelancer_id = :fid'
+        );
+        $dup->execute(['jid' => $data['job_id'], 'fid' => $userId]);
+        if ($dup->fetch()) {
+            return $this->error('You already submitted a proposal for this job', 409);
+        }
+
+        $id  = $this->uuid();
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        $this->db->pdo()->prepare(
+            'INSERT INTO "proposal" (id, job_id, freelancer_id, cover_letter, bid_amount,
+                                     currency, estimated_duration_weeks, milestones_breakdown,
+                                     status, created_at, updated_at)
+             VALUES (:id, :jid, :fid, :cl, :bid, :cur, :dur, :mb, \'submitted\', :now, :now)'
+        )->execute([
+            'id'  => $id,
+            'jid' => $data['job_id'],
+            'fid' => $userId,
+            'cl'  => $data['cover_letter'],
+            'bid' => $data['bid_amount'],
+            'cur' => $data['currency'] ?? 'USD',
+            'dur' => $data['estimated_duration_weeks'] ?? null,
+            'mb'  => json_encode($data['milestones_breakdown'] ?? []),
+            'now' => $now,
+        ]);
+
+        // Dispatch event
+        $this->events?->dispatch(new ProposalSubmitted($id, $data['job_id'], $userId));
+
+        return $this->created(['data' => ['id' => $id]]);
+    }
+
+    #[Route('GET', '/me', name: 'proposals.mine', summary: 'My proposals', tags: ['Proposals'])]
+    public function mine(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $p      = $this->pagination($request);
+
+        $cnt = $this->db->pdo()->prepare('SELECT COUNT(*) FROM "proposal" WHERE freelancer_id = :uid');
+        $cnt->execute(['uid' => $userId]);
+        $total = (int) $cnt->fetchColumn();
+
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT p.*, j.title AS job_title
+             FROM "proposal" p JOIN "job" j ON j.id = p.job_id
+             WHERE p.freelancer_id = :uid
+             ORDER BY p.created_at DESC LIMIT :lim OFFSET :off'
+        );
+        $stmt->bindValue('uid', $userId);
+        $stmt->bindValue('lim', $p['perPage'], \PDO::PARAM_INT);
+        $stmt->bindValue('off', $p['offset'], \PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $this->paginated($stmt->fetchAll(\PDO::FETCH_ASSOC), $total, $p['page'], $p['perPage']);
+    }
+
+    #[Route('GET', '/{id}', name: 'proposals.show', summary: 'Proposal detail', tags: ['Proposals'])]
+    public function show(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT p.*, j.title AS job_title, j.client_id
+             FROM "proposal" p JOIN "job" j ON j.id = p.job_id
+             WHERE p.id = :id'
+        );
+        $stmt->execute(['id' => $id]);
+        $proposal = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$proposal) {
+            return $this->notFound('Proposal');
+        }
+
+        // Only freelancer or job client can view
+        if ($proposal['freelancer_id'] !== $userId && $proposal['client_id'] !== $userId) {
+            return $this->forbidden();
+        }
+
+        // Mark as viewed if client is viewing
+        if ($proposal['client_id'] === $userId && $proposal['status'] === 'submitted') {
+            $this->db->pdo()->prepare(
+                'UPDATE "proposal" SET status = \'viewed\', updated_at = :now WHERE id = :id'
+            )->execute(['now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'), 'id' => $id]);
+            $proposal['status'] = 'viewed';
+        }
+
+        return $this->json(['data' => $proposal]);
+    }
+
+    #[Route('PATCH', '/{id}', name: 'proposals.update', summary: 'Edit proposal (if not viewed)', tags: ['Proposals'])]
+    public function update(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $data   = $this->body($request);
+
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT freelancer_id, status FROM "proposal" WHERE id = :id'
+        );
+        $stmt->execute(['id' => $id]);
+        $proposal = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$proposal) {
+            return $this->notFound('Proposal');
+        }
+        if ($proposal['freelancer_id'] !== $userId) {
+            return $this->forbidden();
+        }
+        if (!in_array($proposal['status'], ['submitted'], true)) {
+            return $this->error('Proposal can only be edited before being viewed');
+        }
+
+        $allowed = ['cover_letter', 'bid_amount', 'estimated_duration_weeks', 'milestones_breakdown'];
+        $sets    = [];
+        $params  = ['id' => $id];
+
+        foreach ($allowed as $field) {
+            if (array_key_exists($field, $data)) {
+                $v = $field === 'milestones_breakdown' ? json_encode($data[$field]) : $data[$field];
+                $sets[]         = "\"{$field}\" = :{$field}";
+                $params[$field] = $v;
+            }
+        }
+
+        if (empty($sets)) {
+            return $this->error('No valid fields to update');
+        }
+
+        $sets[]        = '"updated_at" = :now';
+        $params['now'] = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        $this->db->pdo()->prepare('UPDATE "proposal" SET ' . implode(', ', $sets) . ' WHERE id = :id')
+            ->execute($params);
+
+        return $this->json(['message' => 'Proposal updated']);
+    }
+
+    #[Route('POST', '/{id}/withdraw', name: 'proposals.withdraw', summary: 'Withdraw proposal', tags: ['Proposals'])]
+    public function withdraw(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+
+        $stmt = $this->db->pdo()->prepare('SELECT freelancer_id, status FROM "proposal" WHERE id = :id');
+        $stmt->execute(['id' => $id]);
+        $p = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$p) {
+            return $this->notFound('Proposal');
+        }
+        if ($p['freelancer_id'] !== $userId) {
+            return $this->forbidden();
+        }
+        if (in_array($p['status'], ['withdrawn', 'accepted', 'rejected'], true)) {
+            return $this->error('Cannot withdraw this proposal');
+        }
+
+        $this->db->pdo()->prepare(
+            'UPDATE "proposal" SET status = \'withdrawn\', updated_at = :now WHERE id = :id'
+        )->execute(['now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'), 'id' => $id]);
+
+        return $this->json(['message' => 'Proposal withdrawn']);
+    }
+
+    #[Route('POST', '/{id}/shortlist', name: 'proposals.shortlist', summary: 'Client shortlists', tags: ['Proposals'])]
+    public function shortlist(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        return $this->updateStatusByClient($request, $id, 'shortlisted');
+    }
+
+    #[Route('POST', '/{id}/accept', name: 'proposals.accept', summary: 'Accept → contract', tags: ['Proposals'])]
+    public function accept(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+
+        // Get proposal + job info before status change
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT p.id, p.job_id, p.freelancer_id, j.client_id
+             FROM "proposal" p JOIN "job" j ON j.id = p.job_id WHERE p.id = :id'
+        );
+        $stmt->execute(['id' => $id]);
+        $info = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        $result = $this->updateStatusByClient($request, $id, 'accepted');
+
+        // Dispatch event after successful acceptance
+        if ($info && $info['client_id'] === $userId) {
+            $this->events?->dispatch(new ProposalAccepted(
+                $id, $info['job_id'], $info['freelancer_id'], $userId
+            ));
+        }
+
+        // TODO: create contract from accepted proposal
+        return $result;
+    }
+
+    #[Route('POST', '/{id}/reject', name: 'proposals.reject', summary: 'Reject proposal', tags: ['Proposals'])]
+    public function reject(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        return $this->updateStatusByClient($request, $id, 'rejected');
+    }
+
+    /* ---- helpers ---- */
+
+    private function updateStatusByClient(ServerRequestInterface $request, string $id, string $newStatus): JsonResponse
+    {
+        $userId = $this->userId($request);
+
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT p.id, j.client_id FROM "proposal" p JOIN "job" j ON j.id = p.job_id WHERE p.id = :id'
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$row) {
+            return $this->notFound('Proposal');
+        }
+        if ($row['client_id'] !== $userId) {
+            return $this->forbidden();
+        }
+
+        $this->db->pdo()->prepare(
+            "UPDATE \"proposal\" SET status = :status, updated_at = :now WHERE id = :id"
+        )->execute([
+            'status' => $newStatus,
+            'now'    => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+            'id'     => $id,
+        ]);
+
+        return $this->json(['message' => "Proposal {$newStatus}"]);
+    }
+
+    private function uuid(): string
+    {
+        return sprintf(
+            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+        );
+    }
+}
