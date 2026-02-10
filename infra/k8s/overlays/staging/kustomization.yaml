@@ -10,13 +10,6 @@ commonLabels:
 
 patches:
   - target:
-      kind: Deployment
-      name: api-core
-    patch: |-
-      - op: replace
-        path: /spec/replicas
-        value: 2
-  - target:
       kind: ServiceAccount
     patch: |-
       - op: replace

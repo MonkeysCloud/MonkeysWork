@@ -8,7 +8,6 @@ resources:
   - network-policies.yaml
   - ingress.yaml
   - hpa.yaml
-  - ../api-core/deployment.yaml
   - ../ai-scope-assistant/deployment.yaml
   - ../ai-match-v1/deployment.yaml
   - ../ai-fraud-v1/deployment.yaml

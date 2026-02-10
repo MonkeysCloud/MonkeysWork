@@ -49,7 +49,7 @@ monkeyswork/
 │   │   │   ├── namespaces.yaml
 │   │   │   ├── network-policies.yaml
 │   │   │   └── kustomization.yaml
-│   │   ├── api-core/
+│   │   ├── monkeyswork-api/
 │   │   ├── ai-scope-assistant/
 │   │   ├── ai-match-v1/
 │   │   ├── ai-fraud-v1/
@@ -67,10 +67,14 @@ monkeyswork/
 │       └── ai-match-inference/
 │
 ├── services/                   # Application microservices (source code)
-│   ├── api-core/               # Main API gateway — jobs, users, payments, milestones
-│   │   ├── src/
+│   ├── monkeyswork-api/        # Main API (MonkeysLegion PHP) — jobs, users, payments, milestones
+│   │   ├── www/
 │   │   ├── tests/
 │   │   ├── Dockerfile
+│   │   └── composer.json
+│   ├── frontend/               # Next.js web application
+│   │   ├── src/
+│   │   ├── public/
 │   │   └── package.json
 │   ├── ai-scope-assistant/     # Scope decomposition + estimation service
 │   │   ├── src/
@@ -701,10 +705,10 @@ resource "google_pubsub_subscription" "subs" {
 # ─────────────────────────────────────────────────────
 # 7. IAM — Service Accounts + Least-Privilege Bindings
 # ─────────────────────────────────────────────────────
-# API Core service account
-resource "google_service_account" "api_core" {
-  account_id   = "mw-${var.environment}-api-core"
-  display_name = "MonkeysWork API Core (${var.environment})"
+# MonkeysWork API service account
+resource "google_service_account" "monkeyswork_api" {
+  account_id   = "mw-${var.environment}-mw-api"
+  display_name = "MonkeysWork API (${var.environment})"
 }
 
 # AI service accounts (one per model service)
@@ -734,11 +738,11 @@ resource "google_service_account" "vertex_pipelines" {
 }
 
 # Workload Identity bindings (GKE → GCP SA)
-resource "google_service_account_iam_binding" "api_core_wi" {
-  service_account_id = google_service_account.api_core.name
+resource "google_service_account_iam_binding" "monkeyswork_api_wi" {
+  service_account_id = google_service_account.monkeyswork_api.name
   role               = "roles/iam.workloadIdentityUser"
   members = [
-    "serviceAccount:${var.project_id}.svc.id.goog[monkeyswork/api-core]",
+    "serviceAccount:${var.project_id}.svc.id.goog[monkeyswork/monkeyswork-api]",
   ]
 }
 
@@ -766,11 +770,11 @@ resource "google_service_account_iam_binding" "ai_fraud_wi" {
   ]
 }
 
-# Pub/Sub publisher — api-core publishes to job/proposal/milestone topics
-resource "google_project_iam_member" "api_core_pubsub_publisher" {
+# Pub/Sub publisher — monkeyswork-api publishes to job/proposal/milestone topics
+resource "google_project_iam_member" "monkeyswork_api_pubsub_publisher" {
   project = var.project_id
   role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${google_service_account.api_core.email}"
+  member  = "serviceAccount:${google_service_account.monkeyswork_api.email}"
 }
 
 # Pub/Sub subscriber — AI services consume specific subscriptions
@@ -792,11 +796,11 @@ resource "google_project_iam_member" "ai_fraud_pubsub_subscriber" {
   member  = "serviceAccount:${google_service_account.ai_fraud.email}"
 }
 
-# Cloud SQL — api-core is the only service accessing the DB directly
-resource "google_project_iam_member" "api_core_cloudsql" {
+# Cloud SQL — monkeyswork-api is the only service accessing the DB directly
+resource "google_project_iam_member" "monkeyswork_api_cloudsql" {
   project = var.project_id
   role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.api_core.email}"
+  member  = "serviceAccount:${google_service_account.monkeyswork_api.email}"
 }
 
 # Vertex AI — training + prediction for AI services
@@ -975,27 +979,27 @@ spec:
   policyTypes:
     - Ingress
 ---
-# Allow api-core to receive traffic from ingress
+# Allow monkeyswork-api to receive traffic from ingress
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-ingress-to-api-core
+  name: allow-ingress-to-monkeyswork-api
   namespace: monkeyswork
 spec:
   podSelector:
     matchLabels:
-      app: api-core
+      app: monkeyswork-api
   ingress:
     - from: []  # From ingress controller
       ports:
         - protocol: TCP
           port: 8080
 ---
-# Allow AI services to receive traffic only from api-core
+# Allow AI services to receive traffic only from monkeyswork-api
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-api-core-to-ai
+  name: allow-monkeyswork-api-to-ai
   namespace: monkeyswork-ai
 spec:
   podSelector:
@@ -1008,7 +1012,7 @@ spec:
               app.kubernetes.io/part-of: monkeyswork
           podSelector:
             matchLabels:
-              app: api-core
+              app: monkeyswork-api
       ports:
         - protocol: TCP
           port: 8080
@@ -1039,37 +1043,37 @@ spec:
     - {}
 ```
 
-## `infra/k8s/api-core/deployment.yaml`
+## `infra/k8s/monkeyswork-api/deployment.yaml`
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: api-core
+  name: monkeyswork-api
   namespace: monkeyswork
   labels:
-    app: api-core
+    app: monkeyswork-api
     version: v1
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: api-core
+      app: monkeyswork-api
   template:
     metadata:
       labels:
-        app: api-core
+        app: monkeyswork-api
         version: v1
     spec:
-      serviceAccountName: api-core
+      serviceAccountName: monkeyswork-api
       containers:
-        - name: api-core
-          image: ARTIFACT_REGISTRY_URL/api-core:latest  # replaced by CD
+        - name: monkeyswork-api
+          image: ARTIFACT_REGISTRY_URL/monkeyswork-api:latest  # replaced by CD
           ports:
             - containerPort: 8080
               name: http
           env:
-            - name: NODE_ENV
+            - name: APP_ENV
               value: "production"
             - name: DB_HOST
               valueFrom:
@@ -1114,11 +1118,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: api-core
+  name: monkeyswork-api
   namespace: monkeyswork
 spec:
   selector:
-    app: api-core
+    app: monkeyswork-api
   ports:
     - port: 80
       targetPort: 8080
@@ -1435,7 +1439,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: api-core
+                name: monkeyswork-api
                 port:
                   number: 80
 ---
@@ -1455,13 +1459,13 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: api-core-hpa
+  name: monkeyswork-api-hpa
   namespace: monkeyswork
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: api-core
+    name: monkeyswork-api
   minReplicas: 2
   maxReplicas: 20
   metrics:
@@ -2389,7 +2393,7 @@ Rules:
     "source": {
       "type": "string",
       "description": "Originating service",
-      "example": "api-core"
+      "example": "monkeyswork-api"
     },
     "data": {
       "type": "object",
@@ -2672,14 +2676,14 @@ Rules:
 |---|---|---|---|
 | Apply Terraform: Cloud SQL + GKE | Infra Engineer | VPC ready | Cluster reachable, DB connectable |
 | Run DB migrations (core schema) | Backend Eng | Cloud SQL up | Tables created, seeds loaded |
-| Deploy api-core skeleton to GKE | Backend Eng | GKE + Artifact Registry | /healthz returns 200 |
+| Deploy monkeyswork-api skeleton to GKE | Backend Eng | GKE + Artifact Registry | /healthz returns 200 |
 | Set up Pub/Sub topics + subscriptions | Infra Engineer | APIs enabled | Publish/consume test message |
 | Configure Workload Identity | Infra Engineer | GKE + SAs | Pods can auth to GCP services |
 
 ### Week 3 — Core API + Events
 | Task | Owner | Dependencies | Go/No-Go |
 |---|---|---|---|
-| Implement job CRUD + events | Backend Eng | api-core deployed | job_created event published |
+| Implement job CRUD + events | Backend Eng | monkeyswork-api deployed | job_created event published |
 | Implement proposal CRUD + events | Backend Eng | Jobs ready | proposal_submitted event published |
 | Implement user/auth module | Backend Eng | DB ready | JWT auth working |
 | Set up Ingress + TLS | Infra Engineer | GKE + domain DNS | HTTPS on api.monkeyswork.com |
@@ -2833,10 +2837,10 @@ Rules:
 1. **No service deploys without passing CI** (lint, test, build, security scan)
 2. **All AI decisions logged** with model version, prompt version, input hash, output, confidence, latency
 3. **Feature flags required** for all AI capabilities — killswitch without deploy
-4. **No direct production DB writes** except through api-core service
+4. **No direct production DB writes** except through monkeyswork-api service
 5. **All external traffic via HTTPS** — HTTP redirects to HTTPS, HSTS enabled
 6. **Container images scanned** in Artifact Registry before deploy
-7. **Minimum 2 replicas** for api-core in production
+7. **Minimum 2 replicas** for monkeyswork-api in production
 8. **Alerting configured** for: error rate > 1%, P99 latency > 3s, pod restarts > 3/hour, disk > 80%
 9. **Runbooks exist** for top-5 incident types before go-live
 10. **Quarterly access review** — remove unused permissions
@@ -2975,7 +2979,7 @@ kubectl create secret generic db-credentials \
 echo "→ Building and pushing images..."
 REGISTRY=$(terraform output -raw artifact_registry_url)
 
-for service in api-core ai-scope-assistant ai-match-v1 ai-fraud-v1 verification-automation; do
+for service in monkeyswork-api ai-scope-assistant ai-match-v1 ai-fraud-v1 verification-automation; do
     echo "  Building $service..."
     docker build -t "$REGISTRY/$service:dev-latest" "../services/$service/"
     docker push "$REGISTRY/$service:dev-latest"
@@ -2983,7 +2987,7 @@ done
 
 # 8. Deploy services
 echo "→ Deploying services..."
-for service in api-core ai-scope-assistant ai-match-v1 ai-fraud-v1 verification-automation; do
+for service in monkeyswork-api ai-scope-assistant ai-match-v1 ai-fraud-v1 verification-automation; do
     dir="../infra/k8s/$service"
     if [[ -d "$dir" ]]; then
         sed "s|ARTIFACT_REGISTRY_URL|$REGISTRY|g" "$dir/deployment.yaml" | kubectl apply -f -
@@ -3311,7 +3315,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [api-core, ai-scope-assistant, ai-match-v1, ai-fraud-v1, verification-automation]
+        service: [monkeyswork-api, ai-scope-assistant, ai-match-v1, ai-fraud-v1, verification-automation]
     steps:
       - uses: actions/checkout@v4
 
@@ -3365,7 +3369,7 @@ jobs:
     needs: [lint-and-test]
     strategy:
       matrix:
-        service: [api-core, ai-scope-assistant, ai-match-v1, ai-fraud-v1, verification-automation]
+        service: [monkeyswork-api, ai-scope-assistant, ai-match-v1, ai-fraud-v1, verification-automation]
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
@@ -3406,7 +3410,7 @@ jobs:
       id-token: write
     strategy:
       matrix:
-        service: [api-core, ai-scope-assistant, ai-match-v1, ai-fraud-v1, verification-automation]
+        service: [monkeyswork-api, ai-scope-assistant, ai-match-v1, ai-fraud-v1, verification-automation]
     steps:
       - uses: actions/checkout@v4
 

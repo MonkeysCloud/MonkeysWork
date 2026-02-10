@@ -7,13 +7,13 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    GKE Cluster                          │
-│  ┌──────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │ api-core │──│ ai-scope     │  │ verification-    │  │
-│  │          │  │ assistant    │  │ automation       │  │
-│  └────┬─────┘  └──────────────┘  └──────────────────┘  │
-│       │        ┌──────────────┐  ┌──────────────────┐  │
-│       │        │ ai-match-v1  │  │ ai-fraud-v1      │  │
-│       │        └──────────────┘  └──────────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │ monkeyswork- │  │ ai-scope     │  │ verification-│  │
+│  │ api (PHP)    │  │ assistant    │  │ automation   │  │
+│  └────┬─────────┘  └──────────────┘  └──────────────┘  │
+│       │            ┌──────────────┐  ┌──────────────┐  │
+│       │            │ ai-match-v1  │  │ ai-fraud-v1  │  │
+│       │            └──────────────┘  └──────────────┘  │
 └───────┼─────────────────────────────────────────────────┘
         │
    ┌────┴────┐   ┌──────────┐   ┌──────────────┐
@@ -30,7 +30,7 @@
 - Terraform >= 1.6
 - kubectl
 - Docker
-- Node.js 20+ (for api-core)
+- PHP 8.2+ (for monkeyswork-api)
 - Python 3.11+ (for ML services)
 
 ### Bootstrap
@@ -46,9 +46,9 @@ make bootstrap
 make help              # Show all targets
 make build-all         # Build all Docker images
 make test-all          # Run all tests
-make deploy-staging SVC=api-core  # Deploy to staging
+make deploy-staging SVC=ai-fraud-v1  # Deploy to staging
 make k8s-status        # Check pod status
-make logs SVC=api-core # Tail service logs
+make logs SVC=ai-fraud-v1 # Tail service logs
 make incident TYPE=latency-spike  # Run incident playbook
 ```
 
@@ -71,11 +71,12 @@ make incident TYPE=latency-spike  # Run incident playbook
 
 | Service | Language | Purpose |
 |---------|----------|---------|
-| `api-core` | Node.js/TypeScript | Main API gateway |
+| `monkeyswork-api` | PHP (MonkeysLegion) | Main API service |
 | `ai-scope-assistant` | Python | Job scope decomposition |
 | `ai-match-v1` | Python | Talent-job matching |
 | `ai-fraud-v1` | Python | Fraud detection |
 | `verification-automation` | Python | Identity/skill verification |
+| `frontend` | Next.js | Web application |
 
 ## Environments
 

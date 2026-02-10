@@ -1,37 +1,18 @@
+# ─── Builder stage ───
 FROM php:8.4-fpm-alpine AS builder
 
-# Install system dependencies and PHP extensions
-RUN apk add --no-cache \
-    git \
-    unzip \
-    curl \
-    libzip-dev \
-    icu-dev \
-    oniguruma-dev \
-    postgresql-dev \
-    linux-headers \
-    && docker-php-ext-install \
-    pdo_pgsql \
-    pgsql \
-    zip \
-    intl \
-    mbstring \
-    opcache \
-    pcntl \
-    sockets \
-    pdo_mysql
+RUN apk add --no-cache git unzip curl libzip-dev icu-dev oniguruma-dev postgresql-dev linux-headers \
+    && docker-php-ext-install pdo_pgsql pgsql zip intl mbstring opcache pcntl sockets pdo_mysql
 
-# Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-WORKDIR /app
-COPY composer.json composer.lock* ./
-RUN composer install --no-dev --optimize-autoloader --no-scripts --no-interaction
+WORKDIR /build
 
-COPY . .
-RUN composer dump-autoload --optimize
+# Install skeleton into www/
+RUN composer create-project monkeyscloud/monkeyslegion-skeleton www --no-interaction --no-dev \
+    && cd www && composer dump-autoload --optimize
 
-# Production image
+# ─── Production image ───
 FROM php:8.4-fpm-alpine
 
 RUN apk add --no-cache \
@@ -55,25 +36,35 @@ RUN apk add --no-cache \
     sockets \
     pdo_mysql
 
-# Install Composer in production image
+# Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # PHP production config
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
-COPY docker/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+
+# Nginx + Supervisor + OPcache config
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/supervisord.conf /etc/supervisord.conf
+COPY docker/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 
-# Create app user
-RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
+# Create app directory
+RUN adduser -D -G www-data appuser && \
+    mkdir -p /app/www /run/nginx /var/log/nginx
 
 WORKDIR /app
-COPY --from=builder /app /app
-RUN chown -R appuser:appgroup /app/var 2>/dev/null || true
-RUN chown -R appuser:appgroup /app/storage 2>/dev/null || true
+
+# Copy skeleton from builder
+COPY --from=builder /build/www /app/www
+
+# Copy local overrides (if any exist during build)
+COPY . /app/
+
+# Set permissions
+RUN chown -R appuser:www-data /app/www && chmod -R 755 /app/www
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD wget -qO- http://localhost:8080/healthz || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/healthz || exit 1
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]

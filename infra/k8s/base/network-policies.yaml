@@ -19,27 +19,27 @@ spec:
   policyTypes:
     - Ingress
 ---
-# Allow api-core to receive traffic from ingress
+# Allow monkeyswork-api to receive traffic from ingress
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-ingress-to-api-core
+  name: allow-ingress-to-monkeyswork-api
   namespace: monkeyswork
 spec:
   podSelector:
     matchLabels:
-      app: api-core
+      app: monkeyswork-api
   ingress:
     - from: []
       ports:
         - protocol: TCP
           port: 8080
 ---
-# Allow AI services to receive traffic only from api-core
+# Allow AI services to receive traffic only from monkeyswork-api
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-api-core-to-ai
+  name: allow-monkeyswork-api-to-ai
   namespace: monkeyswork-ai
 spec:
   podSelector:
@@ -52,7 +52,7 @@ spec:
               app.kubernetes.io/part-of: monkeyswork
           podSelector:
             matchLabels:
-              app: api-core
+              app: monkeyswork-api
       ports:
         - protocol: TCP
           port: 8080

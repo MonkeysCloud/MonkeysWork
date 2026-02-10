@@ -14,6 +14,11 @@ node_modules/
 npm-debug.log*
 dist/
 coverage/
+.next/
+
+# PHP
+vendor/
+var/cache/
 
 # Python
 __pycache__/

@@ -10,7 +10,7 @@ ENV ?= dev
 REGISTRY = $(REGION)-docker.pkg.dev/$(PROJECT_ID)/mw-$(ENV)-services
 TAG ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "latest")
 
-SERVICES = api-core ai-scope-assistant ai-match-v1 ai-fraud-v1 verification-automation
+SERVICES = ai-scope-assistant ai-match-v1 ai-fraud-v1 verification-automation
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -40,7 +40,7 @@ build-all: ## Build all service images
 		docker build -t $(REGISTRY)/$$svc:$(TAG) services/$$svc/; \
 	done
 
-build: ## Build a single service: make build SVC=api-core
+build: ## Build a single service: make build SVC=ai-fraud-v1
 	docker build -t $(REGISTRY)/$(SVC):$(TAG) services/$(SVC)/
 
 push-all: ## Push all images to Artifact Registry
@@ -49,7 +49,7 @@ push-all: ## Push all images to Artifact Registry
 		docker push $(REGISTRY)/$$svc:$(TAG); \
 	done
 
-push: ## Push a single service: make push SVC=api-core
+push: ## Push a single service: make push SVC=ai-fraud-v1
 	docker push $(REGISTRY)/$(SVC):$(TAG)
 
 # ─── Testing ───
@@ -73,7 +73,7 @@ lint-all: ## Lint all services
 		cd ../..; \
 	done
 
-test: ## Test single service: make test SVC=api-core
+test: ## Test single service: make test SVC=ai-fraud-v1
 	cd services/$(SVC) && if [ -f package.json ]; then npm test; elif [ -f requirements.txt ]; then pytest tests/; fi
 
 # ─── Database ───
@@ -118,7 +118,7 @@ backfill: ## Backfill features: make backfill FEATURES=match-embeddings
 incident: ## Run incident triage: make incident TYPE=latency-spike
 	@bash scripts/incident-triage.sh $(TYPE)
 
-logs: ## Tail logs for service: make logs SVC=api-core
+logs: ## Tail logs for service: make logs SVC=ai-fraud-v1
 	@NS=monkeyswork; [[ "$(SVC)" == ai-* ]] && NS=monkeyswork-ai; \
 	kubectl logs -f -n $$NS -l app=$(SVC) --tail=100
 
