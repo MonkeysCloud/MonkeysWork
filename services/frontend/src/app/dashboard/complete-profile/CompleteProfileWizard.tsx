@@ -626,8 +626,11 @@ export default function CompleteProfileWizard() {
                 body: fd,
             });
             if (res.ok) {
-                const data = await res.json();
-                const url = data.data?.url || data.url || "";
+                const body = await res.json();
+                const fileUrl = body.data?.[0]?.file_url || "";
+                // file_url is relative like /files/attachments/..., prepend API host
+                const apiHost = API_BASE.replace(/\/api\/v1$/, "");
+                const url = fileUrl ? `${apiHost}${fileUrl}` : "";
                 setVerifEvidence((p) => ({
                     ...p,
                     identity: { ...p.identity, government_id_url: url },
@@ -1441,8 +1444,10 @@ export default function CompleteProfileWizard() {
                                                                         body: fd,
                                                                     });
                                                                     if (res.ok) {
-                                                                        const data = await res.json();
-                                                                        const url = data.data?.url || data.url || "";
+                                                                        const body = await res.json();
+                                                                        const fileUrl = body.data?.[0]?.file_url || "";
+                                                                        const apiHost = API_BASE.replace(/\/api\/v1$/, "");
+                                                                        const url = fileUrl ? `${apiHost}${fileUrl}` : "";
                                                                         setVerifEvidence((p) => ({
                                                                             ...p,
                                                                             identity: { ...p.identity, government_id_url: url },
