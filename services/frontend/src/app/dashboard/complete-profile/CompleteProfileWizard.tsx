@@ -632,7 +632,11 @@ export default function CompleteProfileWizard() {
                     ...p,
                     identity: { ...p.identity, government_id_url: url },
                 }));
+                // Stop camera and exit camera mode
+                govIdStream?.getTracks().forEach((t) => t.stop());
+                setGovIdStream(null);
                 setGovIdCaptured(null);
+                setGovIdMode("upload");
             } else {
                 setError("Failed to upload photo. Please try again.");
             }
