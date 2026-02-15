@@ -1,1 +1,93 @@
 @import "tailwindcss";
+
+/* ── Brand Design Tokens ────────────────────────────── */
+@theme {
+    --color-brand-dark: #363747;
+    --color-brand-dark-light: #454660;
+    --color-brand-orange: #f08a11;
+    --color-brand-orange-hover: #e07a00;
+    --color-brand-orange-light: #fef3e2;
+    --color-brand-surface: #fafafa;
+    --color-brand-text: #1a1b2e;
+    --color-brand-muted: #6b7280;
+    --color-brand-border: #e5e7eb;
+}
+
+/* ── Base Layer ─────────────────────────────────────── */
+@layer base {
+    html {
+        scroll-behavior: smooth;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+        color: var(--color-brand-text);
+        background: var(--color-brand-surface);
+    }
+
+    ::selection {
+        background: var(--color-brand-orange);
+        color: #fff;
+    }
+}
+
+/* ── Header Animations ──────────────────────────────── */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+    }
+
+    to {
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+    }
+
+    to {
+        transform: translateX(100%);
+    }
+}
+
+/* ── Utilities ──────────────────────────────────────── */
+@utility scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+@utility line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}

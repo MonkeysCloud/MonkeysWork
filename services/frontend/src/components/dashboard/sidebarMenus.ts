@@ -1,0 +1,259 @@
+import type { UserRole } from "@/contexts/AuthContext";
+
+/* ── Types ──────────────────────────────────────────── */
+export interface SubMenuItem {
+    label: string;
+    href: string;
+}
+
+export interface MenuItem {
+    icon: string;
+    label: string;
+    href: string;
+    badge?: string; // e.g. "active count" — rendered as placeholder
+    children?: SubMenuItem[];
+}
+
+export interface MenuConfig {
+    main: MenuItem[];
+    secondary: MenuItem[];
+}
+
+/* ── Client (Hire) ──────────────────────────────────── */
+const CLIENT_MENU: MenuConfig = {
+    main: [
+        { icon: "📊", label: "Dashboard", href: "/dashboard" },
+        {
+            icon: "📋",
+            label: "My Jobs",
+            href: "/dashboard/jobs",
+            badge: "jobs",
+            children: [
+                { label: "All Jobs", href: "/dashboard/jobs" },
+                { label: "Post New Job", href: "/dashboard/jobs/create" },
+                { label: "Drafts", href: "/dashboard/jobs?status=draft" },
+                { label: "Active", href: "/dashboard/jobs?status=open" },
+                {
+                    label: "Closed",
+                    href: "/dashboard/jobs?status=completed,cancelled",
+                },
+            ],
+        },
+        {
+            icon: "📝",
+            label: "Proposals",
+            href: "/dashboard/proposals",
+            badge: "proposals",
+            children: [
+                { label: "Received", href: "/dashboard/proposals" },
+                {
+                    label: "Shortlisted",
+                    href: "/dashboard/proposals?status=shortlisted",
+                },
+            ],
+        },
+        {
+            icon: "📄",
+            label: "Contracts",
+            href: "/dashboard/contracts",
+            badge: "contracts",
+            children: [
+                {
+                    label: "Active",
+                    href: "/dashboard/contracts?status=active",
+                },
+                { label: "Milestones", href: "/dashboard/milestones" },
+                {
+                    label: "Completed",
+                    href: "/dashboard/contracts?status=completed",
+                },
+                { label: "Disputes", href: "/dashboard/disputes" },
+            ],
+        },
+        {
+            icon: "💬",
+            label: "Messages",
+            href: "/dashboard/messages",
+            badge: "messages",
+        },
+        {
+            icon: "💰",
+            label: "Billing",
+            href: "/dashboard/billing",
+            children: [
+                {
+                    label: "Escrow Balance",
+                    href: "/dashboard/billing/escrow",
+                },
+                {
+                    label: "Transactions",
+                    href: "/dashboard/billing/transactions",
+                },
+                { label: "Invoices", href: "/dashboard/billing/invoices" },
+                {
+                    label: "Payment Methods",
+                    href: "/dashboard/billing/payment-methods",
+                },
+            ],
+        },
+    ],
+    secondary: [
+        {
+            icon: "🔔",
+            label: "Notifications",
+            href: "/dashboard/notifications",
+        },
+        { icon: "🔍", label: "Find Talent", href: "/freelancers" },
+        { icon: "⭐", label: "Reviews Given", href: "/dashboard/reviews" },
+        {
+            icon: "⚙️",
+            label: "Settings",
+            href: "/dashboard/settings",
+            children: [
+                { label: "Profile", href: "/dashboard/settings/profile" },
+                { label: "Company", href: "/dashboard/settings/company" },
+                { label: "Security", href: "/dashboard/settings/security" },
+                {
+                    label: "Notifications",
+                    href: "/dashboard/settings/notifications",
+                },
+                {
+                    label: "Verification",
+                    href: "/dashboard/settings/verification",
+                },
+            ],
+        },
+    ],
+};
+
+/* ── Freelancer ─────────────────────────────────────── */
+const FREELANCER_MENU: MenuConfig = {
+    main: [
+        { icon: "📊", label: "Dashboard", href: "/dashboard" },
+        {
+            icon: "🔍",
+            label: "Find Work",
+            href: "/jobs",
+            children: [
+                { label: "Browse Jobs", href: "/jobs" },
+                {
+                    label: "Recommended",
+                    href: "/dashboard/jobs/recommended",
+                },
+                { label: "Saved Jobs", href: "/dashboard/jobs/saved" },
+                { label: "Invitations", href: "/dashboard/invitations" },
+            ],
+        },
+        {
+            icon: "📝",
+            label: "My Proposals",
+            href: "/dashboard/proposals",
+            badge: "proposals",
+            children: [
+                {
+                    label: "Active",
+                    href: "/dashboard/proposals?status=submitted,viewed,shortlisted",
+                },
+                {
+                    label: "Accepted",
+                    href: "/dashboard/proposals?status=accepted",
+                },
+                {
+                    label: "Archived",
+                    href: "/dashboard/proposals?status=rejected,withdrawn",
+                },
+            ],
+        },
+        {
+            icon: "📄",
+            label: "Contracts",
+            href: "/dashboard/contracts",
+            badge: "contracts",
+            children: [
+                {
+                    label: "Active",
+                    href: "/dashboard/contracts?status=active",
+                },
+                { label: "Milestones", href: "/dashboard/milestones" },
+                { label: "Deliverables", href: "/dashboard/deliverables" },
+                {
+                    label: "Completed",
+                    href: "/dashboard/contracts?status=completed",
+                },
+                { label: "Disputes", href: "/dashboard/disputes" },
+            ],
+        },
+        {
+            icon: "💬",
+            label: "Messages",
+            href: "/dashboard/messages",
+            badge: "messages",
+        },
+        {
+            icon: "💰",
+            label: "Earnings",
+            href: "/dashboard/earnings",
+            children: [
+                { label: "Overview", href: "/dashboard/earnings" },
+                {
+                    label: "Transactions",
+                    href: "/dashboard/earnings/transactions",
+                },
+                { label: "Payouts", href: "/dashboard/earnings/payouts" },
+                { label: "Invoices", href: "/dashboard/earnings/invoices" },
+                {
+                    label: "Tax Documents",
+                    href: "/dashboard/earnings/tax",
+                },
+            ],
+        },
+    ],
+    secondary: [
+        {
+            icon: "🔔",
+            label: "Notifications",
+            href: "/dashboard/notifications",
+        },
+        { icon: "👤", label: "Public Profile", href: "/freelancers/me" },
+        { icon: "⭐", label: "My Reviews", href: "/dashboard/reviews" },
+        { icon: "📈", label: "Stats", href: "/dashboard/stats" },
+        {
+            icon: "⚙️",
+            label: "Settings",
+            href: "/dashboard/settings",
+            children: [
+                { label: "Profile", href: "/dashboard/settings/profile" },
+                {
+                    label: "Skills & Rate",
+                    href: "/dashboard/settings/skills",
+                },
+                {
+                    label: "Portfolio",
+                    href: "/dashboard/settings/portfolio",
+                },
+                {
+                    label: "Availability",
+                    href: "/dashboard/settings/availability",
+                },
+                { label: "Security", href: "/dashboard/settings/security" },
+                {
+                    label: "Notifications",
+                    href: "/dashboard/settings/notifications",
+                },
+                {
+                    label: "Verification",
+                    href: "/dashboard/settings/verification",
+                },
+                {
+                    label: "Payout Methods",
+                    href: "/dashboard/settings/payout-methods",
+                },
+            ],
+        },
+    ],
+};
+
+/* ── Accessor ───────────────────────────────────────── */
+export function getMenuForRole(role: UserRole): MenuConfig {
+    return role === "client" ? CLIENT_MENU : FREELANCER_MENU;
+}

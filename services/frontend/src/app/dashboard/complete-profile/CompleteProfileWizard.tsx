@@ -614,7 +614,7 @@ export default function CompleteProfileWizard() {
         try {
             const res2 = await fetch(govIdCaptured);
             const blob = await res2.blob();
-            const file = new File([blob], "government-id.jpg", { type: "image/jpeg" });
+            const file = new File([blob], `gov-id-${crypto.randomUUID()}.jpg`, { type: "image/jpeg" });
             const fd = new window.FormData();
             fd.append("file", file);
             fd.append("entity_type", "verification");

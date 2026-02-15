@@ -1,28 +1,34 @@
+import type { Metadata } from "next";
+import HeroSection from "@/components/home/HeroSection";
+import HowItWorks from "@/components/home/HowItWorks";
+import FeaturedCategories from "@/components/home/FeaturedCategories";
+import AiPlatform from "@/components/home/AiPlatform";
+import TrustSafety from "@/components/home/TrustSafety";
+import LatestJobs from "@/components/home/LatestJobs";
+import TopFreelancers from "@/components/home/TopFreelancers";
+import Testimonials from "@/components/home/Testimonials";
+import Ecosystem from "@/components/home/Ecosystem";
+import FinalCTA from "@/components/home/FinalCTA";
+
+export const metadata: Metadata = {
+  title: "MonkeysWork — The AI-Powered Freelance Marketplace",
+  description:
+    "Hire verified freelancers or find your next project. AI-powered matching, milestone-based escrow payments, and built-in scope analysis. Start free.",
+};
+
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
-      <div className="text-center space-y-8">
-        <h1 className="text-6xl font-bold bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-          MonkeysWork
-        </h1>
-        <p className="text-gray-400 text-xl max-w-2xl mx-auto">
-          AI-Powered Freelance Marketplace
-        </p>
-        <div className="flex gap-4 justify-center">
-          <a
-            href="/dashboard"
-            className="px-8 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all duration-200 hover:scale-105"
-          >
-            Get Started
-          </a>
-          <a
-            href="/about"
-            className="px-8 py-3 rounded-lg border border-gray-600 hover:border-gray-400 text-gray-300 font-medium transition-all duration-200 hover:scale-105"
-          >
-            Learn More
-          </a>
-        </div>
-      </div>
-    </main>
+    <>
+      <HeroSection />
+      <HowItWorks />
+      <FeaturedCategories />
+      <AiPlatform />
+      <TrustSafety />
+      <LatestJobs />
+      <TopFreelancers />
+      <Testimonials />
+      <Ecosystem />
+      <FinalCTA />
+    </>
   );
 }
