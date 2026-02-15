@@ -618,7 +618,7 @@ export default function CompleteProfileWizard() {
             fd.append("entity_type", "verification");
             fd.append("entity_id", user?.id ?? "");
             fd.append("label", "government_id");
-            const res = await fetch(`${API_BASE}/attachments/`, {
+            const res = await fetch(`${API_BASE}/attachments/upload`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${token}` },
                 body: fd,
@@ -1427,7 +1427,7 @@ export default function CompleteProfileWizard() {
                                                                     fd.append("entity_type", "verification");
                                                                     fd.append("entity_id", user?.id ?? "");
                                                                     fd.append("label", "government_id");
-                                                                    const res = await fetch(`${API_BASE}/attachments/`, {
+                                                                    const res = await fetch(`${API_BASE}/attachments/upload`, {
                                                                         method: "POST",
                                                                         headers: { Authorization: `Bearer ${token}` },
                                                                         body: fd,
