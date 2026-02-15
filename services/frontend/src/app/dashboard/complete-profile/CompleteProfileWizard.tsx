@@ -616,7 +616,7 @@ export default function CompleteProfileWizard() {
             const blob = await res2.blob();
             const file = new File([blob], `gov-id-${crypto.randomUUID()}.jpg`, { type: "image/jpeg" });
             const fd = new window.FormData();
-            fd.append("file", file);
+            fd.append("files", file);
             fd.append("entity_type", "verification");
             fd.append("entity_id", user?.id ?? "");
             fd.append("label", "government_id");
@@ -1425,7 +1425,7 @@ export default function CompleteProfileWizard() {
                                                                 setGovIdUploading(true);
                                                                 try {
                                                                     const fd = new window.FormData();
-                                                                    fd.append("file", file);
+                                                                    fd.append("files", file);
                                                                     fd.append("entity_type", "verification");
                                                                     fd.append("entity_id", user?.id ?? "");
                                                                     fd.append("label", "government_id");
