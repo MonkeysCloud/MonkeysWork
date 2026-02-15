@@ -608,6 +608,8 @@ export default function CompleteProfileWizard() {
 
     const uploadCapturedPhoto = async () => {
         if (!govIdCaptured) return;
+        const authToken = token || localStorage.getItem("mw_token");
+        if (!authToken) { setError("Not authenticated. Please log in again."); return; }
         setGovIdUploading(true);
         try {
             const res2 = await fetch(govIdCaptured);
@@ -620,7 +622,7 @@ export default function CompleteProfileWizard() {
             fd.append("label", "government_id");
             const res = await fetch(`${API_BASE}/attachments/upload`, {
                 method: "POST",
-                headers: { Authorization: `Bearer ${token}` },
+                headers: { Authorization: `Bearer ${authToken}` },
                 body: fd,
             });
             if (res.ok) {
