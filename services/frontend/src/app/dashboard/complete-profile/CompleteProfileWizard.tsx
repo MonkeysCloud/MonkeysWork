@@ -1426,6 +1426,8 @@ export default function CompleteProfileWizard() {
                                                             onChange={async (e) => {
                                                                 const file = e.target.files?.[0];
                                                                 if (!file) return;
+                                                                const authToken = token || localStorage.getItem("mw_token");
+                                                                if (!authToken) { setError("Not authenticated. Please log in again."); return; }
                                                                 setGovIdUploading(true);
                                                                 try {
                                                                     const fd = new window.FormData();
@@ -1435,7 +1437,7 @@ export default function CompleteProfileWizard() {
                                                                     fd.append("label", "government_id");
                                                                     const res = await fetch(`${API_BASE}/attachments/upload`, {
                                                                         method: "POST",
-                                                                        headers: { Authorization: `Bearer ${token}` },
+                                                                        headers: { Authorization: `Bearer ${authToken}` },
                                                                         body: fd,
                                                                     });
                                                                     if (res.ok) {
@@ -1446,32 +1448,44 @@ export default function CompleteProfileWizard() {
                                                                             identity: { ...p.identity, government_id_url: url },
                                                                         }));
                                                                     } else {
-                                                                        setError("Failed to upload file. Please try again or use a URL.");
+                                                                        setError("Failed to upload file. Please try again.");
                                                                     }
                                                                 } catch {
-                                                                    setError("Upload failed. Please try again or paste a URL instead.");
+                                                                    setError("Upload failed. Please try again.");
                                                                 } finally {
                                                                     setGovIdUploading(false);
                                                                 }
                                                             }}
                                                         />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => govIdFileRef.current?.click()}
-                                                            disabled={govIdUploading}
-                                                            className={`w-full py-4 border-2 border-dashed rounded-xl text-sm transition-all ${govIdUploading
-                                                                ? "border-brand-orange/30 bg-brand-orange/5 text-brand-orange cursor-wait"
-                                                                : verifEvidence.identity.government_id_url
-                                                                    ? "border-emerald-300 bg-emerald-50/50 text-emerald-700"
+                                                        {verifEvidence.identity.government_id_url ? (
+                                                            <div className="space-y-2">
+                                                                <div className="relative rounded-xl overflow-hidden border-2 border-emerald-300 bg-emerald-50/30">
+                                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                                    <img src={verifEvidence.identity.government_id_url} alt="Uploaded ID" className="w-full max-h-48 object-contain" />
+                                                                    <div className="absolute top-2 right-2 bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-lg">✓ Uploaded</div>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => govIdFileRef.current?.click()}
+                                                                    disabled={govIdUploading}
+                                                                    className="w-full py-2 text-xs font-semibold text-brand-muted border border-brand-border/50 rounded-xl hover:bg-gray-50 transition-all"
+                                                                >
+                                                                    {govIdUploading ? "⏳ Uploading…" : "🔄 Replace with another file"}
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => govIdFileRef.current?.click()}
+                                                                disabled={govIdUploading}
+                                                                className={`w-full py-4 border-2 border-dashed rounded-xl text-sm transition-all ${govIdUploading
+                                                                    ? "border-brand-orange/30 bg-brand-orange/5 text-brand-orange cursor-wait"
                                                                     : "border-brand-border/50 hover:border-brand-orange/40 hover:bg-brand-orange/5 text-brand-muted"
-                                                                }`}
-                                                        >
-                                                            {govIdUploading
-                                                                ? "⏳ Uploading…"
-                                                                : verifEvidence.identity.government_id_url
-                                                                    ? "✓ File uploaded — click to replace"
-                                                                    : "Click to select photo or PDF of your ID"}
-                                                        </button>
+                                                                    }`}
+                                                            >
+                                                                {govIdUploading ? "⏳ Uploading…" : "Click to select photo or PDF of your ID"}
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 )}
                                                 {govIdMode === "camera" && (
