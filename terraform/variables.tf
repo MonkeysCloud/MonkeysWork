@@ -95,3 +95,9 @@ variable "jwt_secret" {
   type        = string
   sensitive   = true
 }
+
+variable "internal_api_token" {
+  description = "Shared token for AI service ↔ PHP API internal authentication"
+  type        = string
+  sensitive   = true
+}

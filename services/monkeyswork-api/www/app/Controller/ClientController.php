@@ -42,31 +42,53 @@ final class ClientController
     {
         $userId = $this->userId($request);
         $data   = $this->body($request);
+        $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-        $allowed = ['company_name', 'company_website', 'company_size', 'industry',
-                     'company_description', 'company_logo_url'];
+        // --- Update user-level fields ---
+        $userFields = ['first_name', 'last_name', 'phone', 'country', 'state', 'display_name', 'avatar_url', 'languages'];
+        $userSets   = [];
+        $userParams = ['id' => $userId];
 
+        foreach ($userFields as $field) {
+            if (array_key_exists($field, $data)) {
+                $userSets[]         = "\"{$field}\" = :{$field}";
+                $userParams[$field] = $field === 'languages' ? json_encode($data[$field]) : $data[$field];
+            }
+        }
+
+        if (!empty($userSets)) {
+            $userSets[]        = '"updated_at" = :now';
+            $userParams['now'] = $now;
+            $sql = 'UPDATE "user" SET ' . implode(', ', $userSets) . ' WHERE id = :id';
+            $this->db->pdo()->prepare($sql)->execute($userParams);
+        }
+
+        // --- Update profile fields ---
+        $profileFields = ['company_name', 'company_website', 'company_size', 'industry',
+                          'company_description', 'company_logo_url'];
         $sets   = [];
         $params = ['id' => $userId];
 
-        foreach ($allowed as $field) {
+        foreach ($profileFields as $field) {
             if (array_key_exists($field, $data)) {
                 $sets[]         = "\"{$field}\" = :{$field}";
                 $params[$field] = $data[$field];
             }
         }
 
-        if (empty($sets)) {
-            return $this->error('No valid fields to update');
+        if (!empty($sets)) {
+            $sets[]        = '"updated_at" = :now';
+            $params['now'] = $now;
+            $sql = 'UPDATE "clientprofile" SET ' . implode(', ', $sets) . ' WHERE user_id = :id';
+            $this->db->pdo()->prepare($sql)->execute($params);
         }
 
-        $sets[]        = '"updated_at" = :now';
-        $params['now'] = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        // --- Mark profile as completed ---
+        $this->db->pdo()->prepare(
+            'UPDATE "user" SET profile_completed = TRUE, updated_at = :now WHERE id = :id'
+        )->execute(['now' => $now, 'id' => $userId]);
 
-        $sql = 'UPDATE "clientprofile" SET ' . implode(', ', $sets) . ' WHERE user_id = :id';
-        $this->db->pdo()->prepare($sql)->execute($params);
-
-        return $this->json(['message' => 'Profile updated']);
+        return $this->json(['message' => 'Profile updated', 'profile_completed' => true]);
     }
 
     #[Route('GET', '/me/stats', name: 'clients.stats', summary: 'Spending/stats', tags: ['Clients'])]

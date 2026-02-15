@@ -67,6 +67,12 @@ class User implements
     #[Field(type: 'char', length: 2, nullable: true, comment: 'ISO 3166-1')]
     public ?string $country = null;
 
+    #[Field(type: 'string', length: 100, nullable: true, comment: 'State / Province')]
+    public ?string $state = null;
+
+    #[Field(type: 'json', default: '[]')]
+    public array $languages = [];
+
     #[Field(type: 'string', length: 50, default: 'UTC')]
     public string $timezone = 'UTC';
 

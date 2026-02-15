@@ -83,6 +83,14 @@ class Contract
     #[Field(type: 'timestamptz')]
     public \DateTimeImmutable $updated_at;
 
+    // ── Time-tracking denormalized fields ──
+
+    #[Field(type: 'integer', default: 0, comment: 'Total minutes logged across all time entries')]
+    public int $total_hours_logged = 0;
+
+    #[Field(type: 'decimal', precision: 12, scale: 2, default: '0.00', comment: 'Total billable amount from time entries')]
+    public string $total_time_amount = '0.00';
+
     // ── Relationships ──
 
     #[OneToMany(targetEntity: Milestone::class, mappedBy: 'contract')]
@@ -102,6 +110,12 @@ class Contract
 
     #[OneToOne(targetEntity: Conversation::class, mappedBy: 'contract')]
     public ?Conversation $conversation = null;
+
+    #[OneToMany(targetEntity: TimeEntry::class, mappedBy: 'contract')]
+    public array $timeEntries = [];
+
+    #[OneToMany(targetEntity: WeeklyTimesheet::class, mappedBy: 'contract')]
+    public array $timesheets = [];
 
     // ── Getters ──
 
@@ -131,6 +145,10 @@ class Contract
     public function getDisputes(): array { return $this->disputes; }
     public function getReviews(): array { return $this->reviews; }
     public function getConversation(): ?Conversation { return $this->conversation; }
+    public function getTimeEntries(): array { return $this->timeEntries; }
+    public function getTimesheets(): array { return $this->timesheets; }
+    public function getTotalHoursLogged(): int { return $this->total_hours_logged; }
+    public function getTotalTimeAmount(): string { return $this->total_time_amount; }
 
     // ── Setters ──
 
@@ -153,6 +171,8 @@ class Contract
     public function setCancellationReason(?string $v): self { $this->cancellation_reason = $v; return $this; }
     public function setUpdatedAt(\DateTimeImmutable $at): self { $this->updated_at = $at; return $this; }
     public function setConversation(?Conversation $c): self { $this->conversation = $c; return $this; }
+    public function setTotalHoursLogged(int $v): self { $this->total_hours_logged = $v; return $this; }
+    public function setTotalTimeAmount(string $v): self { $this->total_time_amount = $v; return $this; }
 
     // ── Collection mutators ──
 
@@ -170,6 +190,12 @@ class Contract
 
     public function addReview(Review $r): self { $this->reviews[] = $r; return $this; }
     public function removeReview(Review $r): self { $this->reviews = array_filter($this->reviews, fn($i) => $i !== $r); return $this; }
+
+    public function addTimeEntry(TimeEntry $t): self { $this->timeEntries[] = $t; return $this; }
+    public function removeTimeEntry(TimeEntry $t): self { $this->timeEntries = array_filter($this->timeEntries, fn($i) => $i !== $t); return $this; }
+
+    public function addTimesheet(WeeklyTimesheet $t): self { $this->timesheets[] = $t; return $this; }
+    public function removeTimesheet(WeeklyTimesheet $t): self { $this->timesheets = array_filter($this->timesheets, fn($i) => $i !== $t); return $this; }
 
     // ── Enum helpers ──
 

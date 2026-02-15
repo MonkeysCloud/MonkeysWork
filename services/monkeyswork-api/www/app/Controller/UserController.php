@@ -28,9 +28,9 @@ final class UserController
 
         $stmt = $this->db->pdo()->prepare(
             'SELECT id, email, role, status, display_name, first_name, last_name,
-                    avatar_url, phone, country, timezone, locale,
+                    avatar_url, phone, country, state, languages, timezone, locale,
                     email_verified_at, two_factor_enabled, last_login_at,
-                    metadata, created_at, updated_at
+                    metadata, profile_completed, created_at, updated_at
              FROM "user" WHERE id = :id AND deleted_at IS NULL'
         );
         $stmt->execute(['id' => $userId]);
@@ -53,14 +53,14 @@ final class UserController
         $data   = $this->body($request);
 
         $allowed = ['display_name', 'first_name', 'last_name', 'avatar_url',
-                     'phone', 'country', 'timezone', 'locale', 'metadata'];
+                     'phone', 'country', 'timezone', 'locale', 'metadata', 'languages'];
 
         $sets   = [];
         $params = ['id' => $userId];
 
         foreach ($allowed as $field) {
             if (array_key_exists($field, $data)) {
-                $value = $field === 'metadata' ? json_encode($data[$field]) : $data[$field];
+                $value = in_array($field, ['metadata', 'languages']) ? json_encode($data[$field]) : $data[$field];
                 $sets[]         = "\"{$field}\" = :{$field}";
                 $params[$field] = $value;
             }
@@ -77,6 +77,66 @@ final class UserController
         $this->db->pdo()->prepare($sql)->execute($params);
 
         return $this->json(['message' => 'Profile updated']);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  POST /users/me/avatar                                              */
+    /* ------------------------------------------------------------------ */
+    #[Route('POST', '/me/avatar', name: 'users.avatar', summary: 'Upload avatar', tags: ['Users'])]
+    public function uploadAvatar(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+        if (!$userId) {
+            return $this->json(['error' => 'Authentication required'], 401);
+        }
+
+        $uploadedFiles = $request->getUploadedFiles();
+        $file = $uploadedFiles['avatar'] ?? null;
+
+        if (!$file || $file->getError() !== UPLOAD_ERR_OK) {
+            return $this->error('No avatar file uploaded');
+        }
+
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        $mime = $file->getClientMediaType();
+        if (!in_array($mime, $allowedTypes, true)) {
+            return $this->error('Invalid image type. Allowed: JPEG, PNG, WebP, GIF');
+        }
+
+        if ($file->getSize() > 5 * 1024 * 1024) {
+            return $this->error('Avatar must be under 5 MB');
+        }
+
+        $extMap = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+        $ext = $extMap[$mime] ?? 'jpg';
+        $dir = '/app/www/public/files/avatars';
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $filename = "{$userId}.{$ext}";
+        $filePath = "{$dir}/{$filename}";
+
+        // Remove old avatar files for this user
+        foreach (glob("{$dir}/{$userId}.*") as $old) {
+            @unlink($old);
+        }
+
+        $file->moveTo($filePath);
+
+        $avatarUrl = "/files/avatars/{$filename}";
+
+        $this->db->pdo()->prepare(
+            'UPDATE "user" SET avatar_url = :url, updated_at = :now WHERE id = :id'
+        )->execute([
+            'url' => $avatarUrl,
+            'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+            'id'  => $userId,
+        ]);
+
+        return $this->json([
+            'data' => ['avatar_url' => $avatarUrl],
+        ]);
     }
 
     /* ------------------------------------------------------------------ */

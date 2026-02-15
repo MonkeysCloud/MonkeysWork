@@ -50,12 +50,21 @@ final class SkillController
             return $this->json(['data' => []]);
         }
 
-        $stmt = $this->db->pdo()->prepare(
-            'SELECT id, name, slug, icon FROM "skill"
-             WHERE is_active = true AND name ILIKE :q
-             ORDER BY usage_count DESC LIMIT 20'
-        );
-        $stmt->execute(['q' => "%{$q}%"]);
+        $sql = 'SELECT s.id, s.name, s.slug, s.icon, c.name AS category_name
+                FROM "skill" s
+                LEFT JOIN "category" c ON c.id = s.category_id
+                WHERE s.is_active = true AND s.name ILIKE :q';
+        $params = ['q' => "%{$q}%"];
+
+        if (!empty($request->getQueryParams()['category_id'])) {
+            $sql .= ' AND s.category_id = :cat';
+            $params['cat'] = $request->getQueryParams()['category_id'];
+        }
+
+        $sql .= ' ORDER BY s.usage_count DESC LIMIT 20';
+
+        $stmt = $this->db->pdo()->prepare($sql);
+        $stmt->execute($params);
 
         return $this->json(['data' => $stmt->fetchAll(\PDO::FETCH_ASSOC)]);
     }

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\PubSubPublisher;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -16,7 +17,10 @@ final class VerificationController
 {
     use ApiController;
 
-    public function __construct(private ConnectionInterface $db) {}
+    public function __construct(
+        private ConnectionInterface $db,
+        private ?PubSubPublisher $pubsub = null,
+    ) {}
 
     #[Route('POST', '', name: 'verif.create', summary: 'Submit verification', tags: ['Verification'])]
     public function submit(ServerRequestInterface $request): JsonResponse
@@ -43,6 +47,14 @@ final class VerificationController
             'meta' => json_encode($data['metadata'] ?? []),
             'now'  => $now,
         ]);
+
+        // Publish to Pub/Sub (triggers verification-automation service)
+        $pubsub = $this->pubsub ?? new PubSubPublisher();
+        try {
+            $pubsub->verificationSubmitted($id, $userId, $data['type']);
+        } catch (\Throwable) {
+            // Non-critical: don't fail submission if Pub/Sub is down
+        }
 
         return $this->created(['data' => ['id' => $id]]);
     }

@@ -28,19 +28,32 @@ final class AiFraudController
             return $this->error('account_id is required');
         }
 
-        // TODO: call AI fraud detection microservice
-        $result = [
-            'account_id'         => $data['account_id'],
-            'entity_type'        => $data['entity_type'] ?? 'user',
-            'entity_id'          => $data['entity_id'] ?? $data['account_id'],
-            'fraud_score'        => 0.0,
-            'risk_tier'          => 'low',
-            'recommended_action' => 'allow',
-            'risk_factors'       => [],
-            'model_version'      => 'pending',
-            'status'             => 'ai_service_pending',
-        ];
+        $fraudUrl = getenv('AI_FRAUD_URL') ?: 'http://ai-fraud-v1:8080/api/v1/fraud/check';
 
-        return $this->json(['data' => $result]);
+        $ch = curl_init($fraudUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($data),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT_MS     => 2000,
+            CURLOPT_CONNECTTIMEOUT_MS => 500,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response === false || $httpCode !== 200) {
+            return $this->json(['data' => [
+                'account_id'    => $data['account_id'],
+                'fraud_score'   => 0.0,
+                'risk_tier'     => 'unknown',
+                'recommended_action' => 'allow',
+                'status'        => 'ai_service_unavailable',
+            ]]);
+        }
+
+        return $this->json(['data' => json_decode($response, true)]);
     }
 }

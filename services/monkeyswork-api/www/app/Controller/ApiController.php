@@ -68,7 +68,25 @@ trait ApiController
      */
     protected function userId(ServerRequestInterface $request): ?string
     {
-        return $request->getAttribute('user_id');
+        $uid = $request->getAttribute('user_id');
+        if ($uid) {
+            return $uid;
+        }
+
+        // Fallback: decode JWT payload directly from Authorization header
+        $auth = $request->getHeaderLine('Authorization');
+        if (str_starts_with($auth, 'Bearer ')) {
+            $token = substr($auth, 7);
+            $parts = explode('.', $token);
+            if (count($parts) === 3) {
+                $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
+                if (isset($payload['sub'])) {
+                    return $payload['sub'];
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -85,7 +103,7 @@ trait ApiController
     protected function body(ServerRequestInterface $request): array
     {
         $body = $request->getParsedBody();
-        if (is_array($body)) {
+        if (is_array($body) && !empty($body)) {
             return $body;
         }
         $content = (string) $request->getBody();

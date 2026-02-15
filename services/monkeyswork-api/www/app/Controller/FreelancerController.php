@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\PubSubPublisher;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -16,7 +17,10 @@ final class FreelancerController
 {
     use ApiController;
 
-    public function __construct(private ConnectionInterface $db) {}
+    public function __construct(
+        private ConnectionInterface $db,
+        private ?PubSubPublisher $pubsub = null,
+    ) {}
 
     #[Route('GET', '', name: 'freelancers.index', summary: 'Search/list freelancers', tags: ['Freelancers'])]
     public function index(ServerRequestInterface $request): JsonResponse
@@ -51,7 +55,8 @@ final class FreelancerController
         $total = (int) $countStmt->fetchColumn();
 
         $stmt = $this->db->pdo()->prepare(
-            "SELECT fp.*, u.display_name, u.avatar_url, u.country
+            "SELECT fp.*, u.display_name, u.avatar_url, u.country,
+                    fp.verification_level
              FROM \"freelancerprofile\" fp
              JOIN \"user\" u ON u.id = fp.user_id
              WHERE {$whereSql}
@@ -94,6 +99,19 @@ final class FreelancerController
         $skills->execute(['id' => $id]);
         $profile['skills'] = $skills->fetchAll(\PDO::FETCH_ASSOC);
 
+        // Attach verification badges
+        $verifs = $this->db->pdo()->prepare(
+            'SELECT type, status, ai_confidence AS confidence_score, updated_at
+             FROM "verification"
+             WHERE user_id = :id
+             ORDER BY type ASC'
+        );
+        $verifs->execute(['id' => $id]);
+        $verificationRows = $verifs->fetchAll(\PDO::FETCH_ASSOC);
+
+        $profile['verifications'] = $verificationRows;
+        $profile['verification_badges'] = $this->buildVerificationBadges($verificationRows);
+
         return $this->json(['data' => $profile]);
     }
 
@@ -102,16 +120,36 @@ final class FreelancerController
     {
         $userId = $this->userId($request);
         $data   = $this->body($request);
+        $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-        $allowed = ['headline', 'bio', 'hourly_rate', 'currency', 'experience_years',
-                     'education', 'certifications', 'portfolio_urls', 'website_url',
-                     'github_url', 'linkedin_url', 'availability_status',
-                     'availability_hours_week'];
+        // --- Update user-level fields ---
+        $userFields = ['first_name', 'last_name', 'phone', 'country', 'state', 'display_name', 'avatar_url', 'languages'];
+        $userSets   = [];
+        $userParams = ['id' => $userId];
 
+        foreach ($userFields as $field) {
+            if (array_key_exists($field, $data)) {
+                $userSets[]         = "\"{$field}\" = :{$field}";
+                $userParams[$field] = $field === 'languages' ? json_encode($data[$field]) : $data[$field];
+            }
+        }
+
+        if (!empty($userSets)) {
+            $userSets[]        = '"updated_at" = :now';
+            $userParams['now'] = $now;
+            $sql = 'UPDATE "user" SET ' . implode(', ', $userSets) . ' WHERE id = :id';
+            $this->db->pdo()->prepare($sql)->execute($userParams);
+        }
+
+        // --- Update profile fields ---
+        $profileFields = ['headline', 'bio', 'hourly_rate', 'currency', 'experience_years',
+                          'education', 'certifications', 'portfolio_urls', 'website_url',
+                          'github_url', 'linkedin_url', 'availability_status',
+                          'availability_hours_week'];
         $sets   = [];
         $params = ['id' => $userId];
 
-        foreach ($allowed as $field) {
+        foreach ($profileFields as $field) {
             if (array_key_exists($field, $data)) {
                 $v = in_array($field, ['education', 'certifications', 'portfolio_urls'])
                     ? json_encode($data[$field]) : $data[$field];
@@ -120,17 +158,41 @@ final class FreelancerController
             }
         }
 
-        if (empty($sets)) {
-            return $this->error('No valid fields to update');
+        if (!empty($sets)) {
+            $sets[]        = '"updated_at" = :now';
+            $params['now'] = $now;
+            $sql = 'UPDATE "freelancerprofile" SET ' . implode(', ', $sets) . ' WHERE user_id = :id';
+            $this->db->pdo()->prepare($sql)->execute($params);
         }
 
-        $sets[]               = '"updated_at" = :now';
-        $params['now']        = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        // --- Mark profile as completed ---
+        $this->db->pdo()->prepare(
+            'UPDATE "user" SET profile_completed = TRUE, updated_at = :now WHERE id = :id'
+        )->execute(['now' => $now, 'id' => $userId]);
 
-        $sql = 'UPDATE "freelancerprofile" SET ' . implode(', ', $sets) . ' WHERE user_id = :id';
-        $this->db->pdo()->prepare($sql)->execute($params);
+        // --- Compute profile completeness + publish event ---
+        $completeness = $this->computeProfileCompleteness($userId);
 
-        return $this->json(['message' => 'Profile updated']);
+        // Store computed score
+        $this->db->pdo()->prepare(
+            'UPDATE "freelancerprofile" SET profile_completeness = :score, updated_at = :now WHERE user_id = :id'
+        )->execute(['score' => $completeness, 'now' => $now, 'id' => $userId]);
+
+        // Publish profile-ready event when completeness >= 60%
+        if ($completeness >= 60) {
+            $pubsub = $this->pubsub ?? new PubSubPublisher();
+            try {
+                $pubsub->profileReady($userId);
+            } catch (\Throwable) {
+                // Non-critical: don't fail update if Pub/Sub is down
+            }
+        }
+
+        return $this->json([
+            'message'              => 'Profile updated',
+            'profile_completed'    => true,
+            'profile_completeness' => $completeness,
+        ]);
     }
 
     #[Route('PUT', '/me/skills', name: 'freelancers.skills', summary: 'Set skills', tags: ['Freelancers'])]
@@ -235,5 +297,133 @@ final class FreelancerController
                 'certifications' => json_decode($profile['certifications'] ?: '[]', true),
             ],
         ]);
+    }
+
+    /**
+     * Compute profile completeness score (0-100) based on filled fields.
+     */
+    private function computeProfileCompleteness(string $userId): int
+    {
+        $pdo = $this->db->pdo();
+
+        // Fetch profile + user fields
+        $stmt = $pdo->prepare(
+            'SELECT u.display_name, u.first_name, u.last_name, u.avatar_url, u.country,
+                    fp.headline, fp.bio, fp.hourly_rate, fp.experience_years,
+                    fp.portfolio_urls, fp.education, fp.availability_status
+             FROM "freelancerprofile" fp
+             JOIN "user" u ON u.id = fp.user_id
+             WHERE fp.user_id = :id'
+        );
+        $stmt->execute(['id' => $userId]);
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$row) return 0;
+
+        $score = 0;
+        $checks = [
+            ['field' => 'display_name',        'weight' => 10],
+            ['field' => 'first_name',           'weight' => 5],
+            ['field' => 'last_name',            'weight' => 5],
+            ['field' => 'avatar_url',           'weight' => 10],
+            ['field' => 'country',              'weight' => 5],
+            ['field' => 'headline',             'weight' => 15],
+            ['field' => 'bio',                  'weight' => 15],
+            ['field' => 'hourly_rate',          'weight' => 10],
+            ['field' => 'experience_years',     'weight' => 5],
+            ['field' => 'availability_status',  'weight' => 5],
+        ];
+
+        foreach ($checks as $c) {
+            $val = $row[$c['field']] ?? null;
+            if ($val !== null && $val !== '' && $val !== '0') {
+                $score += $c['weight'];
+            }
+        }
+
+        // Portfolio bonus (up to 10)
+        $portfolio = json_decode($row['portfolio_urls'] ?: '[]', true);
+        if (!empty($portfolio)) $score += 10;
+
+        // Skills bonus (up to 5)
+        $skillStmt = $pdo->prepare('SELECT COUNT(*) FROM "freelancer_skills" WHERE freelancer_id = :id');
+        $skillStmt->execute(['id' => $userId]);
+        $skillCount = (int) $skillStmt->fetchColumn();
+        if ($skillCount >= 3) $score += 5;
+
+        return min(100, $score);
+    }
+
+    /**
+     * Build verification badge summary from verification rows.
+     *
+     * @param array $verificationRows
+     * @return array{level: string, badges: array, total_approved: int, total_types: int}
+     */
+    private function buildVerificationBadges(array $verificationRows): array
+    {
+        $allTypes  = ['identity', 'skill_assessment', 'portfolio', 'work_history', 'payment_method'];
+        $approved  = ['approved', 'auto_approved'];
+        $badges    = [];
+        $approvedCount = 0;
+
+        // Build badge map from actual verification rows
+        $typeMap = [];
+        foreach ($verificationRows as $row) {
+            $typeMap[$row['type']] = $row;
+        }
+
+        foreach ($allTypes as $type) {
+            if (isset($typeMap[$type])) {
+                $row = $typeMap[$type];
+                $isApproved = in_array($row['status'], $approved);
+                if ($isApproved) $approvedCount++;
+
+                $badges[] = [
+                    'type'       => $type,
+                    'label'      => $this->verificationLabel($type),
+                    'status'     => $row['status'],
+                    'verified'   => $isApproved,
+                    'confidence' => $row['confidence_score'] ? (float) $row['confidence_score'] : null,
+                    'verified_at' => $isApproved ? $row['updated_at'] : null,
+                ];
+            } else {
+                $badges[] = [
+                    'type'       => $type,
+                    'label'      => $this->verificationLabel($type),
+                    'status'     => 'not_submitted',
+                    'verified'   => false,
+                    'confidence' => null,
+                    'verified_at' => null,
+                ];
+            }
+        }
+
+        // Determine level
+        $level = match (true) {
+            $approvedCount >= 4 => 'premium',
+            $approvedCount >= 2 => 'verified',
+            $approvedCount >= 1 => 'basic',
+            default             => 'none',
+        };
+
+        return [
+            'level'          => $level,
+            'badges'         => $badges,
+            'total_approved' => $approvedCount,
+            'total_types'    => count($allTypes),
+        ];
+    }
+
+    private function verificationLabel(string $type): string
+    {
+        return match ($type) {
+            'identity'         => 'Identity Verified',
+            'skill_assessment' => 'Skills Verified',
+            'portfolio'        => 'Portfolio Verified',
+            'work_history'     => 'Work History Verified',
+            'payment_method'   => 'Payment Verified',
+            default            => ucfirst(str_replace('_', ' ', $type)),
+        };
     }
 }

@@ -1,3 +1,6 @@
+"""
+Shared audit logger — logs AI decisions and optionally persists via PHP API callback.
+"""
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -6,7 +9,7 @@ import structlog
 logger = structlog.get_logger()
 
 
-def log_ai_decision(
+async def log_ai_decision(
     decision_type: str,
     entity_type: str,
     entity_id: str,
@@ -17,8 +20,12 @@ def log_ai_decision(
     latency_ms: int,
     prompt_version: Optional[str] = None,
     explanation: Optional[Dict] = None,
+    persist: bool = True,
 ) -> Dict[str, Any]:
-    """Log an AI decision for audit trail."""
+    """Log an AI decision for audit trail and persist to DB via callback."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+
     record = {
         "id": str(uuid.uuid4()),
         "decision_type": decision_type,
@@ -35,4 +42,13 @@ def log_ai_decision(
     }
 
     logger.info("ai_decision", **record)
+
+    # Persist to PHP API via callback
+    if persist:
+        try:
+            from callback import post_internal
+            await post_internal("/api/v1/internal/decisions", record)
+        except Exception as e:
+            logger.warning("audit_persist_failed", error=str(e), decision_id=record["id"])
+
     return record

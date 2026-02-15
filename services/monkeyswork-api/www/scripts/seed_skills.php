@@ -1,0 +1,485 @@
+<?php
+/**
+ * Seed comprehensive skills into the database, mapped to categories.
+ *
+ * Usage:
+ *   DB_HOST=postgres DB_PORT=5432 DB_DATABASE=monkeyswork DB_USER=mw_app DB_PASS=localdev php scripts/seed_skills.php
+ *   -- or from Docker: docker compose exec api php scripts/seed_skills.php
+ */
+
+$host = getenv('DB_HOST') ?: 'localhost';
+$port = getenv('DB_PORT') ?: '5432';
+$db   = getenv('DB_DATABASE') ?: 'monkeyswork';
+$user = getenv('DB_USER') ?: 'mw_app';
+$pass = getenv('DB_PASS') ?: 'localdev';
+
+$dsn = "pgsql:host={$host};port={$port};dbname={$db}";
+
+try {
+    $pdo = new PDO($dsn, $user, $pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+} catch (PDOException $e) {
+    echo "❌ DB connection failed: {$e->getMessage()}\n";
+    exit(1);
+}
+
+echo "✅ Connected to {$db}@{$host}\n";
+
+// ── Ensure skill table exists ──
+$pdo->exec('
+    CREATE TABLE IF NOT EXISTS "skill" (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(100) NOT NULL UNIQUE,
+        slug VARCHAR(120) NOT NULL UNIQUE,
+        category_id UUID REFERENCES "category"(id) ON DELETE SET NULL,
+        parent_id UUID REFERENCES "skill"(id) ON DELETE SET NULL,
+        description TEXT,
+        icon VARCHAR(50),
+        is_active BOOLEAN DEFAULT true,
+        usage_count INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+');
+
+// Ensure unique index on slug
+try {
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS skill_slug_unique ON "skill"(slug)');
+} catch (PDOException $e) {
+    // Index may already exist
+}
+
+// ── Fetch category IDs by slug ──
+$cats = [];
+$rows = $pdo->query('SELECT id, slug FROM "category" WHERE is_active = true')->fetchAll(PDO::FETCH_ASSOC);
+foreach ($rows as $r) {
+    $cats[$r['slug']] = $r['id'];
+}
+echo "📂 Found " . count($cats) . " categories: " . implode(', ', array_keys($cats)) . "\n";
+
+// ── Comprehensive skills by category slug ──
+$skillsByCategory = [
+
+    // ═══════════════════════════════════════════
+    // DEVELOPMENT & IT
+    // ═══════════════════════════════════════════
+    'development-it' => [
+        // Frontend
+        'JavaScript', 'TypeScript', 'React', 'React Native', 'Next.js', 'Vue.js', 'Nuxt.js',
+        'Angular', 'Svelte', 'SvelteKit', 'HTML5', 'CSS3', 'Tailwind CSS', 'Bootstrap',
+        'SASS/SCSS', 'jQuery', 'Webpack', 'Vite', 'Storybook',
+        // Backend
+        'Node.js', 'Express.js', 'NestJS', 'PHP', 'Laravel', 'Symfony', 'CodeIgniter',
+        'Python', 'Django', 'Flask', 'FastAPI', 'Ruby', 'Ruby on Rails',
+        'Java', 'Spring Boot', 'Kotlin', 'Go', 'Rust', 'C#', '.NET', 'ASP.NET',
+        'Elixir', 'Phoenix', 'Scala',
+        // Mobile
+        'iOS Development', 'Swift', 'SwiftUI', 'Objective-C',
+        'Android Development', 'Jetpack Compose', 'Flutter', 'Dart',
+        'Xamarin', 'Ionic', 'Capacitor', 'Tauri',
+        // Databases
+        'MySQL', 'PostgreSQL', 'MongoDB', 'Redis', 'SQLite', 'MariaDB',
+        'DynamoDB', 'Cassandra', 'Elasticsearch', 'Neo4j', 'CouchDB', 'Firebase Realtime DB',
+        'Supabase', 'PlanetScale', 'Prisma', 'TypeORM', 'Sequelize', 'Drizzle ORM',
+        // DevOps & Cloud
+        'AWS', 'Google Cloud Platform', 'Microsoft Azure', 'DigitalOcean',
+        'Docker', 'Kubernetes', 'Terraform', 'Ansible', 'Jenkins', 'GitHub Actions',
+        'GitLab CI/CD', 'CircleCI', 'Nginx', 'Apache', 'Linux Administration',
+        'Serverless', 'Vercel', 'Netlify', 'Cloudflare Workers',
+        // APIs & Integration
+        'REST API Design', 'GraphQL', 'gRPC', 'WebSockets', 'OAuth', 'JWT',
+        'Microservices Architecture', 'API Gateway', 'Swagger/OpenAPI',
+        'Stripe Integration', 'PayPal Integration', 'Twilio', 'SendGrid',
+        // Testing & QA
+        'Unit Testing', 'Integration Testing', 'Jest', 'Cypress', 'Playwright',
+        'Selenium', 'PHPUnit', 'Pytest', 'Test-Driven Development',
+        // Other Dev
+        'Git', 'GitHub', 'Agile/Scrum', 'CI/CD Pipelines', 'Web Scraping',
+        'Browser Extensions', 'Progressive Web Apps', 'WebAssembly',
+        'Blockchain Development', 'Solidity', 'Web3.js', 'Ethers.js',
+        'Smart Contracts', 'NFT Development',
+        // AI & Machine Learning
+        'Artificial Intelligence', 'Machine Learning Engineering', 'Deep Learning Frameworks',
+        'Natural Language Processing', 'Computer Vision Applications',
+        'TensorFlow', 'PyTorch', 'Keras', 'scikit-learn', 'Hugging Face Transformers',
+        'OpenAI API', 'Claude API', 'LangChain', 'LlamaIndex',
+        'Prompt Engineering', 'LLM Fine-Tuning', 'RAG Architecture',
+        'ChatGPT Integration', 'AI Chatbot Development', 'Conversational AI',
+        'Stable Diffusion', 'Midjourney', 'DALL-E Integration',
+        'Vector Databases', 'Pinecone', 'Weaviate', 'ChromaDB',
+        'MLOps', 'Model Deployment', 'Model Training',
+        'Reinforcement Learning', 'Generative AI', 'AI Agents',
+        'Speech Recognition', 'Text-to-Speech', 'Sentiment Analysis',
+        'Recommendation Systems', 'Anomaly Detection',
+        'Jupyter Notebooks', 'Pandas', 'NumPy', 'SciPy',
+        'Data Science', 'Data Visualization', 'Data Pipelines',
+    ],
+
+    // ═══════════════════════════════════════════
+    // DESIGN & CREATIVE
+    // ═══════════════════════════════════════════
+    'design-creative' => [
+        // UI/UX
+        'Figma', 'Adobe XD', 'Sketch', 'InVision', 'Framer',
+        'UI Design', 'UX Design', 'UX Research', 'Wireframing', 'Prototyping',
+        'Interaction Design', 'Information Architecture', 'User Testing',
+        'Design Systems', 'Responsive Design', 'Mobile App Design', 'Web Design',
+        'Landing Page Design', 'Dashboard Design',
+        // Graphic Design
+        'Adobe Photoshop', 'Adobe Illustrator', 'Adobe InDesign', 'Canva',
+        'Logo Design', 'Brand Identity', 'Brand Guidelines', 'Typography',
+        'Icon Design', 'Infographic Design', 'Print Design', 'Packaging Design',
+        'Business Card Design', 'Flyer Design', 'Poster Design', 'Banner Design',
+        'T-Shirt Design', 'Merchandise Design', 'Label Design',
+        // Motion & Video
+        'Adobe After Effects', 'Adobe Premiere Pro', 'DaVinci Resolve',
+        'Motion Graphics', 'Video Editing', 'Animation', '2D Animation', '3D Animation',
+        'Lottie Animations', 'Rive', 'Character Animation',
+        // 3D & Game
+        'Blender', 'Cinema 4D', 'Maya', '3ds Max', 'ZBrush',
+        '3D Modeling', '3D Rendering', 'Product Visualization', 'Architectural Visualization',
+        'Game Art', 'Pixel Art', 'Concept Art', 'Character Design', 'Environment Design',
+        // Illustration & Art
+        'Digital Illustration', 'Vector Illustration', 'Editorial Illustration',
+        'Children\'s Book Illustration', 'Technical Illustration', 'Storyboarding',
+        'Caricature', 'Comic Art', 'Manga Art', 'Procreate',
+        // Photography
+        'Photo Editing', 'Photo Retouching', 'Image Manipulation',
+        'Product Photography', 'Portrait Photography', 'Lightroom',
+        // AR/VR & Immersive
+        'AR Design', 'VR Design', 'Spatial Design', 'Unity for Design', 'Unreal Engine for Design',
+        'Mixed Reality', 'Meta Spark', 'Lens Studio',
+        // Game Design
+        'Game Design', 'Game UI Design', 'Level Design', 'Tilemap Design',
+        'Sprite Animation', 'Texture Design', 'Material Design',
+        // Social Media Design
+        'Social Media Graphics', 'YouTube Thumbnails', 'Instagram Story Design',
+        'TikTok Content Design', 'Pinterest Graphics', 'Twitch Graphics',
+        'Email Template Design', 'Newsletter Design', 'Ad Creative Design',
+        // Presentation & Miscellaneous
+        'Pitch Deck Design', 'Report Design', 'Resume Design', 'Menu Design',
+        'Invitation Design', 'Calendar Design', 'Book Cover Design', 'Album Cover Design',
+        'Pattern Design', 'Surface Design', 'Textile Design', 'Color Theory',
+        'Layout Design', 'Creative Direction', 'Art Direction',
+        'NFT Art', 'AI Art Generation', 'Midjourney Artistry',
+    ],
+
+    // ═══════════════════════════════════════════
+    // WRITING & TRANSLATION
+    // ═══════════════════════════════════════════
+    'writing-translation' => [
+        // Content Writing
+        'Blog Writing', 'Article Writing', 'SEO Writing', 'Copywriting',
+        'Content Strategy', 'Content Marketing', 'Email Marketing Copy',
+        'Website Content', 'Product Descriptions', 'Press Releases',
+        'Ghostwriting', 'Research Writing', 'Academic Writing', 'eBook Writing',
+        'White Papers', 'Case Studies', 'Newsletter Writing',
+        // Creative Writing
+        'Creative Writing', 'Fiction Writing', 'Screenwriting', 'Script Writing',
+        'Poetry', 'Storytelling', 'Speechwriting', 'Song Lyrics',
+        // Technical Writing
+        'Technical Writing', 'API Documentation', 'User Manuals',
+        'Standard Operating Procedures', 'Knowledge Base Articles',
+        'Software Documentation', 'Medical Writing', 'Legal Writing', 'Grant Writing',
+        // Editing & Proofreading
+        'Editing', 'Proofreading', 'Copy Editing', 'Fact-Checking',
+        'Content Auditing', 'Style Guide Development',
+        // Translation
+        'English Translation', 'Spanish Translation', 'French Translation',
+        'German Translation', 'Chinese Translation', 'Japanese Translation',
+        'Korean Translation', 'Portuguese Translation', 'Arabic Translation',
+        'Italian Translation', 'Russian Translation', 'Hindi Translation',
+        'Localization', 'Transcription', 'Subtitling', 'Voice-Over Scripts',
+        // More Languages
+        'Dutch Translation', 'Swedish Translation', 'Norwegian Translation',
+        'Danish Translation', 'Finnish Translation', 'Polish Translation',
+        'Czech Translation', 'Thai Translation', 'Vietnamese Translation',
+        'Indonesian Translation', 'Turkish Translation', 'Greek Translation',
+        'Hebrew Translation', 'Ukrainian Translation', 'Swahili Translation',
+        // UX & Digital Writing
+        'UX Writing', 'Microcopy', 'Chatbot Scripts', 'App Store Descriptions',
+        'Social Media Captions', 'Tagline Writing', 'Slogan Writing',
+        'Resume Writing', 'Cover Letter Writing', 'LinkedIn Profile Writing',
+        'Proposal Writing', 'RFP Responses', 'Business Correspondence',
+        // AI-Assisted Writing
+        'AI Content Editing', 'AI Prompt Writing', 'Jasper AI', 'GPT Content Creation',
+        // Video & Audio Scripts
+        'Video Scripts', 'Podcast Scripts', 'Webinar Scripts',
+        'Tutorial Writing', 'Course Content Writing', 'Landing Page Copy',
+        'Brand Voice Development', 'Tone of Voice Guidelines',
+    ],
+
+    // ═══════════════════════════════════════════
+    // MARKETING & SALES
+    // ═══════════════════════════════════════════
+    'sales-marketing' => [
+        // Digital Marketing
+        'Digital Marketing', 'Social Media Marketing', 'Content Marketing',
+        'Email Marketing', 'Marketing Automation', 'Growth Hacking',
+        'Conversion Rate Optimization', 'A/B Testing', 'Marketing Strategy',
+        'Brand Strategy', 'Market Research', 'Competitive Analysis',
+        // SEO & SEM
+        'SEO', 'Technical SEO', 'Local SEO', 'Link Building',
+        'Google Ads', 'Facebook Ads', 'Instagram Ads', 'TikTok Ads',
+        'LinkedIn Ads', 'PPC Management', 'Google Analytics', 'GTM',
+        // Social Media
+        'Social Media Management', 'Community Management', 'Influencer Marketing',
+        'Social Media Strategy', 'Content Calendar', 'Hootsuite', 'Buffer',
+        'Instagram Marketing', 'TikTok Marketing', 'YouTube Marketing',
+        'LinkedIn Marketing', 'Twitter/X Marketing', 'Pinterest Marketing',
+        // Sales
+        'Sales Funnel Design', 'Lead Generation', 'Cold Outreach',
+        'CRM Management', 'Salesforce', 'HubSpot', 'Pipedrive',
+        'Sales Copywriting', 'Proposal Writing', 'B2B Sales', 'B2C Sales',
+        // Public Relations
+        'Public Relations', 'Media Relations', 'Crisis Communications',
+        'Event Marketing', 'Podcast Marketing', 'Affiliate Marketing',
+        // Marketing Tools
+        'Mailchimp', 'Klaviyo', 'ConvertKit', 'ActiveCampaign', 'Brevo',
+        'Zapier', 'Make (Integromat)', 'Segment', 'Mixpanel', 'Amplitude',
+        'Hotjar', 'Crazy Egg', 'SEMrush', 'Ahrefs', 'Moz',
+        'Google Search Console', 'Google Tag Manager', 'Google Data Studio',
+        'Meta Business Suite', 'Meta Pixel', 'Shopify Marketing',
+        // Video & Content Marketing
+        'Video Marketing', 'Webinar Marketing', 'Live Event Marketing',
+        'User-Generated Content', 'Viral Marketing', 'Guerrilla Marketing',
+        'Neuromarketing', 'Customer Journey Mapping', 'Marketing Funnel Optimization',
+        // E-commerce Marketing
+        'Amazon Advertising', 'Amazon SEO', 'Shopify SEO',
+        'WooCommerce Marketing', 'Product Launch Strategy',
+        'Marketplace Optimization', 'Dropshipping Marketing',
+        // Analytics & Data
+        'Marketing Analytics', 'Attribution Modeling', 'ROI Analysis',
+        'Customer Segmentation', 'Cohort Analysis', 'Predictive Marketing',
+        'Voice Search Optimization', 'App Store Optimization',
+    ],
+
+    // ═══════════════════════════════════════════
+    // BUSINESS & FINANCE
+    // ═══════════════════════════════════════════
+    'finance-accounting' => [
+        // Business
+        'Business Plan Writing', 'Business Strategy', 'Business Analysis',
+        'Project Management', 'Product Management', 'Operations Management',
+        'Change Management', 'Risk Management', 'Supply Chain Management',
+        'Lean Six Sigma', 'Process Improvement', 'Strategic Planning',
+        // Finance
+        'Financial Analysis', 'Financial Modeling', 'Bookkeeping', 'Accounting',
+        'QuickBooks', 'Xero', 'FreshBooks', 'Tax Preparation',
+        'Budgeting', 'Cash Flow Management', 'Payroll',
+        'Financial Forecasting', 'Investment Analysis', 'Cryptocurrency',
+        // Consulting
+        'Management Consulting', 'IT Consulting', 'HR Consulting',
+        'Startup Consulting', 'Fundraising', 'Pitch Deck Creation',
+        'Investor Relations', 'Due Diligence', 'Mergers & Acquisitions',
+        // Legal
+        'Contract Drafting', 'Legal Research', 'Compliance', 'GDPR Compliance',
+        'Intellectual Property', 'Privacy Policy', 'Terms of Service',
+        // Data & Analytics
+        'Data Analysis', 'Excel', 'Google Sheets', 'Power BI', 'Tableau',
+        'SQL', 'Business Intelligence', 'KPI Development', 'Reporting',
+        // ERP & Enterprise
+        'SAP', 'Oracle ERP', 'NetSuite', 'Odoo', 'Microsoft Dynamics',
+        'Sage Accounting', 'Wave Accounting', 'MYOB',
+        // Audit & Compliance
+        'Internal Audit', 'External Audit', 'Forensic Accounting',
+        'SOX Compliance', 'IFRS', 'GAAP', 'Cost Accounting',
+        'Revenue Recognition', 'Accounts Payable', 'Accounts Receivable',
+        'Bank Reconciliation', 'Fixed Asset Management',
+        // Insurance & Wealth
+        'Insurance', 'Insurance Underwriting', 'Claims Processing',
+        'Wealth Management', 'Financial Advisory', 'Retirement Planning',
+        'Estate Planning', 'Portfolio Management', 'Venture Capital',
+        'Private Equity', 'Real Estate Finance', 'Mortgage Analysis',
+        // Fintech
+        'Fintech', 'Payment Processing', 'Digital Banking',
+        'DeFi (Decentralized Finance)', 'Tokenomics', 'Financial APIs',
+        'Blockchain Finance', 'Algorithmic Trading', 'Quantitative Analysis',
+        // Nonprofit & Government
+        'Grant Management', 'Nonprofit Accounting', 'Fund Accounting',
+        'Government Accounting', 'Procurement', 'Contract Management',
+    ],
+
+    // ═══════════════════════════════════════════
+    // ENGINEERING & ARCHITECTURE
+    // ═══════════════════════════════════════════
+    'engineering-architecture' => [
+        // Civil & Structural
+        'Civil Engineering', 'Structural Engineering', 'Structural Analysis',
+        'Foundation Design', 'Bridge Engineering', 'Geotechnical Engineering',
+        'Surveying', 'Land Surveying', 'Soil Testing',
+        // Architecture
+        'Architectural Design', 'Building Design', 'Interior Architecture',
+        'Landscape Architecture', 'Urban Planning', 'Sustainable Design',
+        'Green Building', 'LEED Certification', 'Building Codes',
+        'Space Planning', 'Residential Architecture', 'Commercial Architecture',
+        // CAD & BIM
+        'AutoCAD', 'Revit', 'SketchUp', 'Rhino', 'Grasshopper',
+        'SolidWorks', 'CATIA', 'Fusion 360', 'BIM (Building Information Modeling)',
+        'ArchiCAD', '3D Printing Design', 'CAD Drafting', 'Technical Drawing',
+        // Mechanical & Electrical
+        'Mechanical Engineering', 'Electrical Engineering', 'HVAC Design',
+        'Plumbing Design', 'Piping Design', 'Power Systems', 'Control Systems',
+        'Embedded Systems', 'PCB Design', 'Circuit Design', 'PLC Programming',
+        'Robotics', 'IoT Development', 'Arduino', 'Raspberry Pi',
+        // Data Science & AI (cross-category)
+        'Machine Learning', 'Deep Learning', 'Natural Language Processing',
+        'Computer Vision', 'TensorFlow', 'PyTorch', 'Data Science',
+        'Prompt Engineering', 'LLM Fine-Tuning', 'OpenAI API',
+        'Statistical Analysis', 'Predictive Modeling', 'Data Engineering',
+        'ETL Pipelines', 'Data Visualization', 'Python for Data Science',
+        'R Programming', 'MATLAB',
+        // Other Engineering
+        'Environmental Engineering', 'Chemical Engineering',
+        'Industrial Engineering', 'Manufacturing Engineering',
+        'Quality Engineering', 'Safety Engineering', 'Project Engineering',
+        'Finite Element Analysis', 'CFD Analysis', 'GIS', 'Remote Sensing',
+        // Construction & Project
+        'Construction Management', 'Quantity Surveying', 'Cost Estimation',
+        'Project Scheduling', 'Primavera P6', 'Microsoft Project',
+        'Building Envelope Design', 'Fire Protection Engineering',
+        'Water Resources Engineering', 'Transportation Engineering',
+        // Aerospace & Automotive
+        'Aerospace Engineering', 'Automotive Engineering', 'Vehicle Design',
+        'Aerodynamics', 'Propulsion Systems', 'Composites Engineering',
+        // Energy
+        'Solar Energy Design', 'Wind Energy', 'Energy Efficiency',
+        'Power Grid Design', 'Battery Engineering', 'EV Charging Systems',
+        'Nuclear Engineering', 'Petroleum Engineering',
+        // Biomedical
+        'Biomedical Engineering', 'Medical Device Design', 'Prosthetics Design',
+        'Biomechanics', 'Clinical Engineering', 'Tissue Engineering',
+    ],
+
+    // ═══════════════════════════════════════════
+    // ADMIN & CUSTOMER SUPPORT
+    // ═══════════════════════════════════════════
+    'admin-customer-support' => [
+        // Virtual Assistance
+        'Virtual Assistance', 'Executive Assistance', 'Calendar Management',
+        'Email Management', 'Travel Planning', 'Meeting Coordination',
+        'Task Management', 'Personal Assistance', 'Administrative Support',
+        // Data Entry
+        'Data Entry', 'Data Processing', 'Data Mining', 'Web Research',
+        'Lead List Building', 'Database Management', 'Spreadsheet Management',
+        'PDF Conversion', 'OCR Processing', 'Form Filling',
+        // Customer Support
+        'Customer Service', 'Live Chat Support', 'Phone Support',
+        'Help Desk', 'Zendesk', 'Intercom', 'Freshdesk',
+        'Ticket Management', 'Technical Support', 'Customer Success',
+        'Customer Onboarding', 'Knowledge Base Management',
+        // Office & Productivity
+        'Microsoft Office', 'Google Workspace', 'Notion',
+        'Asana', 'Trello', 'Monday.com', 'ClickUp', 'Jira',
+        'Slack Administration', 'Document Formatting',
+        'Presentation Design', 'PowerPoint', 'Google Slides', 'Keynote',
+        // HR
+        'Recruiting', 'Resume Screening', 'Interview Scheduling',
+        'Employee Onboarding', 'Payroll Processing', 'HR Administration',
+        // Audio & Video
+        'Video Production', 'Video Editing', 'YouTube Video Editing',
+        'Podcast Production', 'Voice-Over', 'Audio Editing',
+        'Social Media Video', 'Explainer Videos', 'Promotional Videos',
+        'Audio Production', 'Sound Design', 'Music Production',
+        'Mixing & Mastering', 'Audio Transcription', 'Narration',
+        'Live Streaming', 'Webinar Management', 'OBS Studio',
+        // E-commerce & Operations
+        'Shopify Administration', 'WooCommerce Management', 'Amazon Seller Central',
+        'Inventory Management', 'Order Processing', 'Supply Chain Coordination',
+        // Event & Project Coordination
+        'Event Planning', 'Event Coordination', 'Conference Management',
+        'Workshop Facilitation', 'Vendor Management', 'Office Management',
+        // Translation & Communication
+        'Bilingual Customer Support', 'Multilingual Communication',
+        'Technical Translation Support', 'Chat Moderation', 'Forum Moderation',
+        'Community Building', 'User Engagement',
+    ],
+
+    // ═══════════════════════════════════════════
+    // LEGAL
+    // ═══════════════════════════════════════════
+    'legal' => [
+        // Corporate Law
+        'Corporate Law', 'Business Law', 'Commercial Law',
+        'Contract Law', 'Contract Review', 'Contract Drafting',
+        'Company Formation', 'Corporate Governance', 'Shareholder Agreements',
+        'Partnership Agreements', 'Non-Disclosure Agreements', 'Terms of Service',
+        'Privacy Policies', 'End-User License Agreements',
+        // Intellectual Property
+        'Intellectual Property Law', 'Patent Law', 'Patent Filing',
+        'Trademark Registration', 'Trademark Search', 'Copyright Law',
+        'Trade Secret Protection', 'IP Strategy', 'IP Licensing',
+        // Technology Law
+        'Technology Law', 'Data Privacy Law', 'GDPR Compliance',
+        'CCPA Compliance', 'Cybersecurity Law', 'Internet Law',
+        'Software Licensing', 'SaaS Agreements', 'Open Source Licensing',
+        'AI Regulation', 'Blockchain Legal',
+        // Employment & Immigration
+        'Employment Law', 'Labor Law', 'Employee Contracts',
+        'Non-Compete Agreements', 'Immigration Law', 'Work Permits',
+        'Visa Applications', 'Independent Contractor Agreements',
+        // Regulatory & Compliance
+        'Regulatory Compliance', 'Securities Law', 'Tax Law',
+        'International Trade Law', 'Anti-Money Laundering',
+        'Know Your Customer', 'Financial Regulations',
+        'Healthcare Compliance', 'HIPAA Compliance', 'Environmental Law',
+        // Litigation & Dispute
+        'Litigation Support', 'Legal Research', 'Legal Writing',
+        'Arbitration', 'Mediation', 'Dispute Resolution',
+        'E-Discovery', 'Legal Document Review', 'Paralegal Services',
+        // Real Estate
+        'Real Estate Law', 'Property Law', 'Lease Agreements',
+        'Real Estate Transactions', 'Zoning Law', 'Construction Law',
+        // International & Trade
+        'International Business Law', 'Cross-Border Transactions', 'Foreign Investment',
+        'World Trade Organization', 'Export Controls', 'Sanctions Compliance',
+        // Family & Personal
+        'Family Law', 'Divorce Law', 'Child Custody', 'Adoption Law',
+        'Wills & Trusts', 'Probate Law', 'Personal Injury',
+        // Criminal & Regulatory
+        'Criminal Law', 'White Collar Crime', 'Fraud Investigation',
+        'Banking Regulations', 'Insurance Law', 'Consumer Protection',
+        // Emerging Areas
+        'Crypto Regulation', 'Digital Assets Law', 'NFT Legal',
+        'Space Law', 'Autonomous Vehicle Regulation',
+        'ESG Compliance', 'Climate Law', 'Carbon Credits Legal',
+        'Gig Economy Law', 'Platform Regulation',
+    ],
+];
+
+// ── Insert skills ──
+$insertStmt = $pdo->prepare('
+    INSERT INTO "skill" (id, name, slug, category_id, is_active, usage_count, created_at)
+    VALUES (gen_random_uuid(), :name, :slug, :cat_id, true, 0, NOW())
+    ON CONFLICT (slug) DO NOTHING
+');
+
+$total = 0;
+$inserted = 0;
+
+foreach ($skillsByCategory as $catSlug => $skills) {
+    $catId = $cats[$catSlug] ?? null;
+    echo "\n🏷️  {$catSlug}" . ($catId ? "" : " [⚠️ no matching category]") . "\n";
+
+    foreach ($skills as $skillName) {
+        $slug = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $skillName));
+        $slug = trim($slug, '-');
+
+        $total++;
+        $insertStmt->execute([
+            'name'   => $skillName,
+            'slug'   => $slug,
+            'cat_id' => $catId,
+        ]);
+
+        if ($insertStmt->rowCount() > 0) {
+            $inserted++;
+        }
+    }
+    echo "   ✓ " . count($skills) . " skills processed\n";
+}
+
+$finalCount = $pdo->query('SELECT COUNT(*) FROM "skill"')->fetchColumn();
+echo "\n══════════════════════════════════════\n";
+echo "📊 Total processed: {$total}\n";
+echo "✅ Newly inserted: {$inserted}\n";
+echo "🗃️  Skills in database: {$finalCount}\n";
+echo "══════════════════════════════════════\n";

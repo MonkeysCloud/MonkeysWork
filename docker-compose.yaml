@@ -28,44 +28,64 @@ services:
     build: ./services/ai-scope-assistant
     ports:
       - "8081:8080"
+    volumes:
+      - ./services/shared:/app/shared
     environment:
       ENVIRONMENT: dev
       FEATURE_FLAG_AI_SCOPE: "true"
       FALLBACK_MODE: manual
       LOG_LEVEL: debug
       PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
+      INTERNAL_API_URL: http://monkeyswork-api:8080/api/v1/internal
+      INTERNAL_API_TOKEN: dev-internal-token
+      GCP_PROJECT_ID: monkeyswork-dev
 
   ai-match-v1:
     build: ./services/ai-match-v1
     ports:
       - "8082:8080"
+    volumes:
+      - ./services/shared:/app/shared
     environment:
       ENVIRONMENT: dev
       FEATURE_FLAG_AI_MATCH: "true"
       LOG_LEVEL: debug
       PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
+      INTERNAL_API_URL: http://monkeyswork-api:8080/api/v1/internal
+      INTERNAL_API_TOKEN: dev-internal-token
+      GCP_PROJECT_ID: monkeyswork-dev
 
   ai-fraud-v1:
     build: ./services/ai-fraud-v1
     ports:
       - "8083:8080"
+    volumes:
+      - ./services/shared:/app/shared
     environment:
       ENVIRONMENT: dev
       FEATURE_FLAG_FRAUD_SCORING: "true"
       FRAUD_ENFORCEMENT_MODE: shadow
       LOG_LEVEL: debug
       PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
+      INTERNAL_API_URL: http://monkeyswork-api:8080/api/v1/internal
+      INTERNAL_API_TOKEN: dev-internal-token
+      GCP_PROJECT_ID: monkeyswork-dev
 
   verification-automation:
     build: ./services/verification-automation
     ports:
       - "8084:8080"
+    volumes:
+      - ./services/shared:/app/shared
     environment:
       ENVIRONMENT: dev
       FEATURE_FLAG_AUTO_VERIFICATION: "true"
       HUMAN_REVIEW_THRESHOLD: "0.7"
       LOG_LEVEL: debug
       PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
+      INTERNAL_API_URL: http://monkeyswork-api:8080/api/v1/internal
+      INTERNAL_API_TOKEN: dev-internal-token
+      GCP_PROJECT_ID: monkeyswork-dev
 
   redis:
     image: redis:7-alpine
@@ -94,6 +114,12 @@ services:
       DB_USER: mw_app
       DB_PASSWORD: localdev
       REDIS_URL: redis://redis:6379
+      INTERNAL_API_TOKEN: dev-internal-token
+      PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
+      GCP_PROJECT_ID: monkeyswork-dev
+      AI_FRAUD_URL: http://ai-fraud-v1:8080/api/v1/fraud/check
+      AI_MATCH_URL: http://ai-match-v1:8080/api/v1/match/rank
+      AI_SCOPE_URL: http://ai-scope-assistant:8080/api/v1/scope/analyze
     depends_on:
       postgres:
         condition: service_healthy
@@ -127,7 +153,7 @@ services:
       - frontend_node_modules:/app/node_modules
     environment:
       NODE_ENV: development
-      NEXT_PUBLIC_API_URL: http://monkeyswork-api:8080
+      NEXT_PUBLIC_API_URL: http://localhost:8086/api/v1
       NEXT_PUBLIC_SOCKET_URL: http://socket-server:3001
     depends_on:
       - monkeyswork-api

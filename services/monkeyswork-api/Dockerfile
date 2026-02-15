@@ -46,6 +46,7 @@ RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/supervisord.conf /etc/supervisord.conf
 COPY docker/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY docker/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
 # Create app directory
 RUN adduser -D -G www-data appuser && \

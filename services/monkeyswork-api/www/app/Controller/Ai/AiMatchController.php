@@ -28,17 +28,30 @@ final class AiMatchController
             return $this->error('job_id is required');
         }
 
-        $limit = (int) ($data['limit'] ?? 20);
+        $matchUrl = getenv('AI_MATCH_URL') ?: 'http://ai-match-v1:8080/api/v1/match/rank';
 
-        // TODO: call AI match engine microservice
-        $result = [
-            'job_id'        => $data['job_id'],
-            'results'       => [],
-            'model_version' => 'pending',
-            'ab_group'      => 'control',
-            'status'        => 'ai_service_pending',
-        ];
+        $ch = curl_init($matchUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($data),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT_MS     => 5000,
+            CURLOPT_CONNECTTIMEOUT_MS => 1000,
+        ]);
 
-        return $this->json(['data' => $result]);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response === false || $httpCode !== 200) {
+            return $this->json(['data' => [
+                'job_id'   => $data['job_id'],
+                'results'  => [],
+                'status'   => 'ai_service_unavailable',
+            ]]);
+        }
+
+        return $this->json(['data' => json_decode($response, true)]);
     }
 }

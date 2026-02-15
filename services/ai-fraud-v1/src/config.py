@@ -5,7 +5,7 @@ from pydantic import BaseModel
 class Settings(BaseModel):
     service_name: str = "ai-fraud-v1"
     environment: str = os.getenv("ENVIRONMENT", "dev")
-    gcp_project_id: str = os.getenv("GCP_PROJECT_ID", "monkeyswork-dev")
+    gcp_project_id: str = os.getenv("GCP_PROJECT_ID", "monkeyswork")
     region: str = os.getenv("REGION", "us-central1")
     log_level: str = os.getenv("LOG_LEVEL", "info")
 

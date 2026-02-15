@@ -37,6 +37,12 @@ class InvoiceLine
     #[ManyToOne(targetEntity: Milestone::class)]
     public ?string $milestone_id = null;
 
+    #[Field(type: 'uuid', nullable: true, comment: 'optional link to time entry')]
+    public ?string $time_entry_id = null;
+
+    #[Field(type: 'uuid', nullable: true, comment: 'optional link to weekly timesheet')]
+    public ?string $timesheet_id = null;
+
     #[Field(type: 'integer', default: 0)]
     public int $sort_order = 0;
 
@@ -52,6 +58,8 @@ class InvoiceLine
     public function getUnitPrice(): string { return $this->unit_price; }
     public function getAmount(): string { return $this->amount; }
     public function getMilestoneId(): ?string { return $this->milestone_id; }
+    public function getTimeEntryId(): ?string { return $this->time_entry_id; }
+    public function getTimesheetId(): ?string { return $this->timesheet_id; }
     public function getSortOrder(): int { return $this->sort_order; }
     public function getCreatedAt(): \DateTimeImmutable { return $this->created_at; }
 
@@ -63,5 +71,7 @@ class InvoiceLine
     public function setUnitPrice(string $v): self { $this->unit_price = $v; return $this; }
     public function setAmount(string $v): self { $this->amount = $v; return $this; }
     public function setMilestoneId(?string $v): self { $this->milestone_id = $v; return $this; }
+    public function setTimeEntryId(?string $v): self { $this->time_entry_id = $v; return $this; }
+    public function setTimesheetId(?string $v): self { $this->timesheet_id = $v; return $this; }
     public function setSortOrder(int $v): self { $this->sort_order = $v; return $this; }
 }

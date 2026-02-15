@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Event\UserRegistered;
+use App\Service\PubSubPublisher;
 use App\Validator\RegistrationValidator;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
@@ -21,6 +22,7 @@ final class AuthController
         private ConnectionInterface $db,
         private RegistrationValidator $registrationValidator = new RegistrationValidator(),
         private ?EventDispatcherInterface $events = null,
+        private ?PubSubPublisher $pubsub = null,
     ) {}
 
     /* ------------------------------------------------------------------ */
@@ -52,10 +54,10 @@ final class AuthController
         $this->db->pdo()->prepare(
             'INSERT INTO "user" (id, email, password_hash, role, status, display_name,
                                  first_name, last_name, timezone, locale, token_version,
-                                 metadata, created_at, updated_at, permissions)
+                                 metadata, created_at, updated_at)
              VALUES (:id, :email, :password_hash, :role, :status, :display_name,
                      :first_name, :last_name, :timezone, :locale, 1,
-                     :metadata, :created_at, :updated_at, :permissions)'
+                     :metadata, :created_at, :updated_at)'
         )->execute([
             'id'            => $id,
             'email'         => $email,
@@ -67,14 +69,35 @@ final class AuthController
             'last_name'     => $data['last_name'] ?? null,
             'timezone'      => $data['timezone'] ?? 'UTC',
             'locale'        => $data['locale'] ?? 'en',
-            'metadata'      => '{}',
+            'metadata'      => json_encode($data['metadata'] ?? []),
             'created_at'    => $now,
             'updated_at'    => $now,
-            'permissions'   => '',
         ]);
 
-        // Dispatch event
+        // Create empty profile row based on role
+        $role = $data['role'];
+        if ($role === 'client') {
+            $this->db->pdo()->prepare(
+                'INSERT INTO "clientprofile" (user_id, created_at, updated_at)
+                 VALUES (:uid, :now, :now)'
+            )->execute(['uid' => $id, 'now' => $now]);
+        } elseif ($role === 'freelancer') {
+            $this->db->pdo()->prepare(
+                'INSERT INTO "freelancerprofile" (user_id, created_at, updated_at)
+                 VALUES (:uid, :now, :now)'
+            )->execute(['uid' => $id, 'now' => $now]);
+        }
+
+        // Dispatch domain event
         $this->events?->dispatch(new UserRegistered($id, $email, $data['role']));
+
+        // Publish to Pub/Sub (triggers fraud baseline + verification automation)
+        $pubsub = $this->pubsub ?? new PubSubPublisher();
+        try {
+            $pubsub->userRegistered($id, $data['role'], $email);
+        } catch (\Throwable) {
+            // Non-critical: don't fail registration if Pub/Sub is down
+        }
 
         return $this->created(['data' => ['id' => $id, 'email' => $email]]);
     }
@@ -92,7 +115,7 @@ final class AuthController
         }
 
         $stmt = $this->db->pdo()->prepare(
-            'SELECT id, password_hash, role, status, display_name, token_version
+            'SELECT id, password_hash, role, status, display_name, token_version, profile_completed
              FROM "user" WHERE email = :email AND deleted_at IS NULL'
         );
         $stmt->execute(['email' => strtolower(trim($data['email']))]);
@@ -106,15 +129,50 @@ final class AuthController
             return $this->error('Account suspended', 403);
         }
 
-        // TODO: generate JWT pair via AuthService
+        // Generate JWT
+        $jwtSecret = $_ENV['JWT_SECRET'] ?? 'changeme-use-at-least-32-characters-of-randomness';
+        $now = time();
+
+        $header = self::base64UrlEncode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
+
+        $accessPayload = self::base64UrlEncode(json_encode([
+            'sub'   => $user['id'],
+            'role'  => $user['role'],
+            'email' => strtolower(trim($data['email'])),
+            'iat'   => $now,
+            'exp'   => $now + 1800, // 30 minutes
+        ]));
+        $accessSig = self::base64UrlEncode(
+            hash_hmac('sha256', "{$header}.{$accessPayload}", $jwtSecret, true)
+        );
+        $accessToken = "{$header}.{$accessPayload}.{$accessSig}";
+
+        $refreshPayload = self::base64UrlEncode(json_encode([
+            'sub'  => $user['id'],
+            'type' => 'refresh',
+            'iat'  => $now,
+            'exp'  => $now + 604800, // 7 days
+        ]));
+        $refreshSig = self::base64UrlEncode(
+            hash_hmac('sha256', "{$header}.{$refreshPayload}", $jwtSecret, true)
+        );
+        $refreshToken = "{$header}.{$refreshPayload}.{$refreshSig}";
+
         return $this->json([
             'data' => [
-                'user_id' => $user['id'],
-                'role'    => $user['role'],
-                'token'   => 'JWT_PLACEHOLDER',
-                'refresh' => 'REFRESH_PLACEHOLDER',
+                'user_id'            => $user['id'],
+                'role'               => $user['role'],
+                'display_name'       => $user['display_name'] ?? null,
+                'profile_completed'  => (bool) $user['profile_completed'],
+                'token'              => $accessToken,
+                'refresh'            => $refreshToken,
             ],
         ]);
+    }
+
+    private static function base64UrlEncode(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
 
     /* ------------------------------------------------------------------ */

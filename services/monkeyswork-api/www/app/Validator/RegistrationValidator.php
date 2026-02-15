@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace App\Validator;
 
-use MonkeysLegion\Http\JsonResponse;
+use MonkeysLegion\Http\Message\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 
 /**

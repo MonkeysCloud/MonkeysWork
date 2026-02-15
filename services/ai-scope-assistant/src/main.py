@@ -1,42 +1,71 @@
 """
 AI Scope Assistant - Job decomposition into structured milestones
+
+Subscribes to:
+  - job-published → auto-analyze scope for new jobs (async)
+
+Exposes:
+  - POST /api/v1/scope/analyze → sync scope analysis (called by PHP API)
 """
+
 import os
-from fastapi import FastAPI, HTTPException
+import sys
+import asyncio
+from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import structlog
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+
+from src.routes import router
+from src.config import settings
 
 logger = structlog.get_logger()
 
 SERVICE_NAME = "ai-scope-assistant"
-VERSION = os.getenv("SERVICE_VERSION", "0.1.0")
+VERSION = os.getenv("SERVICE_VERSION", "1.0.0")
+
+_subscriber_task = None
+
+
+async def _start_subscribers():
+    """Start Pub/Sub subscriber for job-published events."""
+    try:
+        from shared.pubsub import subscribe_async
+        from src.subscribers import handle_job_published
+
+        global _subscriber_task
+        _subscriber_task = asyncio.create_task(
+            subscribe_async(
+                topic_name="job-published",
+                subscription_name="job-published-scope",
+                handler=handle_job_published,
+            )
+        )
+        logger.info("subscriber_started", topic="job-published")
+    except Exception:
+        logger.exception("subscriber_start_failed")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("service_starting", service=SERVICE_NAME, version=VERSION)
-    # TODO: Initialize model clients, PubSub subscribers
+    await _start_subscribers()
     yield
+    if _subscriber_task:
+        _subscriber_task.cancel()
     logger.info("service_stopping", service=SERVICE_NAME)
 
 
-app = FastAPI(
-    title=SERVICE_NAME,
-    version=VERSION,
-    lifespan=lifespan,
-)
+app = FastAPI(title=SERVICE_NAME, version=VERSION, lifespan=lifespan)
+app.include_router(router)
 
 
 @app.get("/healthz")
 async def health():
-    return {
-        "status": "ok",
-        "service": SERVICE_NAME,
-        "version": VERSION,
-    }
+    return {"status": "ok", "service": SERVICE_NAME, "version": VERSION}
 
 
 @app.get("/readyz")
 async def ready():
-    # TODO: Check model endpoint connectivity, PubSub health
     return {"status": "ready"}

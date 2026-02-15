@@ -389,6 +389,7 @@ resource "google_sql_user" "app" {
 # ─────────────────────────────────────────────────────
 locals {
   pubsub_topics = {
+    # Legacy aggregate topics (kept for future fan-out / analytics)
     "job-events"          = "Job lifecycle events"
     "proposal-events"     = "Proposal lifecycle events"
     "milestone-events"    = "Milestone lifecycle events"
@@ -397,9 +398,17 @@ locals {
     "match-events"        = "Match engine results"
     "audit-events"        = "All decision audit logs"
     "notification-events" = "User notification triggers"
+
+    # AI service event topics (match code publishers)
+    "user-registered"        = "User registration events — triggers fraud baseline + verification"
+    "verification-submitted" = "Verification document submitted — triggers automation"
+    "proposal-submitted"     = "Proposal submitted — triggers fraud + match analysis"
+    "job-published"          = "Job published — triggers scope + match analysis"
+    "profile-ready"          = "Freelancer profile ready — triggers embedding + re-rank"
   }
 
   subscriptions = {
+    # Legacy subscriptions (kept for backward compat)
     "ai-scope-on-job-created"        = { topic = "job-events", filter = "attributes.event_type = \"job_created\"" }
     "ai-match-on-job-created"        = { topic = "job-events", filter = "attributes.event_type = \"job_created\"" }
     "ai-fraud-on-proposal-submitted" = { topic = "proposal-events", filter = "attributes.event_type = \"proposal_submitted\"" }
@@ -407,6 +416,15 @@ locals {
     "verification-on-status-change"  = { topic = "verification-events", filter = "" }
     "notification-dispatcher"        = { topic = "notification-events", filter = "" }
     "audit-sink"                     = { topic = "audit-events", filter = "" }
+
+    # AI service subscriptions (match code subscribers)
+    "user-registered-fraud"          = { topic = "user-registered", filter = "" }
+    "user-registered-verification"   = { topic = "user-registered", filter = "" }
+    "verification-submitted-auto"    = { topic = "verification-submitted", filter = "" }
+    "proposal-submitted-fraud"       = { topic = "proposal-submitted", filter = "" }
+    "job-published-match"            = { topic = "job-published", filter = "" }
+    "job-published-scope"            = { topic = "job-published", filter = "" }
+    "profile-ready-match"            = { topic = "profile-ready", filter = "" }
   }
 }
 
@@ -774,6 +792,21 @@ resource "google_secret_manager_secret" "jwt_secret" {
   depends_on = [google_project_service.apis]
 }
 
+resource "google_secret_manager_secret" "internal_api_token" {
+  secret_id = "mw-${var.environment}-internal-api-token"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "internal_api_token" {
+  secret      = google_secret_manager_secret.internal_api_token.id
+  secret_data = var.internal_api_token
+}
+
 # ─────────────────────────────────────────────────────
 # 10. MONITORING — Alert Policies
 # ─────────────────────────────────────────────────────
@@ -889,6 +922,48 @@ resource "kubernetes_secret_v1" "jwt_secret" {
 
   data = {
     secret = var.jwt_secret
+  }
+
+  depends_on = [google_container_cluster.primary]
+}
+
+# ─────────────────────────────────────────────────────
+# 13. KUBERNETES — AI Service Namespace + Secrets
+# ─────────────────────────────────────────────────────
+resource "kubernetes_namespace_v1" "ai" {
+  metadata {
+    name = "monkeyswork-ai"
+
+    labels = {
+      environment = var.environment
+      managed-by  = "terraform"
+    }
+  }
+
+  depends_on = [google_container_cluster.primary]
+}
+
+resource "kubernetes_secret_v1" "internal_api_token_ai" {
+  metadata {
+    name      = "internal-api-token"
+    namespace = "monkeyswork-ai"
+  }
+
+  data = {
+    token = var.internal_api_token
+  }
+
+  depends_on = [kubernetes_namespace_v1.ai]
+}
+
+resource "kubernetes_secret_v1" "internal_api_token_main" {
+  metadata {
+    name      = "internal-api-token"
+    namespace = "monkeyswork"
+  }
+
+  data = {
+    token = var.internal_api_token
   }
 
   depends_on = [google_container_cluster.primary]

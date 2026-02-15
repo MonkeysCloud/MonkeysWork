@@ -812,6 +812,66 @@ Report *──0..1 User (reported)
 
 ---
 
+### 2.31 TimeEntry
+
+**Table:** `time_entries`
+
+| Field | Type | DB Type | Null | Default | Index | Notes |
+|-------|------|---------|------|---------|-------|-------|
+| `id` | `string` | `UUID` | NO | — | PK | |
+| `contract_id` | `string` | `UUID` | NO | — | FK→contracts, IDX | |
+| `freelancer_id` | `string` | `UUID` | NO | — | FK→users, IDX | |
+| `milestone_id` | `string` | `UUID` | YES | — | FK→milestones | optional |
+| `started_at` | `datetime` | `TIMESTAMPTZ` | NO | — | IDX | |
+| `ended_at` | `datetime` | `TIMESTAMPTZ` | YES | — | — | null = running |
+| `duration_minutes` | `integer` | `INT` | NO | `0` | — | computed on stop |
+| `description` | `string` | `TEXT` | YES | — | — | |
+| `task_label` | `string` | `VARCHAR(200)` | YES | — | — | category/task tag |
+| `is_manual` | `boolean` | `BOOL` | NO | `false` | — | false=live, true=manual |
+| `is_billable` | `boolean` | `BOOL` | NO | `true` | — | |
+| `hourly_rate` | `string` | `DECIMAL(10,2)` | NO | — | — | snapshot from contract |
+| `amount` | `string` | `DECIMAL(12,2)` | NO | `0.00` | — | duration/60 × rate |
+| `screenshot_urls` | `json` | `JSONB` | NO | `[]` | — | periodic screenshots |
+| `activity_score` | `string` | `DECIMAL(5,2)` | YES | — | — | 0-100 activity % |
+| `status` | `string` | `VARCHAR(20)` | NO | `running` | IDX | `running`, `logged`, `approved`, `disputed`, `rejected` |
+| `approved_by` | `string` | `UUID` | YES | — | — | FK→users |
+| `approved_at` | `datetime` | `TIMESTAMPTZ` | YES | — | — | |
+| `rejected_reason` | `string` | `TEXT` | YES | — | — | |
+| `invoice_line_id` | `string` | `UUID` | YES | — | FK→invoice_lines | |
+| `created_at` | `datetime` | `TIMESTAMPTZ` | NO | `NOW()` | — | |
+| `updated_at` | `datetime` | `TIMESTAMPTZ` | NO | `NOW()` | — | |
+
+---
+
+### 2.32 WeeklyTimesheet
+
+**Table:** `weekly_timesheets`
+
+| Field | Type | DB Type | Null | Default | Index | Notes |
+|-------|------|---------|------|---------|-------|-------|
+| `id` | `string` | `UUID` | NO | — | PK | |
+| `contract_id` | `string` | `UUID` | NO | — | FK→contracts, IDX | |
+| `freelancer_id` | `string` | `UUID` | NO | — | FK→users, IDX | |
+| `week_start` | `date` | `DATE` | NO | — | — | Monday |
+| `week_end` | `date` | `DATE` | NO | — | — | Sunday |
+| `total_minutes` | `integer` | `INT` | NO | `0` | — | sum of all entries |
+| `billable_minutes` | `integer` | `INT` | NO | `0` | — | only billable |
+| `total_amount` | `string` | `DECIMAL(12,2)` | NO | `0.00` | — | billable/60 × rate |
+| `hourly_rate` | `string` | `DECIMAL(10,2)` | NO | — | — | rate in effect |
+| `currency` | `string` | `CHAR(3)` | NO | `USD` | — | |
+| `status` | `string` | `VARCHAR(20)` | NO | `pending` | IDX | `pending`, `submitted`, `approved`, `disputed`, `paid` |
+| `submitted_at` | `datetime` | `TIMESTAMPTZ` | YES | — | — | |
+| `approved_at` | `datetime` | `TIMESTAMPTZ` | YES | — | — | |
+| `approved_by` | `string` | `UUID` | YES | — | — | FK→users |
+| `notes` | `string` | `TEXT` | YES | — | — | freelancer notes |
+| `client_feedback` | `string` | `TEXT` | YES | — | — | |
+| `invoice_id` | `string` | `UUID` | YES | — | FK→invoices | |
+| `created_at` | `datetime` | `TIMESTAMPTZ` | NO | `NOW()` | — | |
+| `updated_at` | `datetime` | `TIMESTAMPTZ` | NO | `NOW()` | — | |
+| UNIQUE | | | | | | `(contract_id, week_start)` |
+
+---
+
 ## 3. Enums & Value Objects
 
 ```php
@@ -958,6 +1018,24 @@ enum VerificationLevel: string {
     case Verified = 'verified';
     case Premium  = 'premium';
 }
+
+// app/Enum/TimeEntryStatus.php
+enum TimeEntryStatus: string {
+    case Running  = 'running';
+    case Logged   = 'logged';
+    case Approved = 'approved';
+    case Disputed = 'disputed';
+    case Rejected = 'rejected';
+}
+
+// app/Enum/TimesheetStatus.php
+enum TimesheetStatus: string {
+    case Pending   = 'pending';
+    case Submitted = 'submitted';
+    case Approved  = 'approved';
+    case Disputed  = 'disputed';
+    case Paid      = 'paid';
+}
 ```
 
 ---
@@ -994,6 +1072,13 @@ enum VerificationLevel: string {
 | Invoice → InvoiceLine[] | 1:N | `invoice_lines.invoice_id` | CASCADE |
 | Contract → Review[] | 1:N | `reviews.contract_id` | RESTRICT |
 | FreelancerProfile → Payout[] | 1:N | `payouts.freelancer_id` | RESTRICT |
+| Contract → TimeEntry[] | 1:N | `time_entries.contract_id` | CASCADE |
+| Contract → WeeklyTimesheet[] | 1:N | `weekly_timesheets.contract_id` | CASCADE |
+| Milestone → TimeEntry[] | 0..1:N | `time_entries.milestone_id` | SET NULL |
+| TimeEntry → InvoiceLine | N:0..1 | `time_entries.invoice_line_id` | SET NULL |
+| WeeklyTimesheet → Invoice | N:0..1 | `weekly_timesheets.invoice_id` | SET NULL |
+| InvoiceLine → TimeEntry | N:0..1 | `invoice_lines.time_entry_id` | SET NULL |
+| InvoiceLine → WeeklyTimesheet | N:0..1 | `invoice_lines.timesheet_id` | SET NULL |
 
 ---
 
@@ -1224,6 +1309,28 @@ enum VerificationLevel: string {
 | `GET` | `/api/v1/admin/dashboard` | `admin.dashboard` | `AdminDashboardController@index` | KPIs |
 | `GET` | `/api/v1/admin/activity-log` | `admin.activity` | `AdminActivityController@index` | Audit trail |
 
+### 5.21 Time Tracking
+
+| Method | Path | Name | Controller | Description |
+|--------|------|------|------------|-------------|
+| `POST` | `/api/v1/time/entries/start` | `time.start` | `TimeTrackingController@start` | Start live timer |
+| `POST` | `/api/v1/time/entries/{id}/stop` | `time.stop` | `TimeTrackingController@stop` | Stop timer |
+| `POST` | `/api/v1/time/entries` | `time.create` | `TimeTrackingController@create` | Manual entry |
+| `GET` | `/api/v1/time/entries` | `time.entries` | `TimeTrackingController@entries` | List entries |
+| `GET` | `/api/v1/time/entries/running` | `time.running` | `TimeTrackingController@running` | Running timer |
+| `GET` | `/api/v1/time/entries/{id}` | `time.entry.show` | `TimeTrackingController@showEntry` | Entry detail |
+| `PATCH` | `/api/v1/time/entries/{id}` | `time.entry.update` | `TimeTrackingController@updateEntry` | Edit entry |
+| `DELETE` | `/api/v1/time/entries/{id}` | `time.entry.delete` | `TimeTrackingController@deleteEntry` | Delete entry |
+| `POST` | `/api/v1/time/entries/{id}/approve` | `time.entry.approve` | `TimeTrackingController@approveEntry` | Approve entry |
+| `POST` | `/api/v1/time/entries/{id}/reject` | `time.entry.reject` | `TimeTrackingController@rejectEntry` | Reject entry |
+| `POST` | `/api/v1/time/entries/heartbeat` | `time.heartbeat` | `TimeTrackingController@heartbeat` | Tracker heartbeat |
+| `GET` | `/api/v1/time/timesheets` | `time.timesheets` | `TimeTrackingController@timesheets` | List timesheets |
+| `GET` | `/api/v1/time/timesheets/{id}` | `time.timesheet.show` | `TimeTrackingController@showTimesheet` | Timesheet detail |
+| `POST` | `/api/v1/time/timesheets/{id}/submit` | `time.timesheet.submit` | `TimeTrackingController@submitTimesheet` | Submit for review |
+| `POST` | `/api/v1/time/timesheets/{id}/approve` | `time.timesheet.approve` | `TimeTrackingController@approveTimesheet` | Approve → escrow |
+| `POST` | `/api/v1/time/timesheets/{id}/dispute` | `time.timesheet.dispute` | `TimeTrackingController@disputeTimesheet` | Dispute |
+| `GET` | `/api/v1/time/summary` | `time.summary` | `TimeTrackingController@summary` | Aggregate stats |
+
 ---
 
 ## 6. MonkeysLegion File Map
@@ -1250,6 +1357,7 @@ app/
 │   ├── NotificationController.php
 │   ├── SkillController.php
 │   ├── CategoryController.php
+│   ├── TimeTrackingController.php
 │   ├── Ai/
 │   │   ├── AiScopeController.php
 │   │   ├── AiMatchController.php
@@ -1294,7 +1402,9 @@ app/
 │   ├── FeatureFlag.php
 │   ├── Report.php
 │   ├── ActivityLog.php
-│   └── Invitation.php
+│   ├── Invitation.php
+│   ├── TimeEntry.php
+│   └── WeeklyTimesheet.php
 ├── Enum/
 │   ├── UserRole.php
 │   ├── UserStatus.php
@@ -1311,7 +1421,9 @@ app/
 │   ├── PayoutStatus.php
 │   ├── VerificationType.php
 │   ├── VerificationStatus.php
-│   └── VerificationLevel.php
+│   ├── VerificationLevel.php
+│   ├── TimeEntryStatus.php
+│   └── TimesheetStatus.php
 ├── Repository/
 │   ├── UserRepository.php
 │   ├── FreelancerRepository.php
@@ -1332,7 +1444,9 @@ app/
 │   ├── NotificationRepository.php
 │   ├── AiDecisionRepository.php
 │   ├── ReportRepository.php
-│   └── ActivityLogRepository.php
+│   ├── ActivityLogRepository.php
+│   ├── TimeEntryRepository.php
+│   └── WeeklyTimesheetRepository.php
 ├── Service/
 │   ├── AuthService.php
 │   ├── JobService.php
@@ -1370,7 +1484,10 @@ app/
 │   ├── ReviewCreated.php
 │   ├── VerificationStatusChanged.php
 │   ├── FraudScoreComputed.php
-│   └── UserRegistered.php
+│   ├── UserRegistered.php
+│   ├── TimeEntryLogged.php
+│   ├── TimesheetSubmitted.php
+│   └── TimesheetApproved.php
 ├── Middleware/
 │   ├── AuthMiddleware.php
 │   ├── RoleGuard.php
@@ -1461,11 +1578,11 @@ POST /api/v1/ai/fraud/check
 
 | What | Count |
 |------|-------|
-| Entities | 30 |
-| Enums | 16 |
-| API Routes | 108 |
-| Controllers | 28 |
-| Repositories | 20 |
+| Entities | 32 |
+| Enums | 18 |
+| API Routes | 125 |
+| Controllers | 29 |
+| Repositories | 22 |
 | Services | 16 |
-| Events | 16 |
+| Events | 19 |
 | Pivot Tables | 4 |

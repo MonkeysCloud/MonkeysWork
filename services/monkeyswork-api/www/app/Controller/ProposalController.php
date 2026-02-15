@@ -5,6 +5,8 @@ namespace App\Controller;
 
 use App\Event\ProposalAccepted;
 use App\Event\ProposalSubmitted;
+use App\Service\FeatureFlagService;
+use App\Service\PubSubPublisher;
 use App\Validator\ProposalValidator;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
@@ -24,6 +26,8 @@ final class ProposalController
         private ConnectionInterface $db,
         private ProposalValidator $proposalValidator = new ProposalValidator(),
         private ?EventDispatcherInterface $events = null,
+        private ?FeatureFlagService $flags = null,
+        private ?PubSubPublisher $pubsub = null,
     ) {}
 
     #[Route('POST', '', name: 'proposals.create', summary: 'Submit proposal', tags: ['Proposals'])]
@@ -67,10 +71,60 @@ final class ProposalController
             'now' => $now,
         ]);
 
-        // Dispatch event
+        // ── Sync fraud check (feature-flag controlled) ──────────────
+        $fraudResult = null;
+        $flags = $this->flags ?? new FeatureFlagService($this->db);
+
+        if ($flags->isEnabled('fraud_detection_enabled')) {
+            $fraudResult = $this->callFraudService($userId, $id, $data);
+
+            if ($fraudResult) {
+                // Store fraud results on proposal
+                $this->db->pdo()->prepare(
+                    'UPDATE "proposal" SET ai_fraud_score = :score,
+                            ai_fraud_model_version = :mv, ai_fraud_action = :action,
+                            updated_at = :now WHERE id = :id'
+                )->execute([
+                    'score'  => $fraudResult['fraud_score'] ?? 0.0,
+                    'mv'     => $fraudResult['model_version'] ?? null,
+                    'action' => $fraudResult['recommended_action'] ?? 'allow',
+                    'now'    => $now,
+                    'id'     => $id,
+                ]);
+
+                // Enforcement
+                $mode = $flags->getMode('fraud_enforcement_mode', 'shadow');
+                $score = (float) ($fraudResult['fraud_score'] ?? 0.0);
+
+                if ($mode === 'enforce' && $score > 0.8) {
+                    // Block: delete the proposal and return 403
+                    $this->db->pdo()->prepare('DELETE FROM "proposal" WHERE id = :id')
+                        ->execute(['id' => $id]);
+                    return $this->error('Submission blocked by fraud detection', 403);
+                }
+
+                if ($mode === 'soft_block' && $score > 0.8) {
+                    // Hold for ops review
+                    $this->db->pdo()->prepare(
+                        'UPDATE "proposal" SET status = \'held_for_review\', updated_at = :now WHERE id = :id'
+                    )->execute(['now' => $now, 'id' => $id]);
+                }
+                // shadow mode: just log, allow everything
+            }
+        }
+
+        // Dispatch domain event
         $this->events?->dispatch(new ProposalSubmitted($id, $data['job_id'], $userId));
 
-        return $this->created(['data' => ['id' => $id]]);
+        // Publish to Pub/Sub (async AI services pick this up)
+        $pubsub = $this->pubsub ?? new PubSubPublisher();
+        try {
+            $pubsub->proposalSubmitted($id, $data['job_id'], $userId);
+        } catch (\Throwable) {
+            // Non-critical: don't fail the request if Pub/Sub is down
+        }
+
+        return $this->created(['data' => ['id' => $id, 'fraud' => $fraudResult]]);
     }
 
     #[Route('GET', '/me', name: 'proposals.mine', summary: 'My proposals', tags: ['Proposals'])]
@@ -281,5 +335,91 @@ final class ProposalController
             mt_rand(0, 0x3fff) | 0x8000,
             mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
         );
+    }
+
+    /**
+     * Make a synchronous HTTP call to the fraud detection service.
+     * Must complete in < 500ms P99.
+     *
+     * @return array|null  Decoded JSON response or null on failure
+     */
+    private function callFraudService(string $userId, string $proposalId, array $data): ?array
+    {
+        $fraudUrl = getenv('AI_FRAUD_URL') ?: 'http://ai-fraud-v1:8080/api/v1/fraud/check';
+
+        // Fetch job context for smarter scoring
+        $jobContext = [];
+        if (!empty($data['job_id'])) {
+            $stmt = $this->db->pdo()->prepare(
+                'SELECT budget_min, budget_max FROM "job" WHERE id = :id'
+            );
+            $stmt->execute(['id' => $data['job_id']]);
+            $jobContext = $stmt->fetch(\PDO::FETCH_ASSOC) ?: [];
+        }
+
+        // Fetch freelancer skills
+        $skillStmt = $this->db->pdo()->prepare(
+            'SELECT s.name FROM "skill" s
+             JOIN "freelancerprofile" fp ON fp.user_id = :uid
+             WHERE s.id = ANY(
+                 SELECT unnest(ARRAY(
+                     SELECT jsonb_array_elements_text(fp.certifications)
+                 ))
+             )
+             LIMIT 10'
+        );
+        // Simplified: just get proposal count for velocity check
+        $velStmt = $this->db->pdo()->prepare(
+            'SELECT COUNT(*) FROM "proposal"
+             WHERE freelancer_id = :uid AND created_at > NOW() - INTERVAL \'1 hour\''
+        );
+        $velStmt->execute(['uid' => $userId]);
+        $proposalsLastHour = (int) $velStmt->fetchColumn();
+
+        $totalStmt = $this->db->pdo()->prepare(
+            'SELECT COUNT(*) FROM "proposal" WHERE freelancer_id = :uid'
+        );
+        $totalStmt->execute(['uid' => $userId]);
+        $totalProposals = (int) $totalStmt->fetchColumn();
+
+        // Account age
+        $ageStmt = $this->db->pdo()->prepare(
+            'SELECT EXTRACT(DAY FROM NOW() - created_at)::int FROM "user" WHERE id = :uid'
+        );
+        $ageStmt->execute(['uid' => $userId]);
+        $accountAgeDays = (int) $ageStmt->fetchColumn();
+
+        $payload = [
+            'account_id'          => $userId,
+            'entity_type'         => 'proposal',
+            'entity_id'           => $proposalId,
+            'cover_letter'        => $data['cover_letter'] ?? null,
+            'bid_amount'          => isset($data['bid_amount']) ? (float) $data['bid_amount'] : null,
+            'job_budget_min'      => isset($jobContext['budget_min']) ? (float) $jobContext['budget_min'] : null,
+            'job_budget_max'      => isset($jobContext['budget_max']) ? (float) $jobContext['budget_max'] : null,
+            'proposals_last_hour' => $proposalsLastHour,
+            'total_proposals'     => $totalProposals,
+            'account_age_days'    => $accountAgeDays,
+        ];
+
+        $ch = curl_init($fraudUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($payload),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT_MS     => 2000,
+            CURLOPT_CONNECTTIMEOUT_MS => 500,
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response === false || $httpCode !== 200) {
+            return null; // Fail open — allow the proposal
+        }
+
+        return json_decode($response, true);
     }
 }
