@@ -5,13 +5,11 @@ namespace App\Controller;
 
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
-use MonkeysLegion\Router\Attributes\Middleware;
 use MonkeysLegion\Router\Attributes\Route;
 use MonkeysLegion\Router\Attributes\RoutePrefix;
 use Psr\Http\Message\ServerRequestInterface;
 
 #[RoutePrefix('/api/v1/attachments')]
-#[Middleware('auth')]
 final class AttachmentController
 {
     use ApiController;
