@@ -1,13 +1,26 @@
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+import httpx
 
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Dict, Optional
 from enum import Enum
 import structlog
 
-from callback import post_internal
+# ── Inline callback helper (shared/callback.py isn't in Docker image) ──
+_API_BASE = os.getenv("INTERNAL_API_URL", "http://monkeyswork-api:8080/api/v1/internal")
+_INTERNAL_TOKEN = os.getenv("INTERNAL_API_TOKEN", "dev-internal-token")
+
+async def post_internal(path: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """POST to an internal PHP API endpoint."""
+    async with httpx.AsyncClient(
+        base_url=_API_BASE,
+        headers={"Content-Type": "application/json", "X-Internal-Token": _INTERNAL_TOKEN},
+        timeout=10.0,
+    ) as client:
+        resp = await client.post(path, json=data)
+        resp.raise_for_status()
+        return resp.json()
 
 logger = structlog.get_logger()
 
@@ -220,7 +233,7 @@ async def approve_verification(verification_id: str, reviewer_id: str = "system"
             "status": "approved",
             "reviewer_id": reviewer_id,
             "confidence_score": 1.0,
-            "model_version": MODEL_VERSION,
+            "model_version": MODEL_VERSION_RULES,
         })
     except Exception as e:
         logger.warning("approve_callback_failed", error=str(e))
@@ -236,7 +249,7 @@ async def reject_verification(verification_id: str, reason: str = "", reviewer_i
             "status": "rejected",
             "reviewer_id": reviewer_id,
             "confidence_score": 0.0,
-            "model_version": MODEL_VERSION,
+            "model_version": MODEL_VERSION_RULES,
             "reason": reason,
         })
     except Exception as e:
