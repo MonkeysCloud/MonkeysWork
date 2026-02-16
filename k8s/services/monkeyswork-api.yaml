@@ -15,6 +15,7 @@ spec:
       labels:
         app: monkeyswork-api
     spec:
+      serviceAccountName: api-core
       containers:
         - name: monkeyswork-api
           image: IMAGE_PLACEHOLDER
@@ -25,12 +26,51 @@ spec:
               value: prod
             - name: DB_DRIVER
               value: pgsql
+            - name: DB_HOST
+              value: "CLOUD_SQL_PRIVATE_IP"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_DATABASE
+              value: "monkeyswork"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: password
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: secret
+            - name: INTERNAL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-api-token
+                  key: token
+            - name: GCP_PROJECT_ID
+              value: "monkeyswork-prod"
+            - name: AI_FRAUD_URL
+              value: "http://ai-fraud-v1.monkeyswork-ai.svc.cluster.local/api/v1/fraud/check"
+            - name: AI_MATCH_URL
+              value: "http://ai-match-v1.monkeyswork-ai.svc.cluster.local/api/v1/match/rank"
+            - name: AI_SCOPE_URL
+              value: "http://ai-scope-assistant.monkeyswork-ai.svc.cluster.local/api/v1/scope/analyze"
           resources:
             requests:
               cpu: 250m
               memory: 256Mi
             limits:
-              cpu: 500m
+              cpu: "1"
               memory: 512Mi
           readinessProbe:
             httpGet:

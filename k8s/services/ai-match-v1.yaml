@@ -15,6 +15,7 @@ spec:
       labels:
         app: ai-match-v1
     spec:
+      serviceAccountName: ai-match-v1
       tolerations:
         - key: workload-type
           value: ai
@@ -26,6 +27,26 @@ spec:
           image: IMAGE_PLACEHOLDER
           ports:
             - containerPort: 8080
+          env:
+            - name: ENVIRONMENT
+              value: "prod"
+            - name: GCP_PROJECT_ID
+              value: "monkeyswork-prod"
+            - name: REGION
+              value: "us-central1"
+            - name: VERTEX_MODEL
+              value: "gemini-3-flash-preview"
+            - name: INTERNAL_API_URL
+              value: "http://monkeyswork-api.monkeyswork.svc.cluster.local/api/v1/internal"
+            - name: INTERNAL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-api-token
+                  key: token
+            - name: FEATURE_FLAG_AI_MATCH
+              value: "true"
+            - name: LOG_LEVEL
+              value: "info"
           resources:
             requests:
               cpu: 500m
@@ -39,6 +60,12 @@ spec:
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
 ---
 apiVersion: v1
 kind: Service

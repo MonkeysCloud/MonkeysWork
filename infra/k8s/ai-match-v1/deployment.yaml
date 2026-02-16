@@ -31,13 +31,18 @@ spec:
           envFrom:
             - configMapRef:
                 name: feature-flags
+            - configMapRef:
+                name: ai-service-config
           env:
             - name: SERVICE_NAME
               value: "ai-match-v1"
-            - name: NODE_ENV
-              value: "production"
-            - name: LOG_LEVEL
-              value: "info"
+            - name: FEATURE_FLAG_AI_MATCH
+              value: "true"
+            - name: INTERNAL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-api-token
+                  key: token
           resources:
             requests:
               cpu: "500m"

@@ -25,13 +25,20 @@ spec:
           envFrom:
             - configMapRef:
                 name: feature-flags
+            - configMapRef:
+                name: ai-service-config
           env:
             - name: SERVICE_NAME
               value: "verification-automation"
-            - name: NODE_ENV
-              value: "production"
-            - name: LOG_LEVEL
-              value: "info"
+            - name: FEATURE_FLAG_AUTO_VERIFICATION
+              value: "true"
+            - name: HUMAN_REVIEW_THRESHOLD
+              value: "0.7"
+            - name: INTERNAL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-api-token
+                  key: token
           resources:
             requests:
               cpu: "250m"

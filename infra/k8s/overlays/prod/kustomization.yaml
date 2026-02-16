@@ -4,14 +4,69 @@ kind: Kustomization
 resources:
   - ../../base
 
-namePrefix: ""
 commonLabels:
   environment: prod
 
 patches:
+  # ── Service Account WI annotations (per-service) ──
   - target:
       kind: ServiceAccount
+      name: ai-scope-assistant
     patch: |-
       - op: replace
         path: /metadata/annotations/iam.gke.io~1gcp-service-account
-        value: "placeholder-update-per-env"
+        value: "mw-prod-ai-scope@monkeyswork-prod.iam.gserviceaccount.com"
+  - target:
+      kind: ServiceAccount
+      name: ai-match-v1
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/iam.gke.io~1gcp-service-account
+        value: "mw-prod-ai-match@monkeyswork-prod.iam.gserviceaccount.com"
+  - target:
+      kind: ServiceAccount
+      name: ai-fraud-v1
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/iam.gke.io~1gcp-service-account
+        value: "mw-prod-ai-fraud@monkeyswork-prod.iam.gserviceaccount.com"
+  - target:
+      kind: ServiceAccount
+      name: verification-automation
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/iam.gke.io~1gcp-service-account
+        value: "mw-prod-verification@monkeyswork-prod.iam.gserviceaccount.com"
+
+  # ── ConfigMap overrides for prod ──
+  - target:
+      kind: ConfigMap
+      name: ai-service-config
+      namespace: monkeyswork-ai
+    patch: |-
+      - op: replace
+        path: /data/GCP_PROJECT_ID
+        value: "monkeyswork-prod"
+      - op: replace
+        path: /data/ENVIRONMENT
+        value: "prod"
+  - target:
+      kind: ConfigMap
+      name: ai-service-config
+      namespace: monkeyswork
+    patch: |-
+      - op: replace
+        path: /data/GCP_PROJECT_ID
+        value: "monkeyswork-prod"
+      - op: replace
+        path: /data/ENVIRONMENT
+        value: "prod"
+
+  # ── Feature flags for prod ──
+  - target:
+      kind: ConfigMap
+      name: feature-flags
+    patch: |-
+      - op: replace
+        path: /data/FRAUD_ENFORCEMENT_MODE
+        value: "enforce"

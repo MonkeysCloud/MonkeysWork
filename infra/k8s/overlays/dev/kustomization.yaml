@@ -4,14 +4,60 @@ kind: Kustomization
 resources:
   - ../../base
 
-namePrefix: ""
 commonLabels:
   environment: dev
 
 patches:
+  # ── Service Account WI annotations (dev project) ──
   - target:
       kind: ServiceAccount
+      name: ai-scope-assistant
     patch: |-
       - op: replace
         path: /metadata/annotations/iam.gke.io~1gcp-service-account
-        value: "placeholder-update-per-env"
+        value: "mw-dev-ai-scope@monkeyswork-dev.iam.gserviceaccount.com"
+  - target:
+      kind: ServiceAccount
+      name: ai-match-v1
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/iam.gke.io~1gcp-service-account
+        value: "mw-dev-ai-match@monkeyswork-dev.iam.gserviceaccount.com"
+  - target:
+      kind: ServiceAccount
+      name: ai-fraud-v1
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/iam.gke.io~1gcp-service-account
+        value: "mw-dev-ai-fraud@monkeyswork-dev.iam.gserviceaccount.com"
+  - target:
+      kind: ServiceAccount
+      name: verification-automation
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/iam.gke.io~1gcp-service-account
+        value: "mw-dev-verification@monkeyswork-dev.iam.gserviceaccount.com"
+
+  # ── ConfigMap overrides for dev ──
+  - target:
+      kind: ConfigMap
+      name: ai-service-config
+      namespace: monkeyswork-ai
+    patch: |-
+      - op: replace
+        path: /data/GCP_PROJECT_ID
+        value: "monkeyswork-dev"
+      - op: replace
+        path: /data/ENVIRONMENT
+        value: "dev"
+  - target:
+      kind: ConfigMap
+      name: ai-service-config
+      namespace: monkeyswork
+    patch: |-
+      - op: replace
+        path: /data/GCP_PROJECT_ID
+        value: "monkeyswork-dev"
+      - op: replace
+        path: /data/ENVIRONMENT
+        value: "dev"

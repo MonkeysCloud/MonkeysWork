@@ -22,3 +22,31 @@ data:
   FRAUD_SCORING_ENABLED: "true"
   FRAUD_ENFORCEMENT_MODE: "shadow"
   AB_TEST_MATCH_PERCENT: "0"
+---
+# Shared production config for all AI Python services
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-service-config
+  namespace: monkeyswork-ai
+data:
+  ENVIRONMENT: "prod"
+  GCP_PROJECT_ID: "monkeyswork-prod"
+  REGION: "us-central1"
+  VERTEX_MODEL: "gemini-3-flash-preview"
+  INTERNAL_API_URL: "http://monkeyswork-api.monkeyswork.svc.cluster.local/api/v1/internal"
+  LOG_LEVEL: "info"
+---
+# Same config for verification-automation (lives in monkeyswork namespace)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-service-config
+  namespace: monkeyswork
+data:
+  ENVIRONMENT: "prod"
+  GCP_PROJECT_ID: "monkeyswork-prod"
+  REGION: "us-central1"
+  VERTEX_MODEL: "gemini-3-flash-preview"
+  INTERNAL_API_URL: "http://monkeyswork-api.monkeyswork.svc.cluster.local/api/v1/internal"
+  LOG_LEVEL: "info"
