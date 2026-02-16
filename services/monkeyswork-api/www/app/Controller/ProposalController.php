@@ -56,18 +56,18 @@ final class ProposalController
 
         $this->db->pdo()->prepare(
             'INSERT INTO "proposal" (id, job_id, freelancer_id, cover_letter, bid_amount,
-                                     currency, estimated_duration_weeks, milestones_breakdown,
+                                     bid_type, estimated_duration_days, milestones_proposed,
                                      status, created_at, updated_at)
-             VALUES (:id, :jid, :fid, :cl, :bid, :cur, :dur, :mb, \'submitted\', :now, :now)'
+             VALUES (:id, :jid, :fid, :cl, :bid, :bt, :dur, :mb, \'submitted\', :now, :now)'
         )->execute([
             'id'  => $id,
             'jid' => $data['job_id'],
             'fid' => $userId,
             'cl'  => $data['cover_letter'],
             'bid' => $data['bid_amount'],
-            'cur' => $data['currency'] ?? 'USD',
-            'dur' => $data['estimated_duration_weeks'] ?? null,
-            'mb'  => json_encode($data['milestones_breakdown'] ?? []),
+            'bt'  => $data['bid_type'] ?? 'total',
+            'dur' => isset($data['estimated_duration_weeks']) ? ((int)$data['estimated_duration_weeks'] * 7) : null,
+            'mb'  => json_encode($data['milestones_proposed'] ?? []),
             'now' => $now,
         ]);
 
@@ -151,6 +151,56 @@ final class ProposalController
         return $this->paginated($stmt->fetchAll(\PDO::FETCH_ASSOC), $total, $p['page'], $p['perPage']);
     }
 
+    #[Route('GET', '/received', name: 'proposals.received', summary: 'Proposals received on my jobs (client)', tags: ['Proposals'])]
+    public function received(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $p      = $this->pagination($request);
+
+        // Optional status filter
+        $qs     = $request->getQueryParams();
+        $status = isset($qs['status']) ? array_filter(explode(',', $qs['status'])) : [];
+
+        $where = 'j.client_id = :uid';
+        $params = ['uid' => $userId];
+
+        if ($status) {
+            $placeholders = [];
+            foreach ($status as $i => $s) {
+                $key = "st{$i}";
+                $placeholders[] = ":{$key}";
+                $params[$key] = trim($s);
+            }
+            $where .= ' AND p.status IN (' . implode(',', $placeholders) . ')';
+        }
+
+        $cnt = $this->db->pdo()->prepare(
+            "SELECT COUNT(*) FROM \"proposal\" p JOIN \"job\" j ON j.id = p.job_id WHERE {$where}"
+        );
+        $cnt->execute($params);
+        $total = (int) $cnt->fetchColumn();
+
+        $stmt = $this->db->pdo()->prepare(
+            "SELECT p.*, j.title AS job_title,
+                    u.first_name AS freelancer_first_name,
+                    u.last_name  AS freelancer_last_name,
+                    u.email      AS freelancer_email
+             FROM \"proposal\" p
+             JOIN \"job\" j ON j.id = p.job_id
+             JOIN \"user\" u ON u.id = p.freelancer_id
+             WHERE {$where}
+             ORDER BY p.created_at DESC LIMIT :lim OFFSET :off"
+        );
+        foreach ($params as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
+        $stmt->bindValue('lim', $p['perPage'], \PDO::PARAM_INT);
+        $stmt->bindValue('off', $p['offset'], \PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $this->paginated($stmt->fetchAll(\PDO::FETCH_ASSOC), $total, $p['page'], $p['perPage']);
+    }
+
     #[Route('GET', '/{id}', name: 'proposals.show', summary: 'Proposal detail', tags: ['Proposals'])]
     public function show(ServerRequestInterface $request, string $id): JsonResponse
     {
@@ -206,7 +256,7 @@ final class ProposalController
             return $this->error('Proposal can only be edited before being viewed');
         }
 
-        $allowed = ['cover_letter', 'bid_amount', 'estimated_duration_weeks', 'milestones_breakdown'];
+        $allowed = ['cover_letter', 'bid_amount', 'estimated_duration_days', 'milestones_proposed'];
         $sets    = [];
         $params  = ['id' => $id];
 

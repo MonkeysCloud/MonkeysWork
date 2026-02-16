@@ -160,6 +160,10 @@ export default function JobManagePage() {
     const isOwner = !!(job && user && job.client_id === user.id);
     const [isSaved, setIsSaved] = useState(false);
     const [saveLoading, setSaveLoading] = useState(false);
+    const [myProposal, setMyProposal] = useState<{
+        id: string; status: string; bid_amount: number;
+        cover_letter: string; created_at: string;
+    } | null>(null);
 
     // Confirmation modal state
     const [confirmModal, setConfirmModal] = useState<{
@@ -192,7 +196,7 @@ export default function JobManagePage() {
         fetchJob();
     }, [fetchJob]);
 
-    // Check if job is saved (freelancer only)
+    // Check if job is saved + check existing proposal (freelancer only)
     useEffect(() => {
         if (!job || isOwner || !token) return;
         fetch(`${API_BASE}/saved-jobs/${id}`, {
@@ -200,6 +204,19 @@ export default function JobManagePage() {
         })
             .then((r) => r.json())
             .then((b) => setIsSaved(b.data?.saved ?? false))
+            .catch(() => { });
+
+        // Fetch freelancer's proposal for this job
+        fetch(`${API_BASE}/proposals/me?per_page=100`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then((r) => r.json())
+            .then((b) => {
+                const existing = (b.data || []).find(
+                    (p: { job_id: string }) => p.job_id === id
+                );
+                if (existing) setMyProposal(existing);
+            })
             .catch(() => { });
     }, [job, isOwner, id, token]);
 
@@ -502,33 +519,76 @@ export default function JobManagePage() {
                     </div>
                 )}
 
-                {/* Freelancer CTA */}
+                {/* Freelancer CTA / Proposal Status */}
                 {!isOwner && job.status === "open" && (
                     <div className="bg-gradient-to-r from-brand-orange/5 to-amber-50 rounded-2xl border border-brand-orange/20 p-6 mb-6">
-                        <div className="flex items-center justify-between gap-4">
+                        {myProposal ? (
+                            /* ── Existing proposal block ── */
                             <div>
-                                <h2 className="text-lg font-bold text-brand-dark mb-1">Interested in this job?</h2>
-                                <p className="text-sm text-brand-muted">Submit a proposal to let the client know you&apos;re the right fit.</p>
+                                <div className="flex items-center justify-between gap-4 mb-4">
+                                    <div>
+                                        <h2 className="text-lg font-bold text-brand-dark mb-1">📋 Your Proposal</h2>
+                                        <p className="text-sm text-brand-muted">Submitted {formatDate(myProposal.created_at)}</p>
+                                    </div>
+                                    <span className={`inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-full border capitalize ${myProposal.status === "accepted" ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                                            myProposal.status === "rejected" ? "bg-red-100 text-red-700 border-red-200" :
+                                                myProposal.status === "withdrawn" ? "bg-gray-100 text-gray-600 border-gray-200" :
+                                                    myProposal.status === "shortlisted" ? "bg-violet-100 text-violet-700 border-violet-200" :
+                                                        "bg-amber-100 text-amber-700 border-amber-200"
+                                        }`}>
+                                        {myProposal.status === "submitted" ? "⏳ Pending" :
+                                            myProposal.status === "viewed" ? "👁️ Viewed" :
+                                                myProposal.status === "shortlisted" ? "⭐ Shortlisted" :
+                                                    myProposal.status === "accepted" ? "✅ Accepted" :
+                                                        myProposal.status === "rejected" ? "❌ Rejected" :
+                                                            myProposal.status === "withdrawn" ? "↩️ Withdrawn" :
+                                                                myProposal.status}
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                                    <div className="bg-white rounded-xl border border-brand-border/40 px-4 py-3">
+                                        <p className="text-[11px] font-semibold text-brand-muted uppercase tracking-wide mb-0.5">Your Bid</p>
+                                        <p className="text-lg font-bold text-brand-dark">${Number(myProposal.bid_amount).toLocaleString()}</p>
+                                    </div>
+                                    <div className="bg-white rounded-xl border border-brand-border/40 px-4 py-3">
+                                        <p className="text-[11px] font-semibold text-brand-muted uppercase tracking-wide mb-0.5">Client Budget</p>
+                                        <p className="text-lg font-bold text-brand-dark">${job.budget_min?.toLocaleString()} – ${job.budget_max?.toLocaleString()}</p>
+                                    </div>
+                                </div>
+                                {myProposal.cover_letter && (
+                                    <div className="bg-white rounded-xl border border-brand-border/40 px-4 py-3">
+                                        <p className="text-[11px] font-semibold text-brand-muted uppercase tracking-wide mb-1.5">Cover Letter</p>
+                                        <div className="text-sm text-brand-dark/80 line-clamp-4 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: myProposal.cover_letter }} />
+                                    </div>
+                                )}
                             </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                                <button
-                                    onClick={toggleSaveJob}
-                                    disabled={saveLoading}
-                                    className={`px-4 py-3 text-sm font-semibold rounded-xl border transition-all duration-200 ${isSaved
+                        ) : (
+                            /* ── Submit proposal CTA ── */
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <h2 className="text-lg font-bold text-brand-dark mb-1">Interested in this job?</h2>
+                                    <p className="text-sm text-brand-muted">Submit a proposal to let the client know you&apos;re the right fit.</p>
+                                </div>
+                                <div className="flex items-center gap-3 shrink-0">
+                                    <button
+                                        onClick={toggleSaveJob}
+                                        disabled={saveLoading}
+                                        className={`px-4 py-3 text-sm font-semibold rounded-xl border transition-all duration-200 ${isSaved
                                             ? "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
                                             : "bg-white text-brand-dark border-brand-border/60 hover:border-brand-dark/30 hover:shadow-sm"
-                                        }`}
-                                >
-                                    {saveLoading ? "…" : isSaved ? "❤️ Saved" : "🤍 Save Job"}
-                                </button>
-                                <button
-                                    onClick={() => router.push(`/dashboard/jobs/${id}/proposal`)}
-                                    className="px-6 py-3 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5"
-                                >
-                                    📝 Submit Proposal
-                                </button>
+                                            }`}
+                                    >
+                                        {saveLoading ? "…" : isSaved ? "❤️ Saved" : "🤍 Save Job"}
+                                    </button>
+                                    <button
+                                        onClick={() => router.push(`/dashboard/jobs/${id}/proposal`)}
+                                        className="px-6 py-3 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5"
+                                    >
+                                        📝 Submit Proposal
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 )}
 

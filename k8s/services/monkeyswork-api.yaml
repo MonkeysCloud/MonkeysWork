@@ -27,7 +27,7 @@ spec:
             - name: DB_DRIVER
               value: pgsql
             - name: DB_HOST
-              value: "CLOUD_SQL_PRIVATE_IP"
+              value: "10.234.0.2"
             - name: DB_PORT
               value: "5432"
             - name: DB_DATABASE

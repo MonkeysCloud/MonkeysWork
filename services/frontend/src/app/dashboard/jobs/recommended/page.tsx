@@ -123,35 +123,7 @@ export default function RecommendedJobsPage() {
                 </p>
             </div>
 
-            {/* Profile summary bar */}
-            {profile && !profileIncomplete && (
-                <div className="bg-gradient-to-r from-brand-orange/5 to-violet-50 border border-brand-border/60 rounded-2xl p-4 mb-6 flex flex-wrap gap-3 items-center text-xs">
-                    <span className="font-semibold text-brand-dark">Your profile:</span>
-                    {profile.primary_skill && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-violet-100 text-violet-700 border border-violet-200 font-medium">
-                            🎯 {profile.primary_skill}
-                        </span>
-                    )}
-                    {profile.hourly_rate > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-medium">
-                            💰 ${profile.hourly_rate}/hr
-                        </span>
-                    )}
-                    {profile.country && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200 font-medium">
-                            📍 {profile.country} {profile.region ? `(${REGION_LABELS[profile.region]?.replace(/^.\s/, "") ?? profile.region})` : ""}
-                        </span>
-                    )}
-                    {profile.skill_count > 0 && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200 font-medium">
-                            🛠️ {profile.skill_count} skills
-                        </span>
-                    )}
-                    <Link href="/dashboard/settings" className="ml-auto text-brand-orange hover:underline font-semibold">
-                        Edit Profile →
-                    </Link>
-                </div>
-            )}
+
 
             {/* Profile incomplete warning */}
             {profileIncomplete && (
