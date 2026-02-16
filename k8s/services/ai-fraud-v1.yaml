@@ -16,12 +16,6 @@ spec:
         app: ai-fraud-v1
     spec:
       serviceAccountName: ai-fraud-v1
-      tolerations:
-        - key: workload-type
-          value: ai
-          effect: NoSchedule
-      nodeSelector:
-        workload-type: ai
       containers:
         - name: ai-fraud-v1
           image: IMAGE_PLACEHOLDER

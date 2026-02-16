@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import ALL_COUNTRIES from "@/data/countries";
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
@@ -76,9 +77,26 @@ type Job = {
     views_count: number;
     client_name?: string;
     category_name?: string;
+    location_type?: string;
+    location_regions?: string[];
+    location_countries?: string[];
     created_at: string;
     published_at: string | null;
 };
+
+const REGION_LABELS: Record<string, string> = {
+    north_america: "🌎 North America",
+    europe: "🇪🇺 Europe",
+    latin_america: "🌎 Latin America",
+    asia_pacific: "🌏 Asia Pacific",
+    middle_east_africa: "🌍 Middle East & Africa",
+};
+
+function toArr(v: unknown): string[] {
+    if (Array.isArray(v)) return v;
+    if (typeof v === "string") try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch { /* noop */ }
+    return [];
+}
 
 function formatDate(iso?: string | null) {
     if (!iso) return "—";
@@ -123,17 +141,42 @@ const FREELANCER_TABS = [
 /* ── Page ─────────────────────────────────────────── */
 export default function JobsListPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { token, user } = useAuth();
 
     const isClient = user?.role === "client";
+
+    /* Derive initial filter from ?status= query param */
+    const statusParam = searchParams.get("status") ?? "";
+    const initialFilter = (() => {
+        if (!statusParam) return "all";
+        // multi-value like "completed,cancelled" → "closed"
+        if (statusParam.includes("completed") && statusParam.includes("cancelled")) return "closed";
+        // single status: match to a known tab key
+        if (statusParam === "open") return "open";
+        if (statusParam === "draft") return "draft";
+        if (statusParam === "pending_review") return "pending_review";
+        if (statusParam === "in_progress") return "in_progress";
+        if (statusParam === "completed") return "completed";
+        if (statusParam === "cancelled" || statusParam === "suspended") return "closed";
+        // freelancer budget type filters
+        if (statusParam === "hourly") return "hourly";
+        if (statusParam === "fixed") return "fixed";
+        return "all";
+    })();
 
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
-    const [filter, setFilter] = useState("all");
+    const [filter, setFilter] = useState(initialFilter);
     const [search, setSearch] = useState("");
     const perPage = 12;
+
+    /* Sync filter when URL query param changes (sidebar clicks) */
+    useEffect(() => {
+        setFilter(initialFilter);
+    }, [initialFilter]);
 
     const fetchJobs = useCallback(async () => {
         if (!token) return;
@@ -306,11 +349,7 @@ export default function JobsListPage() {
                             <button
                                 key={job.id}
                                 onClick={() =>
-                                    router.push(
-                                        isClient
-                                            ? `/dashboard/jobs/${job.id}`
-                                            : `/jobs/${job.slug || job.id}`
-                                    )
+                                    router.push(`/dashboard/jobs/${job.id}`)
                                 }
                                 className="w-full text-left bg-white rounded-xl border border-brand-border/60 p-4 sm:p-5 hover:shadow-md hover:border-brand-border transition-all duration-200 group"
                             >
@@ -355,6 +394,15 @@ export default function JobsListPage() {
                                             )}
                                             {job.category_name && (
                                                 <span>{job.category_name}</span>
+                                            )}
+                                            {job.location_type && (
+                                                <span className="inline-flex items-center gap-1">
+                                                    {job.location_type === "regions"
+                                                        ? `🗺️ ${toArr(job.location_regions).map((r) => REGION_LABELS[r]?.replace(/^.\s/, "") ?? r).join(", ") || "Regions"}`
+                                                        : job.location_type === "countries"
+                                                            ? `🏁 ${toArr(job.location_countries).map((cc) => ALL_COUNTRIES.find((c) => c.code === cc)?.name ?? cc).join(", ") || "Countries"}`
+                                                            : "🌍 Worldwide"}
+                                                </span>
                                             )}
                                         </div>
                                     </div>

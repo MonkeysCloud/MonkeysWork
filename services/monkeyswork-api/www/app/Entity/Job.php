@@ -74,6 +74,15 @@ class Job
     #[Field(type: 'string', length: 50, nullable: true)]
     public ?string $timezone_preference = null;
 
+    #[Field(type: 'string', length: 20, default: 'worldwide', comment: 'worldwide, regions, countries')]
+    public string $location_type = 'worldwide';
+
+    #[Field(type: 'json', default: '[]', comment: 'Region codes e.g. ["north_america","europe"]')]
+    public array $location_regions = [];
+
+    #[Field(type: 'json', default: '[]', comment: 'ISO country codes e.g. ["US","CA"]')]
+    public array $location_countries = [];
+
     #[Field(type: 'integer', default: 0)]
     public int $proposals_count = 0;
 
@@ -171,6 +180,9 @@ class Job
     public function getEstimatedDuration(): ?string { return $this->estimated_duration; }
     public function getLocationRequirement(): string { return $this->location_requirement; }
     public function getTimezonePreference(): ?string { return $this->timezone_preference; }
+    public function getLocationType(): string { return $this->location_type; }
+    public function getLocationRegions(): array { return $this->location_regions; }
+    public function getLocationCountries(): array { return $this->location_countries; }
     public function getProposalsCount(): int { return $this->proposals_count; }
     public function getViewsCount(): int { return $this->views_count; }
     public function getJobEmbedding(): ?string { return $this->job_embedding; }

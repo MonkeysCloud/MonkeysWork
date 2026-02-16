@@ -3,6 +3,21 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import ALL_COUNTRIES from "@/data/countries";
+
+const REGION_LABELS: Record<string, string> = {
+    north_america: "🌎 North America",
+    europe: "🇪🇺 Europe",
+    latin_america: "🌎 Latin America",
+    asia_pacific: "🌏 Asia Pacific",
+    middle_east_africa: "🌍 Middle East & Africa",
+};
+
+function toArr(v: unknown): string[] {
+    if (Array.isArray(v)) return v;
+    if (typeof v === "string") try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch { /* noop */ }
+    return [];
+}
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
@@ -12,6 +27,7 @@ const API_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
 
 type Job = {
     id: string;
+    client_id: string;
     title: string;
     slug: string;
     description: string;
@@ -39,6 +55,9 @@ type Job = {
     } | null;
     moderation_reviewer_notes?: string;
     moderation_reviewed_at?: string;
+    location_type?: string;
+    location_regions?: string[];
+    location_countries?: string[];
 };
 
 type Attachment = {
@@ -129,7 +148,7 @@ function fileUrl(relPath: string) {
 export default function JobManagePage() {
     const { id } = useParams<{ id: string }>();
     const router = useRouter();
-    const { token } = useAuth();
+    const { token, user } = useAuth();
 
     const [job, setJob] = useState<Job | null>(null);
     const [loading, setLoading] = useState(true);
@@ -137,6 +156,8 @@ export default function JobManagePage() {
     const [error, setError] = useState<string | null>(null);
     const [toast, setToast] = useState<string | null>(null);
     const [previewAtt, setPreviewAtt] = useState<Attachment | null>(null);
+
+    const isOwner = !!(job && user && job.client_id === user.id);
 
     // Confirmation modal state
     const [confirmModal, setConfirmModal] = useState<{
@@ -199,7 +220,7 @@ export default function JobManagePage() {
             const body = await res.json().catch(() => ({}));
             if (res.ok) {
                 if (action === "delete") {
-                    router.push("/dashboard");
+                    router.push("/dashboard/jobs");
                     return;
                 }
                 if (action === "publish") {
@@ -381,76 +402,96 @@ export default function JobManagePage() {
                     </div>
                 )}
 
-                {/* Action buttons */}
-                <div className="bg-white rounded-2xl border border-brand-border/60 p-6 mb-6">
-                    <h2 className="text-sm font-bold text-brand-dark uppercase tracking-wide mb-4">
-                        Actions
-                    </h2>
-                    <div className="flex flex-wrap gap-3">
-                        {(job.status === "draft" || job.status === "revision_requested" || job.status === "rejected") && (
-                            <button
-                                onClick={() =>
-                                    requestAction(
-                                        "publish",
-                                        job.status === "draft" ? "Submit for Review" : "Resubmit for Review",
-                                        job.status === "draft"
-                                            ? "Your job will be checked by our AI moderation system before going live. This usually takes just a few seconds."
-                                            : "Your revised job will be resubmitted for moderation review.",
-                                    )
-                                }
-                                disabled={actionLoading}
-                                className="px-5 py-2.5 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
-                            >
-                                {actionLoading ? "Submitting…" : job.status === "draft" ? "🚀 Submit for Review" : "🔄 Resubmit"}
-                            </button>
-                        )}
-                        {(job.status === "draft" || job.status === "open" || job.status === "revision_requested" || job.status === "rejected") && (
-                            <button
-                                onClick={() =>
-                                    router.push(`/dashboard/jobs/${id}/edit`)
-                                }
-                                className="px-5 py-2.5 text-sm font-semibold text-brand-dark border border-brand-border/60 rounded-xl hover:border-brand-dark/30 hover:shadow-sm transition-all"
-                            >
-                                ✏️ Edit Job
-                            </button>
-                        )}
-                        {job.status === "open" && (
-                            <button
-                                onClick={() =>
-                                    requestAction(
-                                        "close",
-                                        "Close Job",
-                                        "This job will no longer accept new proposals. You can still manage existing proposals and contracts.",
-                                        "danger",
-                                    )
-                                }
-                                disabled={actionLoading}
-                                className="px-5 py-2.5 text-sm font-semibold text-yellow-700 border border-yellow-300 rounded-xl hover:bg-yellow-50 transition-all disabled:opacity-60"
-                            >
-                                ⏸️ Close Job
-                            </button>
-                        )}
-                        {(job.status === "draft" || job.status === "cancelled") && (
-                            <button
-                                onClick={() =>
-                                    requestAction(
-                                        "delete",
-                                        "Delete Job",
-                                        "This will permanently delete this job and all associated data. This action cannot be undone.",
-                                        "danger",
-                                    )
-                                }
-                                disabled={actionLoading}
-                                className="px-5 py-2.5 text-sm font-semibold text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-all disabled:opacity-60"
-                            >
-                                🗑️ Delete
-                            </button>
-                        )}
+                {/* Action buttons — client only */}
+                {isOwner && (
+                    <div className="bg-white rounded-2xl border border-brand-border/60 p-6 mb-6">
+                        <h2 className="text-sm font-bold text-brand-dark uppercase tracking-wide mb-4">
+                            Actions
+                        </h2>
+                        <div className="flex flex-wrap gap-3">
+                            {(job.status === "draft" || job.status === "revision_requested" || job.status === "rejected") && (
+                                <button
+                                    onClick={() =>
+                                        requestAction(
+                                            "publish",
+                                            job.status === "draft" ? "Submit for Review" : "Resubmit for Review",
+                                            job.status === "draft"
+                                                ? "Your job will be checked by our AI moderation system before going live. This usually takes just a few seconds."
+                                                : "Your revised job will be resubmitted for moderation review.",
+                                        )
+                                    }
+                                    disabled={actionLoading}
+                                    className="px-5 py-2.5 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+                                >
+                                    {actionLoading ? "Submitting…" : job.status === "draft" ? "🚀 Submit for Review" : "🔄 Resubmit"}
+                                </button>
+                            )}
+                            {(job.status === "draft" || job.status === "open" || job.status === "revision_requested" || job.status === "rejected") && (
+                                <button
+                                    onClick={() =>
+                                        router.push(`/dashboard/jobs/${id}/edit`)
+                                    }
+                                    className="px-5 py-2.5 text-sm font-semibold text-brand-dark border border-brand-border/60 rounded-xl hover:border-brand-dark/30 hover:shadow-sm transition-all"
+                                >
+                                    ✏️ Edit Job
+                                </button>
+                            )}
+                            {job.status === "open" && (
+                                <button
+                                    onClick={() =>
+                                        requestAction(
+                                            "close",
+                                            "Close Job",
+                                            "This job will no longer accept new proposals. You can still manage existing proposals and contracts.",
+                                            "danger",
+                                        )
+                                    }
+                                    disabled={actionLoading}
+                                    className="px-5 py-2.5 text-sm font-semibold text-yellow-700 border border-yellow-300 rounded-xl hover:bg-yellow-50 transition-all disabled:opacity-60"
+                                >
+                                    ⏸️ Close Job
+                                </button>
+                            )}
+                            {(job.status === "draft" || job.status === "cancelled") && (
+                                <button
+                                    onClick={() =>
+                                        requestAction(
+                                            "delete",
+                                            "Delete Job",
+                                            "This will permanently delete this job and all associated data. This action cannot be undone.",
+                                            "danger",
+                                        )
+                                    }
+                                    disabled={actionLoading}
+                                    className="px-5 py-2.5 text-sm font-semibold text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-all disabled:opacity-60"
+                                >
+                                    🗑️ Delete
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
+                )}
 
-                {/* ── Moderation Status Card ── */}
-                {job.moderation_status && job.moderation_status !== "none" && (
+                {/* Freelancer CTA */}
+                {!isOwner && job.status === "open" && (
+                    <div className="bg-gradient-to-r from-brand-orange/5 to-amber-50 rounded-2xl border border-brand-orange/20 p-6 mb-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold text-brand-dark mb-1">Interested in this job?</h2>
+                                <p className="text-sm text-brand-muted">Submit a proposal to let the client know you&apos;re the right fit.</p>
+                            </div>
+                            <button
+                                onClick={() => router.push(`/dashboard/jobs/${id}/proposal`)}
+                                className="px-6 py-3 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5 shrink-0"
+                            >
+                                📝 Submit Proposal
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Moderation Status Card (client only) ── */}
+                {isOwner && job.moderation_status && job.moderation_status !== "none" && (
                     <div className={`rounded-2xl border p-6 mb-6 ${job.status === "rejected" ? "bg-red-50 border-red-200" :
                         job.status === "revision_requested" ? "bg-amber-50 border-amber-200" :
                             job.status === "pending_review" ? "bg-orange-50 border-orange-200" :
@@ -569,6 +610,16 @@ export default function JobManagePage() {
                             value={formatDate(job.published_at)}
                         />
                     )}
+                    <DetailRow
+                        label="Location"
+                        value={
+                            job.location_type === "regions"
+                                ? `🗺️ ${toArr(job.location_regions).map((r) => REGION_LABELS[r] ?? r).join(", ") || "Regions"}`
+                                : job.location_type === "countries"
+                                    ? `🏁 ${toArr(job.location_countries).map((cc) => ALL_COUNTRIES.find((c) => c.code === cc)?.name ?? cc).join(", ") || "Countries"}`
+                                    : "🌍 Worldwide"
+                        }
+                    />
 
                     <div className="border-t border-brand-border/40 pt-4">
                         <div className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-2">

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import ALL_COUNTRIES from "@/data/countries";
 
 const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), {
     ssr: false,
@@ -46,6 +47,16 @@ const inputCls = (hasError?: boolean) =>
 const labelCls =
     "block text-sm font-semibold text-brand-dark mb-1.5 tracking-tight";
 
+/* ── Region & Country data ─────────────────────────── */
+const REGIONS = [
+    { code: "north_america", label: "🌎 North America", countries: ["US", "CA", "MX"] },
+    { code: "europe", label: "🇪🇺 Europe", countries: ["GB", "DE", "FR", "ES", "IT", "NL", "SE", "PL", "PT", "IE", "CH", "NO", "DK", "FI", "AT", "BE", "CZ", "RO", "HU", "GR"] },
+    { code: "latin_america", label: "🌎 Latin America", countries: ["BR", "AR", "CL", "CO", "PE", "UY", "EC", "VE", "CR", "PA"] },
+    { code: "asia_pacific", label: "🌏 Asia Pacific", countries: ["AU", "NZ", "JP", "KR", "SG", "IN", "PH", "TH", "MY", "ID", "VN", "TW", "HK"] },
+    { code: "middle_east_africa", label: "🌍 Middle East & Africa", countries: ["AE", "SA", "IL", "ZA", "NG", "KE", "EG", "QA", "KW", "BH"] },
+] as const;
+
+
 export default function EditJobPage() {
     const { id } = useParams<{ id: string }>();
     const router = useRouter();
@@ -74,7 +85,12 @@ export default function EditJobPage() {
         experience_level: "mid",
         visibility: "public",
         duration_weeks: "",
+        location_type: "worldwide" as "worldwide" | "regions" | "countries",
+        location_regions: [] as string[],
+        location_countries: [] as string[],
     });
+
+    const [countrySearch, setCountrySearch] = useState("");
 
     /* skill state */
     const [selectedSkills, setSelectedSkills] = useState<Skill[]>([]);
@@ -116,6 +132,9 @@ export default function EditJobPage() {
                 experience_level: j.experience_level ?? "mid",
                 visibility: j.visibility ?? "public",
                 duration_weeks: j.estimated_duration ? String(j.estimated_duration) : "",
+                location_type: j.location_type ?? "worldwide",
+                location_regions: Array.isArray(j.location_regions) ? j.location_regions : (typeof j.location_regions === "string" ? JSON.parse(j.location_regions || "[]") : []),
+                location_countries: Array.isArray(j.location_countries) ? j.location_countries : (typeof j.location_countries === "string" ? JSON.parse(j.location_countries || "[]") : []),
             });
             setSelectedSkills(j.skills ?? []);
             setExistingAttachments(j.attachments ?? []);
@@ -256,6 +275,9 @@ export default function EditJobPage() {
                 currency: form.currency,
                 experience_level: form.experience_level,
                 visibility: form.visibility,
+                location_type: form.location_type,
+                location_regions: form.location_regions,
+                location_countries: form.location_countries,
             };
             if (form.duration_weeks)
                 payload.estimated_duration = Number(form.duration_weeks);
@@ -512,6 +534,145 @@ export default function EditJobPage() {
                         <option value="public">Public</option>
                         <option value="invite_only">Invite Only</option>
                     </select>
+                </div>
+
+                {/* Location Targeting */}
+                <div>
+                    <label className={labelCls}>Location Targeting</label>
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                        {([
+                            { value: "worldwide", label: "Worldwide", icon: "🌍", desc: "Open to all locations" },
+                            { value: "regions", label: "Regions", icon: "🗺️", desc: "Specific regions" },
+                            { value: "countries", label: "Countries", icon: "🏁", desc: "Specific countries" },
+                        ] as const).map((lt) => (
+                            <button
+                                key={lt.value}
+                                type="button"
+                                onClick={() =>
+                                    setForm((p) => ({
+                                        ...p,
+                                        location_type: lt.value,
+                                        ...(lt.value === "worldwide" ? { location_regions: [], location_countries: [] } : {}),
+                                    }))
+                                }
+                                className={`p-3 rounded-xl border text-left transition-all duration-200 ${form.location_type === lt.value
+                                    ? "border-brand-orange bg-brand-orange/5 shadow-sm"
+                                    : "border-brand-border/60 hover:border-brand-dark/20"
+                                    }`}
+                            >
+                                <span className="text-xl">{lt.icon}</span>
+                                <div className="text-sm font-semibold text-brand-dark mt-1">{lt.label}</div>
+                                <div className="text-xs text-brand-muted">{lt.desc}</div>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Region checkboxes */}
+                    {form.location_type === "regions" && (
+                        <div className="space-y-2 p-4 bg-gray-50 rounded-xl border border-brand-border/40">
+                            <p className="text-xs text-brand-muted font-medium mb-2">Select one or more regions:</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {REGIONS.map((r) => {
+                                    const checked = form.location_regions.includes(r.code);
+                                    return (
+                                        <label
+                                            key={r.code}
+                                            className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${checked
+                                                ? "border-brand-orange bg-brand-orange/5"
+                                                : "border-brand-border/40 hover:border-brand-dark/20"
+                                                }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                className="accent-[var(--color-brand-orange)] w-4 h-4"
+                                                onChange={() => {
+                                                    setForm((p) => {
+                                                        const regions = checked
+                                                            ? p.location_regions.filter((c) => c !== r.code)
+                                                            : [...p.location_regions, r.code];
+                                                        return { ...p, location_regions: regions };
+                                                    });
+                                                }}
+                                            />
+                                            <span className="text-sm font-medium text-brand-dark">{r.label}</span>
+                                            <span className="text-[10px] text-brand-muted ml-auto">{r.countries.length} countries</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                            {form.location_regions.length > 0 && (
+                                <p className="text-xs text-brand-muted mt-2">
+                                    Includes: {form.location_regions.flatMap((rc) =>
+                                        REGIONS.find((r) => r.code === rc)?.countries ?? []
+                                    ).join(", ")}
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Country search & select */}
+                    {form.location_type === "countries" && (
+                        <div className="space-y-3 p-4 bg-gray-50 rounded-xl border border-brand-border/40">
+                            {form.location_countries.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    {form.location_countries.map((cc) => {
+                                        const c = ALL_COUNTRIES.find((x) => x.code === cc);
+                                        return (
+                                            <span
+                                                key={cc}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-orange/10 text-brand-orange text-xs font-semibold rounded-full border border-brand-orange/20"
+                                            >
+                                                {c?.name ?? cc}
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setForm((p) => ({
+                                                            ...p,
+                                                            location_countries: p.location_countries.filter((x) => x !== cc),
+                                                        }))
+                                                    }
+                                                    className="hover:text-red-500 transition-colors ml-0.5"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            <input
+                                type="text"
+                                value={countrySearch}
+                                onChange={(e) => setCountrySearch(e.target.value)}
+                                placeholder="Search countries…"
+                                className={inputCls()}
+                            />
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto">
+                                {ALL_COUNTRIES.filter(
+                                    (c) =>
+                                        !form.location_countries.includes(c.code) &&
+                                        (countrySearch === "" ||
+                                            c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                            c.code.toLowerCase().includes(countrySearch.toLowerCase()))
+                                ).map((c) => (
+                                    <button
+                                        key={c.code}
+                                        type="button"
+                                        onClick={() =>
+                                            setForm((p) => ({
+                                                ...p,
+                                                location_countries: [...p.location_countries, c.code],
+                                            }))
+                                        }
+                                        className="text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-brand-orange/10 hover:text-brand-orange transition-colors text-brand-dark"
+                                    >
+                                        {c.name} <span className="text-brand-muted">({c.code})</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="border-t border-brand-border/40 pt-5" />

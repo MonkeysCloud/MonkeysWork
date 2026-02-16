@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import ALL_COUNTRIES from "@/data/countries";
 
 const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), {
     ssr: false,
     loading: () => <div className="w-full h-[120px] bg-gray-50 rounded-xl animate-pulse" />,
 });
-import { useAuth } from "@/contexts/AuthContext";
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
@@ -58,11 +59,21 @@ function formatBytes(bytes: number) {
 
 /* ── Helpers ────────────────────────────────────────── */
 const inputCls = (hasError?: boolean) =>
-    `w-full px-3.5 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange text-brand-dark placeholder:text-brand-muted/50 transition-colors ${hasError ? "border-red-400 bg-red-50/30" : "border-brand-border/60"
-    }`;
+    `w - full px - 3.5 py - 2.5 text - sm border rounded - lg focus: outline - none focus: ring - 2 focus: ring - brand - orange / 30 focus: border - brand - orange text - brand - dark placeholder: text - brand - muted / 50 transition - colors ${hasError ? "border-red-400 bg-red-50/30" : "border-brand-border/60"
+    } `;
 
 const labelCls =
     "block text-xs font-semibold text-brand-muted mb-1.5 uppercase tracking-wide";
+
+/* ── Region & Country data ─────────────────────────── */
+const REGIONS = [
+    { code: "north_america", label: "🌎 North America", countries: ["US", "CA", "MX"] },
+    { code: "europe", label: "🇪🇺 Europe", countries: ["GB", "DE", "FR", "ES", "IT", "NL", "SE", "PL", "PT", "IE", "CH", "NO", "DK", "FI", "AT", "BE", "CZ", "RO", "HU", "GR"] },
+    { code: "latin_america", label: "🌎 Latin America", countries: ["BR", "AR", "CL", "CO", "PE", "UY", "EC", "VE", "CR", "PA"] },
+    { code: "asia_pacific", label: "🌏 Asia Pacific", countries: ["AU", "NZ", "JP", "KR", "SG", "IN", "PH", "TH", "MY", "ID", "VN", "TW", "HK"] },
+    { code: "middle_east_africa", label: "🌍 Middle East & Africa", countries: ["AE", "SA", "IL", "ZA", "NG", "KE", "EG", "QA", "KW", "BH"] },
+] as const;
+
 
 /* strip HTML tags for text-only length checking */
 function stripHtml(html: string): string {
@@ -78,21 +89,21 @@ function StepBar({ current, total }: { current: number; total: number }) {
             {Array.from({ length: total }, (_, i) => (
                 <div key={i} className="flex items-center gap-2 flex-1">
                     <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${i < current
-                            ? "bg-brand-orange text-white"
-                            : i === current
-                                ? "bg-brand-orange/10 text-brand-orange border-2 border-brand-orange"
-                                : "bg-brand-border/30 text-brand-muted"
-                            }`}
+                        className={`w - 8 h - 8 rounded - full flex items - center justify - center text - xs font - bold shrink - 0 transition - colors ${i < current
+                                ? "bg-brand-orange text-white"
+                                : i === current
+                                    ? "bg-brand-orange/10 text-brand-orange border-2 border-brand-orange"
+                                    : "bg-brand-border/30 text-brand-muted"
+                            } `}
                     >
                         {i < current ? "✓" : i + 1}
                     </div>
                     {i < total - 1 && (
                         <div
-                            className={`flex-1 h-0.5 rounded ${i < current
-                                ? "bg-brand-orange"
-                                : "bg-brand-border/40"
-                                }`}
+                            className={`flex - 1 h - 0.5 rounded ${i < current
+                                    ? "bg-brand-orange"
+                                    : "bg-brand-border/40"
+                                } `}
                         />
                     )}
                 </div>
@@ -140,15 +151,20 @@ export default function CreateJobForm() {
         experience_level: "intermediate",
         duration_weeks: "",
         visibility: "public",
+        location_type: "worldwide" as "worldwide" | "regions" | "countries",
+        location_regions: [] as string[],
+        location_countries: [] as string[],
         skills: [] as string[],
     });
+
+    const [countrySearch, setCountrySearch] = useState("");
 
     /* fetch categories */
     useEffect(() => {
         const headers: Record<string, string> = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
+        if (token) headers.Authorization = `Bearer ${token} `;
 
-        fetch(`${API_BASE}/categories/`, { headers })
+        fetch(`${API_BASE} /categories/`, { headers })
             .then((r) => r.json())
             .then((body) => setCategories(body.data ?? []))
             .catch((err) => console.warn("Failed to fetch categories:", err));
@@ -169,9 +185,9 @@ export default function CreateJobForm() {
                     const params = new URLSearchParams({ q: query });
                     if (form.category_id) params.set("category_id", form.category_id);
                     const headers: Record<string, string> = {};
-                    if (token) headers.Authorization = `Bearer ${token}`;
+                    if (token) headers.Authorization = `Bearer ${token} `;
                     const res = await fetch(
-                        `${API_BASE}/skills/search?${params}`,
+                        `${API_BASE} /skills/search ? ${params} `,
                         { headers }
                     );
                     const body = await res.json();
@@ -257,9 +273,9 @@ export default function CreateJobForm() {
         fd.append('entity_type', 'job');
         fd.append('entity_id', jobId);
         attachedFiles.forEach((af) => fd.append('files[]', af.file));
-        await fetch(`${API_BASE}/attachments/upload`, {
+        await fetch(`${API_BASE} /attachments/upload`, {
             method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${token} ` },
             body: fd,
         });
     }
@@ -344,17 +360,20 @@ export default function CreateJobForm() {
                 currency: form.currency,
                 experience_level: form.experience_level,
                 visibility: form.visibility,
+                location_type: form.location_type,
+                location_regions: form.location_regions,
+                location_countries: form.location_countries,
             };
             if (form.duration_weeks)
                 payload.duration_weeks = Number(form.duration_weeks);
             if (selectedSkills.length > 0)
                 payload.skill_ids = selectedSkills.map((s) => s.id);
 
-            const res = await fetch(`${API_BASE}/jobs/`, {
+            const res = await fetch(`${API_BASE} /jobs/`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
+                    Authorization: `Bearer ${token} `,
                 },
                 body: JSON.stringify(payload),
             });
@@ -396,7 +415,7 @@ export default function CreateJobForm() {
 
             // Redirect to job management page
             if (jobId) {
-                router.push(`/dashboard/jobs/${jobId}`);
+                router.push(`/ dashboard / jobs / ${jobId} `);
                 return;
             }
             setSuccessId(jobId);
@@ -414,7 +433,7 @@ export default function CreateJobForm() {
         if (!successId) return;
         setLoading(true);
         try {
-            await fetch(`${API_BASE}/jobs/${successId}/publish`, {
+            await fetch(`${API_BASE} /jobs/${successId}/publish`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -857,6 +876,149 @@ export default function CreateJobForm() {
                         />
                     </div>
 
+                    {/* ── Location Targeting ──────────── */}
+                    <div>
+                        <label className={labelCls}>Location Targeting</label>
+                        <div className="grid grid-cols-3 gap-3 mb-4">
+                            {([
+                                { value: "worldwide", label: "Worldwide", icon: "🌍", desc: "Open to all locations" },
+                                { value: "regions", label: "Regions", icon: "🗺️", desc: "Specific regions" },
+                                { value: "countries", label: "Countries", icon: "🏁", desc: "Specific countries" },
+                            ] as const).map((lt) => (
+                                <button
+                                    key={lt.value}
+                                    type="button"
+                                    onClick={() =>
+                                        setForm((p) => ({
+                                            ...p,
+                                            location_type: lt.value,
+                                            ...(lt.value === "worldwide" ? { location_regions: [], location_countries: [] } : {}),
+                                        }))
+                                    }
+                                    className={`p-3 rounded-xl border text-left transition-all duration-200 ${form.location_type === lt.value
+                                        ? "border-brand-orange bg-brand-orange/5 shadow-sm"
+                                        : "border-brand-border/60 hover:border-brand-dark/20"
+                                        }`}
+                                >
+                                    <span className="text-xl">{lt.icon}</span>
+                                    <div className="text-sm font-semibold text-brand-dark mt-1">{lt.label}</div>
+                                    <div className="text-xs text-brand-muted">{lt.desc}</div>
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Region checkboxes */}
+                        {form.location_type === "regions" && (
+                            <div className="space-y-2 p-4 bg-gray-50 rounded-xl border border-brand-border/40">
+                                <p className="text-xs text-brand-muted font-medium mb-2">Select one or more regions:</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {REGIONS.map((r) => {
+                                        const checked = form.location_regions.includes(r.code);
+                                        return (
+                                            <label
+                                                key={r.code}
+                                                className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${checked
+                                                    ? "border-brand-orange bg-brand-orange/5"
+                                                    : "border-brand-border/40 hover:border-brand-dark/20"
+                                                    }`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    className="accent-[var(--color-brand-orange)] w-4 h-4"
+                                                    onChange={() => {
+                                                        setForm((p) => {
+                                                            const regions = checked
+                                                                ? p.location_regions.filter((c) => c !== r.code)
+                                                                : [...p.location_regions, r.code];
+                                                            return { ...p, location_regions: regions };
+                                                        });
+                                                    }}
+                                                />
+                                                <span className="text-sm font-medium text-brand-dark">{r.label}</span>
+                                                <span className="text-[10px] text-brand-muted ml-auto">{r.countries.length} countries</span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                                {form.location_regions.length > 0 && (
+                                    <p className="text-xs text-brand-muted mt-2">
+                                        Includes: {form.location_regions.flatMap((rc) =>
+                                            REGIONS.find((r) => r.code === rc)?.countries ?? []
+                                        ).join(", ")}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Country search & select */}
+                        {form.location_type === "countries" && (
+                            <div className="space-y-3 p-4 bg-gray-50 rounded-xl border border-brand-border/40">
+                                {/* Selected country chips */}
+                                {form.location_countries.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        {form.location_countries.map((cc) => {
+                                            const c = ALL_COUNTRIES.find((x) => x.code === cc);
+                                            return (
+                                                <span
+                                                    key={cc}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-orange/10 text-brand-orange text-xs font-semibold rounded-full border border-brand-orange/20"
+                                                >
+                                                    {c?.name ?? cc}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setForm((p) => ({
+                                                                ...p,
+                                                                location_countries: p.location_countries.filter((x) => x !== cc),
+                                                            }))
+                                                        }
+                                                        className="hover:text-red-500 transition-colors ml-0.5"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                {/* Country search */}
+                                <input
+                                    type="text"
+                                    value={countrySearch}
+                                    onChange={(e) => setCountrySearch(e.target.value)}
+                                    placeholder="Search countries…"
+                                    className={inputCls()}
+                                />
+
+                                {/* Filtered country list */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto">
+                                    {ALL_COUNTRIES.filter(
+                                        (c) =>
+                                            !form.location_countries.includes(c.code) &&
+                                            (countrySearch === "" ||
+                                                c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                                c.code.toLowerCase().includes(countrySearch.toLowerCase()))
+                                    ).map((c) => (
+                                        <button
+                                            key={c.code}
+                                            type="button"
+                                            onClick={() =>
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    location_countries: [...p.location_countries, c.code],
+                                                }))
+                                            }
+                                            className="text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-brand-orange/10 hover:text-brand-orange transition-colors text-brand-dark"
+                                        >
+                                            {c.name} <span className="text-brand-muted">({c.code})</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                     {/* attachments */}
                     <div>
                         <label className={labelCls}>
@@ -1039,6 +1201,16 @@ export default function CreateJobForm() {
                             value={
                                 form.visibility.charAt(0).toUpperCase() +
                                 form.visibility.slice(1).replace("_", " ")
+                            }
+                        />
+                        <ReviewRow
+                            label="Location"
+                            value={
+                                form.location_type === "worldwide"
+                                    ? "🌍 Worldwide"
+                                    : form.location_type === "regions"
+                                        ? `🗺️ ${form.location_regions.map((rc) => REGIONS.find((r) => r.code === rc)?.label.replace(/^.\s/, "") ?? rc).join(", ")}`
+                                        : `🏁 ${form.location_countries.map((cc) => ALL_COUNTRIES.find((c) => c.code === cc)?.name ?? cc).join(", ")}`
                             }
                         />
                         {selectedSkills.length > 0 && (

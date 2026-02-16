@@ -17,11 +17,6 @@ spec:
         tier: ai-service
     spec:
       serviceAccountName: ai-match-v1
-      tolerations:
-        - key: "workload-type"
-          operator: "Equal"
-          value: "ai"
-          effect: "NoSchedule"
       containers:
         - name: ai-match-v1
           image: ARTIFACT_REGISTRY_URL/ai-match-v1:latest
@@ -66,8 +61,6 @@ spec:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
-      nodeSelector:
-        workload-type: ai
 ---
 apiVersion: v1
 kind: Service

@@ -63,6 +63,14 @@ final class JobController
             $where[]              = 'EXISTS (SELECT 1 FROM "job_skills" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = j.id AND s.slug = :skill)';
             $params['skill']      = $q['skill'];
         }
+        if (!empty($q['region'])) {
+            $where[]              = "(j.location_type = 'worldwide' OR j.location_regions @> :region::jsonb)";
+            $params['region']     = json_encode([$q['region']]);
+        }
+        if (!empty($q['country'])) {
+            $where[]              = "(j.location_type = 'worldwide' OR j.location_countries @> :country::jsonb)";
+            $params['country']    = json_encode([$q['country']]);
+        }
 
         $w = implode(' AND ', $where);
 
@@ -116,25 +124,31 @@ final class JobController
             'INSERT INTO "job" (id, client_id, title, slug, description, category_id, budget_type,
                                 budget_min, budget_max, currency, estimated_duration,
                                 experience_level, status, visibility, ai_scope,
+                                location_type, location_regions, location_countries,
                                 created_at, updated_at)
              VALUES (:id, :client_id, :title, :slug, :desc, :cat, :bt, :bmin, :bmax, :cur,
-                     :dur, :exp, \'draft\', :vis, :ai, :now, :now)'
+                     :dur, :exp, \'draft\', :vis, :ai,
+                     :loc_type, :loc_regions, :loc_countries,
+                     :now, :now)'
         )->execute([
-            'id'        => $id,
-            'client_id' => $userId,
-            'title'     => $data['title'],
-            'slug'      => $slug,
-            'desc'      => $data['description'],
-            'cat'       => $data['category_id'] ?? null,
-            'bt'        => $data['budget_type'],
-            'bmin'      => $data['budget_min'] ?? null,
-            'bmax'      => $data['budget_max'] ?? null,
-            'cur'       => $data['currency'] ?? 'USD',
-            'dur'       => $data['estimated_duration'] ?? $data['duration_weeks'] ?? null,
-            'exp'       => $data['experience_level'] ?? 'intermediate',
-            'vis'       => $data['visibility'] ?? 'public',
-            'ai'        => '{}',
-            'now'       => $now,
+            'id'             => $id,
+            'client_id'      => $userId,
+            'title'          => $data['title'],
+            'slug'           => $slug,
+            'desc'           => $data['description'],
+            'cat'            => $data['category_id'] ?? null,
+            'bt'             => $data['budget_type'],
+            'bmin'           => $data['budget_min'] ?? null,
+            'bmax'           => $data['budget_max'] ?? null,
+            'cur'            => $data['currency'] ?? 'USD',
+            'dur'            => $data['estimated_duration'] ?? $data['duration_weeks'] ?? null,
+            'exp'            => $data['experience_level'] ?? 'intermediate',
+            'vis'            => $data['visibility'] ?? 'public',
+            'ai'             => '{}',
+            'loc_type'       => $data['location_type'] ?? 'worldwide',
+            'loc_regions'    => json_encode($data['location_regions'] ?? []),
+            'loc_countries'  => json_encode($data['location_countries'] ?? []),
+            'now'            => $now,
         ]);
 
         // Attach skills
@@ -233,14 +247,22 @@ final class JobController
         }
 
         $allowed = ['title', 'description', 'category_id', 'budget_type', 'budget_min',
-                     'budget_max', 'currency', 'estimated_duration', 'experience_level', 'visibility'];
+                     'budget_max', 'currency', 'estimated_duration', 'experience_level', 'visibility',
+                     'location_type', 'location_regions', 'location_countries'];
+
+        $jsonFields = ['location_regions', 'location_countries'];
 
         $sets   = [];
         $params = ['id' => $id];
         foreach ($allowed as $field) {
             if (array_key_exists($field, $data)) {
-                $sets[]         = "\"{$field}\" = :{$field}";
-                $params[$field] = $data[$field];
+                if (in_array($field, $jsonFields, true)) {
+                    $sets[]         = "\"{$field}\" = :{$field}::jsonb";
+                    $params[$field] = json_encode($data[$field]);
+                } else {
+                    $sets[]         = "\"{$field}\" = :{$field}";
+                    $params[$field] = $data[$field];
+                }
             }
         }
 

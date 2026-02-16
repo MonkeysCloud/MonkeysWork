@@ -17,11 +17,6 @@ spec:
         tier: ai-service
     spec:
       serviceAccountName: ai-scope-assistant
-      tolerations:
-        - key: "workload-type"
-          operator: "Equal"
-          value: "ai"
-          effect: "NoSchedule"
       containers:
         - name: ai-scope-assistant
           image: ARTIFACT_REGISTRY_URL/ai-scope-assistant:latest
@@ -68,8 +63,6 @@ spec:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
-      nodeSelector:
-        workload-type: ai
 ---
 apiVersion: v1
 kind: Service

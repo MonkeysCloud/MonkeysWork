@@ -133,9 +133,9 @@ const FREELANCER_MENU: MenuConfig = {
         {
             icon: "🔍",
             label: "Find Work",
-            href: "/jobs",
+            href: "/dashboard/jobs",
             children: [
-                { label: "Browse Jobs", href: "/jobs" },
+                { label: "Browse Jobs", href: "/dashboard/jobs" },
                 {
                     label: "Recommended",
                     href: "/dashboard/jobs/recommended",

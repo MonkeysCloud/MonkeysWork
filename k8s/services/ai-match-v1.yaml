@@ -16,12 +16,6 @@ spec:
         app: ai-match-v1
     spec:
       serviceAccountName: ai-match-v1
-      tolerations:
-        - key: workload-type
-          value: ai
-          effect: NoSchedule
-      nodeSelector:
-        workload-type: ai
       containers:
         - name: ai-match-v1
           image: IMAGE_PLACEHOLDER

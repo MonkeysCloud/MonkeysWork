@@ -16,12 +16,6 @@ spec:
         app: ai-scope-assistant
     spec:
       serviceAccountName: ai-scope-assistant
-      tolerations:
-        - key: workload-type
-          value: ai
-          effect: NoSchedule
-      nodeSelector:
-        workload-type: ai
       containers:
         - name: ai-scope-assistant
           image: IMAGE_PLACEHOLDER
