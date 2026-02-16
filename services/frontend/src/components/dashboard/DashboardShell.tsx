@@ -83,7 +83,7 @@ function NavItem({
                 <div className="ml-9 mt-1 space-y-0.5 border-l border-white/10 pl-3">
                     {item.children.map((child) => {
                         const childBase = child.href.split("?")[0];
-                        const childActive = pathname.startsWith(childBase);
+                        const childActive = pathname === childBase || (pathname.startsWith(childBase + "/") && !item.children?.some((s) => s.href !== child.href && pathname.startsWith(s.href.split("?")[0])));
                         return (
                             <Link
                                 key={child.href}

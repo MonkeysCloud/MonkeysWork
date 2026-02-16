@@ -716,6 +716,257 @@ final class JobController
         return $this->created(['data' => ['id' => $invId]]);
     }
 
+    /* ── Country → Region mapping (must match frontend REGIONS) ─── */
+    private const COUNTRY_TO_REGION = [
+        // North America
+        'US' => 'north_america', 'CA' => 'north_america', 'MX' => 'north_america',
+        // Europe
+        'GB' => 'europe', 'DE' => 'europe', 'FR' => 'europe', 'ES' => 'europe',
+        'IT' => 'europe', 'NL' => 'europe', 'SE' => 'europe', 'PL' => 'europe',
+        'PT' => 'europe', 'IE' => 'europe', 'CH' => 'europe', 'NO' => 'europe',
+        'DK' => 'europe', 'FI' => 'europe', 'AT' => 'europe', 'BE' => 'europe',
+        'CZ' => 'europe', 'RO' => 'europe', 'HU' => 'europe', 'GR' => 'europe',
+        // Latin America
+        'BR' => 'latin_america', 'AR' => 'latin_america', 'CL' => 'latin_america',
+        'CO' => 'latin_america', 'PE' => 'latin_america', 'UY' => 'latin_america',
+        'EC' => 'latin_america', 'VE' => 'latin_america', 'CR' => 'latin_america',
+        'PA' => 'latin_america',
+        // Asia Pacific
+        'AU' => 'asia_pacific', 'NZ' => 'asia_pacific', 'JP' => 'asia_pacific',
+        'KR' => 'asia_pacific', 'SG' => 'asia_pacific', 'IN' => 'asia_pacific',
+        'PH' => 'asia_pacific', 'TH' => 'asia_pacific', 'MY' => 'asia_pacific',
+        'ID' => 'asia_pacific', 'VN' => 'asia_pacific', 'TW' => 'asia_pacific',
+        'HK' => 'asia_pacific',
+        // Middle East & Africa
+        'AE' => 'middle_east_africa', 'SA' => 'middle_east_africa', 'IL' => 'middle_east_africa',
+        'ZA' => 'middle_east_africa', 'NG' => 'middle_east_africa', 'KE' => 'middle_east_africa',
+        'EG' => 'middle_east_africa', 'QA' => 'middle_east_africa', 'KW' => 'middle_east_africa',
+        'BH' => 'middle_east_africa',
+    ];
+
+    /** Recommended jobs for the current freelancer, scored & ranked */
+    #[Route('GET', '/recommended', name: 'jobs.recommended', summary: 'Recommended jobs for freelancer', tags: ['Jobs'])]
+    public function recommended(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+        if (!$userId) {
+            return $this->error('Unauthorized', 401);
+        }
+
+        $pdo = $this->db->pdo();
+        $p   = $this->pagination($request, 20);
+
+        // ── 1. Gather freelancer profile ────────────────────────
+        $uStmt = $pdo->prepare('SELECT country, metadata FROM "user" WHERE id = :uid');
+        $uStmt->execute(['uid' => $userId]);
+        $user = $uStmt->fetch(\PDO::FETCH_ASSOC);
+        if (!$user) {
+            return $this->error('User not found', 404);
+        }
+
+        $meta        = json_decode($user['metadata'] ?? '{}', true) ?: [];
+        $hourlyRate  = (float) ($meta['hourly_rate'] ?? 0);
+        $primarySkill = $meta['primary_skill'] ?? '';
+        $country     = strtoupper(trim($user['country'] ?? ''));
+        $region      = self::COUNTRY_TO_REGION[$country] ?? '';
+
+        // ── 2. Freelancer skill IDs ─────────────────────────────
+        $fsStmt = $pdo->prepare('SELECT skill_id FROM freelancer_skills WHERE freelancer_id = :uid');
+        $fsStmt->execute(['uid' => $userId]);
+        $freelancerSkillIds = $fsStmt->fetchAll(\PDO::FETCH_COLUMN);
+
+        // Fallback: match primary_skill name to skill table
+        if (empty($freelancerSkillIds) && $primarySkill) {
+            $psStmt = $pdo->prepare("SELECT id FROM skill WHERE LOWER(name) = LOWER(:ps) LIMIT 1");
+            $psStmt->execute(['ps' => $primarySkill]);
+            $psId = $psStmt->fetchColumn();
+            if ($psId) {
+                $freelancerSkillIds = [$psId];
+            }
+        }
+
+        // ── 3. Build scored query ───────────────────────────────
+        // We build score components in PHP and inject safe values via bind params.
+        // Each component is 0-100, then weighted & summed.
+
+        $sql = "
+        WITH job_base AS (
+            SELECT j.id, j.title, j.slug, j.status, j.budget_type, j.budget_min, j.budget_max,
+                   j.currency, j.experience_level, j.location_type, j.location_regions, j.location_countries,
+                   j.category_id, j.published_at, j.created_at,
+                   u.display_name AS client_name,
+                   c.name AS category_name,
+                   (SELECT COUNT(*) FROM job_skills WHERE job_id = j.id) AS total_skills
+            FROM \"job\" j
+            JOIN \"user\" u ON u.id = j.client_id
+            LEFT JOIN \"category\" c ON c.id = j.category_id
+            WHERE j.status = 'open'
+              AND j.client_id != :uid
+              AND NOT EXISTS (SELECT 1 FROM proposal pr WHERE pr.job_id = j.id AND pr.freelancer_id = :uid2)
+        ),
+        skill_match AS (
+            SELECT jb.id AS job_id,
+                   COUNT(DISTINCT js.skill_id) FILTER (WHERE js.skill_id = ANY(:skill_ids::uuid[])) AS matched,
+                   GREATEST(jb.total_skills, 1) AS total
+            FROM job_base jb
+            LEFT JOIN job_skills js ON js.job_id = jb.id
+            GROUP BY jb.id, jb.total_skills
+        )
+        SELECT jb.*,
+               sm.matched AS matched_skills,
+               sm.total   AS total_job_skills,
+
+               -- Skill score (0-100): matched/total * 100, weight 40%
+               CASE WHEN sm.total > 0 THEN ROUND(sm.matched::numeric / sm.total * 100) ELSE 50 END AS skill_score,
+
+               -- Rate score (0-100): how well freelancer rate fits budget, weight 25%
+               CASE
+                   WHEN :rate <= 0 THEN 50
+                   WHEN jb.budget_type = 'fixed' THEN 50
+                   WHEN :rate2 BETWEEN COALESCE(jb.budget_min, 0) AND COALESCE(jb.budget_max, 999999) THEN 100
+                   WHEN :rate3 < COALESCE(jb.budget_min, 0) THEN GREATEST(0, 100 - (COALESCE(jb.budget_min, 0) - :rate4) * 2)
+                   ELSE GREATEST(0, 100 - (:rate5 - COALESCE(jb.budget_max, 999999)) * 2)
+               END AS rate_score,
+
+               -- Location score (0-100), weight 20%
+               CASE
+                   WHEN jb.location_type = 'worldwide' THEN 100
+                   WHEN jb.location_type = 'countries' AND :country != '' AND jb.location_countries @> (:country_json)::jsonb THEN 100
+                   WHEN jb.location_type = 'regions' AND :region != '' AND jb.location_regions @> (:region_json)::jsonb THEN 100
+                   WHEN jb.location_type = 'countries' AND :country2 = '' THEN 50
+                   WHEN jb.location_type = 'regions' AND :region2 = '' THEN 50
+                   ELSE 0
+               END AS location_score,
+
+               -- Experience score (0-100), weight 15%  (neutral if no data)
+               50 AS experience_score
+
+        FROM job_base jb
+        JOIN skill_match sm ON sm.job_id = jb.id
+        ORDER BY (
+            CASE WHEN sm.total > 0 THEN ROUND(sm.matched::numeric / sm.total * 100) ELSE 50 END * 0.40 +
+            CASE
+                WHEN :rate6 <= 0 THEN 50
+                WHEN jb.budget_type = 'fixed' THEN 50
+                WHEN :rate7 BETWEEN COALESCE(jb.budget_min, 0) AND COALESCE(jb.budget_max, 999999) THEN 100
+                WHEN :rate8 < COALESCE(jb.budget_min, 0) THEN GREATEST(0, 100 - (COALESCE(jb.budget_min, 0) - :rate9) * 2)
+                ELSE GREATEST(0, 100 - (:rate10 - COALESCE(jb.budget_max, 999999)) * 2)
+            END * 0.25 +
+            CASE
+                WHEN jb.location_type = 'worldwide' THEN 100
+                WHEN jb.location_type = 'countries' AND :country3 != '' AND jb.location_countries @> (:country_json2)::jsonb THEN 100
+                WHEN jb.location_type = 'regions' AND :region3 != '' AND jb.location_regions @> (:region_json2)::jsonb THEN 100
+                WHEN jb.location_type = 'countries' AND :country4 = '' THEN 50
+                WHEN jb.location_type = 'regions' AND :region4 = '' THEN 50
+                ELSE 0
+            END * 0.20 +
+            50 * 0.15
+        ) DESC,
+        jb.published_at DESC NULLS LAST
+        LIMIT :lim OFFSET :off
+        ";
+
+        $skillIdsParam = '{' . implode(',', $freelancerSkillIds) . '}';
+        $countryJson   = json_encode([$country]);
+        $regionJson    = json_encode([$region]);
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue('uid',  $userId);
+        $stmt->bindValue('uid2', $userId);
+        $stmt->bindValue('skill_ids', $skillIdsParam);
+        // Rate params (duplicated for SELECT + ORDER BY)
+        foreach (['rate','rate2','rate3','rate4','rate5','rate6','rate7','rate8','rate9','rate10'] as $rp) {
+            $stmt->bindValue($rp, $hourlyRate);
+        }
+        // Location params
+        foreach (['country','country2','country3','country4'] as $cp) {
+            $stmt->bindValue($cp, $country);
+        }
+        $stmt->bindValue('country_json', $countryJson);
+        $stmt->bindValue('country_json2', $countryJson);
+        foreach (['region','region2','region3','region4'] as $rg) {
+            $stmt->bindValue($rg, $region);
+        }
+        $stmt->bindValue('region_json', $regionJson);
+        $stmt->bindValue('region_json2', $regionJson);
+        $stmt->bindValue('lim', $p['perPage'], \PDO::PARAM_INT);
+        $stmt->bindValue('off', $p['offset'], \PDO::PARAM_INT);
+
+        try {
+            $stmt->execute();
+        } catch (\Throwable $e) {
+            error_log("[JobController::recommended] SQL error: " . $e->getMessage());
+            return $this->error('Failed to fetch recommendations: ' . $e->getMessage(), 500);
+        }
+
+        $jobs = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        // ── 4. Enrich with match_score + match_reasons ──────────
+        foreach ($jobs as &$job) {
+            $skillScore    = (int) $job['skill_score'];
+            $rateScore     = (int) $job['rate_score'];
+            $locationScore = (int) $job['location_score'];
+            $expScore      = (int) $job['experience_score'];
+
+            $job['match_score'] = (int) round(
+                $skillScore * 0.40 + $rateScore * 0.25 + $locationScore * 0.20 + $expScore * 0.15
+            );
+
+            $reasons = [];
+            $matched = (int) ($job['matched_skills'] ?? 0);
+            $total   = (int) ($job['total_job_skills'] ?? 0);
+            if ($matched > 0) {
+                $reasons[] = "🎯 {$matched}/{$total} skills match";
+            }
+            if ($rateScore >= 80 && $hourlyRate > 0) {
+                $reasons[] = '💰 Rate fits budget';
+            }
+            if ($locationScore >= 100) {
+                $reasons[] = '🌍 Your region';
+            }
+            if ($total === 0 && !empty($freelancerSkillIds)) {
+                $reasons[] = '📋 No skills specified';
+            }
+            $job['match_reasons'] = $reasons;
+
+            // Fetch skills for this job
+            $jsStmt = $pdo->prepare('SELECT s.name FROM job_skills js JOIN skill s ON s.id = js.skill_id WHERE js.job_id = :jid');
+            $jsStmt->execute(['jid' => $job['id']]);
+            $job['skills'] = $jsStmt->fetchAll(\PDO::FETCH_COLUMN);
+
+            // Clean up internal scoring columns
+            unset($job['skill_score'], $job['rate_score'], $job['location_score'], $job['experience_score']);
+        }
+
+        // ── 5. Count total (for pagination) ─────────────────────
+        $cntSql = "
+            SELECT COUNT(*)
+            FROM \"job\" j
+            WHERE j.status = 'open'
+              AND j.client_id != :uid
+              AND NOT EXISTS (SELECT 1 FROM proposal pr WHERE pr.job_id = j.id AND pr.freelancer_id = :uid2)
+        ";
+        $cntStmt = $pdo->prepare($cntSql);
+        $cntStmt->execute(['uid' => $userId, 'uid2' => $userId]);
+        $total = (int) $cntStmt->fetchColumn();
+
+        return $this->json([
+            'data' => $jobs,
+            'meta' => [
+                'current_page' => $p['page'],
+                'per_page'     => $p['perPage'],
+                'total'        => $total,
+            ],
+            'profile' => [
+                'hourly_rate'   => $hourlyRate,
+                'primary_skill' => $primarySkill,
+                'country'       => $country,
+                'region'        => $region,
+                'skill_count'   => count($freelancerSkillIds),
+            ],
+        ]);
+    }
+
     private function uuid(): string
     {
         return sprintf(

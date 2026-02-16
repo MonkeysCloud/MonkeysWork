@@ -158,6 +158,8 @@ export default function JobManagePage() {
     const [previewAtt, setPreviewAtt] = useState<Attachment | null>(null);
 
     const isOwner = !!(job && user && job.client_id === user.id);
+    const [isSaved, setIsSaved] = useState(false);
+    const [saveLoading, setSaveLoading] = useState(false);
 
     // Confirmation modal state
     const [confirmModal, setConfirmModal] = useState<{
@@ -189,6 +191,34 @@ export default function JobManagePage() {
     useEffect(() => {
         fetchJob();
     }, [fetchJob]);
+
+    // Check if job is saved (freelancer only)
+    useEffect(() => {
+        if (!job || isOwner || !token) return;
+        fetch(`${API_BASE}/saved-jobs/${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then((r) => r.json())
+            .then((b) => setIsSaved(b.data?.saved ?? false))
+            .catch(() => { });
+    }, [job, isOwner, id, token]);
+
+    async function toggleSaveJob() {
+        if (!token) return;
+        setSaveLoading(true);
+        try {
+            const method = isSaved ? "DELETE" : "POST";
+            const res = await fetch(`${API_BASE}/saved-jobs/${id}`, {
+                method,
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                setIsSaved(!isSaved);
+                showToast(isSaved ? "Job removed from saved" : "Job saved!");
+            }
+        } catch { /* noop */ }
+        setSaveLoading(false);
+    }
 
     function showToast(msg: string) {
         setToast(msg);
@@ -475,17 +505,29 @@ export default function JobManagePage() {
                 {/* Freelancer CTA */}
                 {!isOwner && job.status === "open" && (
                     <div className="bg-gradient-to-r from-brand-orange/5 to-amber-50 rounded-2xl border border-brand-orange/20 p-6 mb-6">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-4">
                             <div>
                                 <h2 className="text-lg font-bold text-brand-dark mb-1">Interested in this job?</h2>
                                 <p className="text-sm text-brand-muted">Submit a proposal to let the client know you&apos;re the right fit.</p>
                             </div>
-                            <button
-                                onClick={() => router.push(`/dashboard/jobs/${id}/proposal`)}
-                                className="px-6 py-3 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5 shrink-0"
-                            >
-                                📝 Submit Proposal
-                            </button>
+                            <div className="flex items-center gap-3 shrink-0">
+                                <button
+                                    onClick={toggleSaveJob}
+                                    disabled={saveLoading}
+                                    className={`px-4 py-3 text-sm font-semibold rounded-xl border transition-all duration-200 ${isSaved
+                                            ? "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
+                                            : "bg-white text-brand-dark border-brand-border/60 hover:border-brand-dark/30 hover:shadow-sm"
+                                        }`}
+                                >
+                                    {saveLoading ? "…" : isSaved ? "❤️ Saved" : "🤍 Save Job"}
+                                </button>
+                                <button
+                                    onClick={() => router.push(`/dashboard/jobs/${id}/proposal`)}
+                                    className="px-6 py-3 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5"
+                                >
+                                    📝 Submit Proposal
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
