@@ -41,14 +41,33 @@ class VerificationResponse(BaseModel):
 # ── Confidence thresholds ──────────────────────────
 AUTO_APPROVE_THRESHOLD = 0.85
 HUMAN_REVIEW_THRESHOLD = 0.50
-MODEL_VERSION = "rule-v1.0.0"
+MODEL_VERSION_RULES = "rule-v1.0.0"
 
 
-def _analyze_evidence(verification_type: str, evidence: dict) -> float:
+async def _analyze_evidence_with_ai(verification_type: str, evidence: dict) -> tuple[float, str, list]:
     """
-    Rule-based confidence scoring.
-    Replace with Vertex AI call when models are ready.
+    Try Vertex AI first (production), fall back to rules.
+    Returns (confidence, model_version, checks).
     """
+    from src.vertex_ai import analyze_with_vertex, is_vertex_enabled
+
+    if is_vertex_enabled():
+        result = await analyze_with_vertex(verification_type, evidence)
+        if result is not None:
+            return (
+                result.get("confidence", 0.5),
+                result.get("model", "vertex-unknown"),
+                result.get("checks", []),
+            )
+        logger.warning("vertex_fallback_to_rules", type=verification_type)
+
+    # Fallback: rule-based scoring
+    confidence = _analyze_evidence_rules(verification_type, evidence)
+    return confidence, MODEL_VERSION_RULES, []
+
+
+def _analyze_evidence_rules(verification_type: str, evidence: dict) -> float:
+    """Rule-based confidence scoring — used as fallback when Vertex AI is unavailable."""
     score = 0.0
     fields = evidence
 
@@ -126,10 +145,12 @@ def _determine_status(confidence: float) -> tuple[str, bool]:
 
 @router.post("/submit", response_model=VerificationResponse)
 async def submit_verification(request: VerificationRequest):
-    """Submit verification request — auto-approve if high confidence, else queue for human review."""
+    """Submit verification request — uses Vertex AI in production, rules in dev."""
     import uuid
 
-    confidence = _analyze_evidence(request.verification_type.value, request.evidence)
+    confidence, model_version, ai_checks = await _analyze_evidence_with_ai(
+        request.verification_type.value, request.evidence
+    )
     status, requires_review = _determine_status(confidence)
     verification_id = str(uuid.uuid4())
 
@@ -140,6 +161,7 @@ async def submit_verification(request: VerificationRequest):
         type=request.verification_type.value,
         confidence=confidence,
         status=status,
+        model_version=model_version,
     )
 
     # Callback to PHP API
@@ -149,7 +171,7 @@ async def submit_verification(request: VerificationRequest):
             "type": request.verification_type.value,
             "status": status,
             "confidence_score": confidence,
-            "model_version": MODEL_VERSION,
+            "model_version": model_version,
         })
     except Exception as e:
         logger.warning("verification_callback_failed", error=str(e))
@@ -160,10 +182,10 @@ async def submit_verification(request: VerificationRequest):
             "decision_type": "verification",
             "entity_type": "verification",
             "entity_id": verification_id,
-            "model_name": "verification-rules",
-            "model_version": MODEL_VERSION,
+            "model_name": "verification-ai",
+            "model_version": model_version,
             "confidence_score": confidence,
-            "output": {"status": status, "requires_review": requires_review},
+            "output": {"status": status, "requires_review": requires_review, "checks": ai_checks},
         })
     except Exception as e:
         logger.warning("audit_callback_failed", error=str(e))
@@ -174,7 +196,7 @@ async def submit_verification(request: VerificationRequest):
         verification_type=request.verification_type.value,
         status=status,
         confidence_score=confidence,
-        model_version=MODEL_VERSION,
+        model_version=model_version,
         requires_human_review=requires_review,
     )
 

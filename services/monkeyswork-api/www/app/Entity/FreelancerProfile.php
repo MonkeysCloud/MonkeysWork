@@ -97,6 +97,9 @@ class FreelancerProfile
     #[Field(type: 'boolean', default: false, comment: 'admin curated')]
     public bool $featured = false;
 
+    #[Field(type: 'string', length: 20, default: 'public', comment: 'public | logged_in | private')]
+    public string $profile_visibility = 'public';
+
     #[Field(type: 'timestamptz')]
     public \DateTimeImmutable $created_at;
 
@@ -143,6 +146,7 @@ class FreelancerProfile
     public function getProfileCompleteness(): int { return $this->profile_completeness; }
     public function getProfileEmbedding(): ?string { return $this->profile_embedding; }
     public function isFeatured(): bool { return $this->featured; }
+    public function getProfileVisibility(): string { return $this->profile_visibility; }
     public function getCreatedAt(): \DateTimeImmutable { return $this->created_at; }
     public function getUpdatedAt(): \DateTimeImmutable { return $this->updated_at; }
     public function getSkills(): array { return $this->skills; }
@@ -175,6 +179,7 @@ class FreelancerProfile
     public function setProfileCompleteness(int $v): self { $this->profile_completeness = $v; return $this; }
     public function setProfileEmbedding(?string $v): self { $this->profile_embedding = $v; return $this; }
     public function setFeatured(bool $v): self { $this->featured = $v; return $this; }
+    public function setProfileVisibility(string $v): self { $this->profile_visibility = $v; return $this; }
     public function setUpdatedAt(\DateTimeImmutable $at): self { $this->updated_at = $at; return $this; }
 
     // ── Collection mutators ──

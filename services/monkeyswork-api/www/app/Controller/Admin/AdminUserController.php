@@ -63,7 +63,55 @@ final class AdminUserController
         return $this->paginated($stmt->fetchAll(\PDO::FETCH_ASSOC), $total, $p['page'], $p['perPage']);
     }
 
-    #[Route('PATCH', '/{id}/status', name: 'admin.users.status', summary: 'Suspend/activate user', tags: ['Admin'])]
+    #[Route('GET', '/{id}/', name: 'admin.users.show', summary: 'User detail', tags: ['Admin'])]
+    public function show(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT id, email, role, status, display_name, first_name, last_name,
+                    avatar_url, phone, country, timezone, locale,
+                    email_verified_at, two_factor_enabled, last_login_at, last_login_ip,
+                    metadata, created_at, updated_at, state, languages, profile_completed
+             FROM "user" WHERE id = :id'
+        );
+        $stmt->execute(['id' => $id]);
+        $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            return $this->notFound('User');
+        }
+
+        $profile = $this->db->pdo()->prepare(
+            'SELECT headline, bio, hourly_rate, currency, experience_years,
+                    portfolio_urls, website_url, linkedin_url, github_url,
+                    verification_level, availability_status, availability_hours_week,
+                    avg_rating, total_reviews, total_jobs_completed, total_earnings,
+                    success_rate, profile_completeness
+             FROM freelancerprofile WHERE user_id = :id'
+        );
+        $profile->execute(['id' => $id]);
+        $user['freelancer_profile'] = $profile->fetch(\PDO::FETCH_ASSOC) ?: null;
+
+        // Counts
+        $jobs = $this->db->pdo()->prepare('SELECT COUNT(*) FROM job WHERE client_id = :id');
+        $jobs->execute(['id' => $id]);
+        $user['jobs_count'] = (int) $jobs->fetchColumn();
+
+        $contracts = $this->db->pdo()->prepare(
+            'SELECT COUNT(*) FROM contract WHERE client_id = :id OR freelancer_id = :id'
+        );
+        $contracts->execute(['id' => $id]);
+        $user['contracts_count'] = (int) $contracts->fetchColumn();
+
+        $verif = $this->db->pdo()->prepare(
+            'SELECT id, type, status, created_at FROM verification WHERE user_id = :id ORDER BY created_at DESC LIMIT 5'
+        );
+        $verif->execute(['id' => $id]);
+        $user['verifications'] = $verif->fetchAll(\PDO::FETCH_ASSOC);
+
+        return $this->json(['data' => $user]);
+    }
+
+    #[Route('PATCH', '/{id}/status/', name: 'admin.users.status', summary: 'Suspend/activate user', tags: ['Admin'])]
     public function updateStatus(ServerRequestInterface $request, string $id): JsonResponse
     {
         $data = $this->body($request);

@@ -425,6 +425,7 @@ locals {
     "job-published-match"            = { topic = "job-published", filter = "" }
     "job-published-scope"            = { topic = "job-published", filter = "" }
     "profile-ready-match"            = { topic = "profile-ready", filter = "" }
+    "job-published-moderation"       = { topic = "job-published", filter = "" }
   }
 }
 
@@ -629,6 +630,12 @@ resource "google_project_iam_member" "verification_secrets" {
 resource "google_project_iam_member" "verification_subscriber" {
   project = var.project_id
   role    = "roles/pubsub.subscriber"
+  member  = "serviceAccount:${google_service_account.services["verification"].email}"
+}
+
+resource "google_project_iam_member" "verification_vertex" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
   member  = "serviceAccount:${google_service_account.services["verification"].email}"
 }
 

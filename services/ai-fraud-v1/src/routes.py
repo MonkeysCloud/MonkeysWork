@@ -261,12 +261,73 @@ def compute_fraud_score(request: FraudCheckRequest) -> FraudResponse:
     )
 
 
-# ── Endpoint ─────────────────────────────────────────────────────────
+# ── Endpoints ────────────────────────────────────────────────────────
 
 @router.post("/check", response_model=FraudResponse)
 async def check_fraud(request: FraudCheckRequest):
     """
     Synchronous fraud check — called by the PHP API during proposal submission.
+    In production: tries Vertex AI for deep analysis, falls back to rules.
     Must respond in < 500ms P99.
     """
+    from src.vertex_ai import analyze_proposal_fraud, is_vertex_enabled
+
+    if is_vertex_enabled():
+        try:
+            result = await analyze_proposal_fraud(
+                cover_letter=request.cover_letter or "",
+                bid_amount=request.bid_amount,
+                budget_min=request.job_budget_min,
+                budget_max=request.job_budget_max,
+                job_skills=request.job_skills,
+                freelancer_skills=request.freelancer_skills,
+                account_age_days=request.account_age_days,
+                proposals_last_hour=request.proposals_last_hour,
+                total_proposals=request.total_proposals,
+            )
+            if result:
+                return FraudResponse(
+                    account_id=request.account_id,
+                    entity_type=request.entity_type,
+                    entity_id=request.entity_id,
+                    fraud_score=round(result.get("fraud_score", 0.0), 4),
+                    risk_tier=result.get("risk_tier", "low"),
+                    recommended_action=result.get("recommended_action", "allow"),
+                    top_risk_factors=[
+                        RiskFactor(**f) for f in result.get("risk_factors", [])[:5]
+                    ],
+                    model_version=f"vertex-ai/{result.get('model', 'gemini-3-flash-preview')}",
+                    enforcement_mode=settings.fallback_mode,
+                )
+        except Exception:
+            logger.exception("vertex_fraud_check_error")
+
+    # Fallback to rule-based scoring
     return compute_fraud_score(request)
+
+
+@router.post("/anomaly")
+async def check_anomaly(request: dict):
+    """
+    Behavioral anomaly detection — detects suspicious user patterns.
+    Production only.
+    """
+    from src.vertex_ai import detect_behavioral_anomaly, is_vertex_enabled
+
+    if not is_vertex_enabled():
+        return {"anomaly_score": 0.0, "anomaly_type": "none", "message": "Anomaly detection requires production environment"}
+
+    result = await detect_behavioral_anomaly(
+        account_age_days=request.get("account_age_days", 0),
+        role=request.get("role", "unknown"),
+        total_proposals=request.get("total_proposals", 0),
+        proposals_24h=request.get("proposals_24h", 0),
+        avg_bid=request.get("avg_bid", 0),
+        jobs_completed=request.get("jobs_completed", 0),
+        avg_rating=request.get("avg_rating", 0),
+        disputes=request.get("disputes", 0),
+        messages_24h=request.get("messages_24h", 0),
+        login_locations=request.get("login_locations"),
+        payment_changes=request.get("payment_changes", 0),
+    )
+    return result or {"anomaly_score": 0.0, "anomaly_type": "none", "message": "Analysis unavailable"}

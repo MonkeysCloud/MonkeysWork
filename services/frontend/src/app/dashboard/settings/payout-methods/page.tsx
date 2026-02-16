@@ -1,0 +1,495 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+
+const API_BASE =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
+
+/* ── Styling ────────────────────────────────────── */
+const inputCls =
+    "w-full px-4 py-3 rounded-xl border border-brand-border/60 bg-white text-sm text-brand-dark placeholder:text-brand-muted/60 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 transition-all";
+const btnPrimary =
+    "px-6 py-2.5 rounded-xl bg-brand-orange text-white text-sm font-semibold hover:bg-brand-orange/90 transition-all shadow-sm disabled:opacity-50";
+const btnOutline =
+    "px-4 py-2 rounded-xl border border-brand-border/60 text-sm font-medium text-brand-dark hover:bg-brand-bg transition-all disabled:opacity-50";
+const btnDanger =
+    "px-3 py-1.5 rounded-lg border border-red-200 text-xs font-medium text-red-600 hover:bg-red-50 transition-all";
+
+/* ── Types ──────────────────────────────────────── */
+interface PayoutMethod {
+    id: string;
+    type: string;
+    provider: string;
+    last_four: string;
+    is_default: boolean;
+    is_active: boolean;
+    expiry: string | null;
+    metadata: Record<string, string> | null;
+    created_at: string;
+}
+
+interface PayoutFormData {
+    type: string;
+    provider: string;
+    last_four: string;
+    is_default: boolean;
+    metadata: Record<string, string>;
+}
+
+/* ── Payout type definitions ────────────────────── */
+const PAYOUT_TYPES = [
+    {
+        value: "bank_transfer",
+        label: "Bank Transfer (ACH)",
+        icon: "🏦",
+        desc: "Direct deposit to your bank account",
+        fields: [
+            { key: "bank_name", label: "Bank Name", placeholder: "e.g. Chase, Wells Fargo" },
+            { key: "account_holder", label: "Account Holder Name", placeholder: "Full name on the account" },
+            { key: "routing_number", label: "Routing Number", placeholder: "9-digit routing number", mask: true },
+            { key: "account_number", label: "Account Number", placeholder: "Account number", mask: true },
+        ],
+    },
+    {
+        value: "wire",
+        label: "Wire Transfer",
+        icon: "🌐",
+        desc: "International wire transfer (SWIFT)",
+        fields: [
+            { key: "bank_name", label: "Bank Name", placeholder: "e.g. HSBC, Barclays" },
+            { key: "account_holder", label: "Account Holder Name", placeholder: "Full name on the account" },
+            { key: "swift_code", label: "SWIFT/BIC Code", placeholder: "8-11 character code" },
+            { key: "iban", label: "IBAN / Account Number", placeholder: "International bank account number", mask: true },
+            { key: "country", label: "Bank Country", placeholder: "e.g. United States, United Kingdom" },
+        ],
+    },
+    {
+        value: "paypal",
+        label: "PayPal",
+        icon: "💸",
+        desc: "Receive payments to your PayPal account",
+        fields: [
+            { key: "paypal_email", label: "PayPal Email", placeholder: "your-paypal@email.com" },
+        ],
+    },
+    {
+        value: "wise",
+        label: "Wise (TransferWise)",
+        icon: "🔄",
+        desc: "Low-fee international transfers",
+        fields: [
+            { key: "wise_email", label: "Wise Email", placeholder: "your@email.com" },
+            { key: "currency", label: "Preferred Currency", placeholder: "e.g. USD, EUR, GBP" },
+        ],
+    },
+    {
+        value: "crypto",
+        label: "Cryptocurrency",
+        icon: "₿",
+        desc: "Receive payments in crypto",
+        fields: [
+            { key: "network", label: "Network", placeholder: "e.g. Bitcoin, Ethereum, USDC" },
+            { key: "wallet_address", label: "Wallet Address", placeholder: "Your wallet address", mask: true },
+        ],
+    },
+];
+
+const PAYOUT_ICONS: Record<string, string> = Object.fromEntries(PAYOUT_TYPES.map(t => [t.value, t.icon]));
+
+/* ── Components ─────────────────────────────────── */
+function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+    return (
+        <div className="bg-white rounded-xl border border-brand-border/60 overflow-hidden">
+            <div className="px-6 py-5 border-b border-brand-border/40">
+                <h2 className="text-base font-bold text-brand-dark">{title}</h2>
+                {description && <p className="text-xs text-brand-muted mt-0.5">{description}</p>}
+            </div>
+            <div className="px-6 py-5">{children}</div>
+        </div>
+    );
+}
+
+function MaskedValue({ value }: { value: string }) {
+    if (!value || value.length <= 4) return <span>{value || "—"}</span>;
+    return <span>{"•".repeat(value.length - 4)}{value.slice(-4)}</span>;
+}
+
+/* ── Main Page ──────────────────────────────────── */
+export default function PayoutMethodsPage() {
+    const { token } = useAuth();
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+    const [methods, setMethods] = useState<PayoutMethod[]>([]);
+    const [showForm, setShowForm] = useState(false);
+    const [selectedType, setSelectedType] = useState<string | null>(null);
+    const [formData, setFormData] = useState<Record<string, string>>({});
+    const [makeDefault, setMakeDefault] = useState(false);
+
+    useEffect(() => {
+        if (toast) {
+            const t = setTimeout(() => setToast(null), 4000);
+            return () => clearTimeout(t);
+        }
+    }, [toast]);
+
+    /* ── Load ────────────────────────────────────── */
+    const loadData = useCallback(async () => {
+        if (!token) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE}/payment-methods`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const { data } = await res.json();
+                setMethods(data || []);
+            }
+        } catch (err) {
+            setToast({ message: (err as Error).message, type: "error" });
+        } finally {
+            setLoading(false);
+        }
+    }, [token]);
+
+    useEffect(() => { loadData(); }, [loadData]);
+
+    /* ── Add ─────────────────────────────────────── */
+    const handleAdd = async () => {
+        if (!token || !selectedType) return;
+        setSaving(true);
+
+        const typeInfo = PAYOUT_TYPES.find(t => t.value === selectedType);
+        if (!typeInfo) return;
+
+        // Validate all required fields
+        const missingFields = typeInfo.fields.filter(f => !formData[f.key]?.trim());
+        if (missingFields.length > 0) {
+            setToast({ message: `Please fill in: ${missingFields.map(f => f.label).join(", ")}`, type: "error" });
+            setSaving(false);
+            return;
+        }
+
+        // Determine last_four from relevant field
+        let lastFour = "••••";
+        if (selectedType === "paypal") {
+            const email = formData.paypal_email || "";
+            lastFour = email.includes("@") ? email.split("@")[0].slice(-4) : email.slice(-4);
+        } else if (selectedType === "wise") {
+            const email = formData.wise_email || "";
+            lastFour = email.includes("@") ? email.split("@")[0].slice(-4) : email.slice(-4);
+        } else if (selectedType === "bank_transfer") {
+            lastFour = (formData.account_number || "").slice(-4);
+        } else if (selectedType === "wire") {
+            lastFour = (formData.iban || "").slice(-4);
+        } else if (selectedType === "crypto") {
+            lastFour = (formData.wallet_address || "").slice(-4);
+        }
+
+        try {
+            const res = await fetch(`${API_BASE}/payment-methods`, {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    type: selectedType,
+                    provider: selectedType,
+                    last_four: lastFour || "••••",
+                    is_default: makeDefault,
+                    metadata: formData,
+                }),
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || "Failed to add payout method");
+            }
+
+            setToast({ message: `${typeInfo.label} added successfully!`, type: "success" });
+            setShowForm(false);
+            setSelectedType(null);
+            setFormData({});
+            setMakeDefault(false);
+            await loadData();
+        } catch (err) {
+            setToast({ message: (err as Error).message, type: "error" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    /* ── Delete ──────────────────────────────────── */
+    const handleDelete = async (id: string) => {
+        if (!token) return;
+        if (!confirm("Are you sure you want to remove this payout method?")) return;
+
+        try {
+            const res = await fetch(`${API_BASE}/payment-methods/${id}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok && res.status !== 204) {
+                throw new Error("Failed to remove");
+            }
+            setToast({ message: "Payout method removed.", type: "success" });
+            await loadData();
+        } catch (err) {
+            setToast({ message: (err as Error).message, type: "error" });
+        }
+    };
+
+    /* ── Set Default ─────────────────────────────── */
+    const handleSetDefault = async (id: string) => {
+        if (!token) return;
+        try {
+            const res = await fetch(`${API_BASE}/payment-methods/${id}/default`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error("Failed to set default");
+            setToast({ message: "Default payout method updated!", type: "success" });
+            await loadData();
+        } catch (err) {
+            setToast({ message: (err as Error).message, type: "error" });
+        }
+    };
+
+    /* ── Render ───────────────────────────────────── */
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-orange" />
+            </div>
+        );
+    }
+
+    const selectedTypeInfo = PAYOUT_TYPES.find(t => t.value === selectedType);
+
+    return (
+        <div className="max-w-3xl mx-auto space-y-6 pb-10">
+            {toast && (
+                <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-xl text-sm font-medium shadow-lg transition-all max-w-sm ${toast.type === "success"
+                    ? "bg-green-50 text-green-700 border border-green-200"
+                    : "bg-red-50 text-red-700 border border-red-200"
+                    }`}>
+                    {toast.message}
+                </div>
+            )}
+
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-xl font-bold text-brand-dark">Payout Methods</h1>
+                    <p className="text-sm text-brand-muted mt-0.5">
+                        Add and manage how you receive payments from clients.
+                    </p>
+                </div>
+                {!showForm && (
+                    <button className={btnPrimary} onClick={() => setShowForm(true)}>
+                        + Add Payout Method
+                    </button>
+                )}
+            </div>
+
+            {/* ── Existing Methods ── */}
+            {methods.length > 0 && (
+                <Section title="Your Payout Methods" description="Manage your saved payout methods.">
+                    <div className="space-y-3">
+                        {methods.map((m) => {
+                            const meta = m.metadata || {};
+                            const typeLabel = PAYOUT_TYPES.find(t => t.value === m.type)?.label || m.type;
+
+                            return (
+                                <div
+                                    key={m.id}
+                                    className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${m.is_default
+                                            ? "border-brand-orange/40 bg-brand-orange/5"
+                                            : "border-brand-border/60"
+                                        }`}
+                                >
+                                    <div className="text-2xl w-10 h-10 flex items-center justify-center flex-shrink-0">
+                                        {PAYOUT_ICONS[m.type] || "💳"}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-sm font-semibold text-brand-dark">{typeLabel}</p>
+                                            {m.is_default && (
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-brand-orange/10 text-brand-orange">
+                                                    Default
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-brand-muted mt-0.5">
+                                            {m.type === "paypal" || m.type === "wise"
+                                                ? meta.paypal_email || meta.wise_email || `••••${m.last_four}`
+                                                : m.type === "crypto"
+                                                    ? `${meta.network || "Crypto"} ••••${m.last_four}`
+                                                    : `${meta.bank_name || m.provider} ••••${m.last_four}`}
+                                        </p>
+                                        <p className="text-[10px] text-brand-muted/70 mt-0.5">
+                                            Added {new Date(m.created_at).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                        {!m.is_default && (
+                                            <button
+                                                className={btnOutline + " !text-xs !px-3 !py-1.5"}
+                                                onClick={() => handleSetDefault(m.id)}
+                                            >
+                                                Set Default
+                                            </button>
+                                        )}
+                                        <button
+                                            className={btnDanger}
+                                            onClick={() => handleDelete(m.id)}
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </Section>
+            )}
+
+            {/* ── Empty state ── */}
+            {methods.length === 0 && !showForm && (
+                <Section title="No Payout Methods">
+                    <div className="text-center py-8">
+                        <div className="text-4xl mb-3">💰</div>
+                        <p className="text-sm text-brand-muted mb-4">
+                            You haven&apos;t added any payout methods yet.<br />
+                            Add one to start receiving payments from clients.
+                        </p>
+                        <button className={btnPrimary} onClick={() => setShowForm(true)}>
+                            + Add Your First Payout Method
+                        </button>
+                    </div>
+                </Section>
+            )}
+
+            {/* ── Add Form ── */}
+            {showForm && (
+                <Section title="Add Payout Method" description="Choose how you'd like to receive payments.">
+                    <div className="space-y-5">
+                        {/* Step 1: Choose type */}
+                        <div className="space-y-3">
+                            <p className="text-xs font-semibold text-brand-dark">Select Type</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {PAYOUT_TYPES.map((pt) => (
+                                    <label
+                                        key={pt.value}
+                                        className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${selectedType === pt.value
+                                                ? "border-brand-orange bg-brand-orange/5 ring-2 ring-brand-orange/20"
+                                                : "border-brand-border/60 hover:bg-brand-bg/50"
+                                            }`}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="payout-type"
+                                            value={pt.value}
+                                            checked={selectedType === pt.value}
+                                            onChange={() => {
+                                                setSelectedType(pt.value);
+                                                setFormData({});
+                                            }}
+                                            className="sr-only"
+                                        />
+                                        <div className="text-2xl flex-shrink-0">{pt.icon}</div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-semibold text-brand-dark">{pt.label}</p>
+                                            <p className="text-[11px] text-brand-muted mt-0.5">{pt.desc}</p>
+                                        </div>
+                                        {selectedType === pt.value && (
+                                            <span className="text-brand-orange text-lg flex-shrink-0">✓</span>
+                                        )}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Step 2: Fill in details */}
+                        {selectedTypeInfo && (
+                            <div className="space-y-4 border-t border-brand-border/30 pt-5">
+                                <p className="text-xs font-semibold text-brand-dark">
+                                    {selectedTypeInfo.label} Details
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {selectedTypeInfo.fields.map((field) => (
+                                        <div key={field.key} className={selectedTypeInfo.fields.length === 1 ? "sm:col-span-2" : ""}>
+                                            <label className="block text-xs font-medium text-brand-dark mb-1.5">
+                                                {field.label}
+                                            </label>
+                                            <input
+                                                type={field.mask ? "password" : "text"}
+                                                className={inputCls}
+                                                placeholder={field.placeholder}
+                                                value={formData[field.key] || ""}
+                                                onChange={(e) =>
+                                                    setFormData((prev) => ({
+                                                        ...prev,
+                                                        [field.key]: e.target.value,
+                                                    }))
+                                                }
+                                                autoComplete="off"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Make default toggle */}
+                                <label className="flex items-center gap-3 p-3 rounded-xl bg-brand-bg/50 border border-brand-border/30 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={makeDefault}
+                                        onChange={(e) => setMakeDefault(e.target.checked)}
+                                        className="w-4 h-4 rounded accent-brand-orange"
+                                    />
+                                    <div>
+                                        <p className="text-sm font-medium text-brand-dark">Set as default payout method</p>
+                                        <p className="text-[11px] text-brand-muted">Payments will be sent here by default</p>
+                                    </div>
+                                </label>
+
+                                {/* Security note */}
+                                <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                                    <span className="text-sm mt-0.5">🔒</span>
+                                    <p className="text-[11px] text-blue-700">
+                                        Your payout details are encrypted and stored securely. We never share your
+                                        financial information with third parties.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex justify-end gap-3 pt-2">
+                            <button
+                                className={btnOutline}
+                                onClick={() => {
+                                    setShowForm(false);
+                                    setSelectedType(null);
+                                    setFormData({});
+                                    setMakeDefault(false);
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className={btnPrimary}
+                                onClick={handleAdd}
+                                disabled={saving || !selectedType}
+                            >
+                                {saving ? "Saving…" : "Add Payout Method"}
+                            </button>
+                        </div>
+                    </div>
+                </Section>
+            )}
+        </div>
+    );
+}

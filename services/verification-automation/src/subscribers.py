@@ -49,6 +49,9 @@ async def handle_user_registered(data: dict) -> None:
 async def handle_verification_submitted(data: dict) -> None:
     """
     When a user submits verification documents, process them with AI.
+    In production: uses Vertex AI (Gemini) for analysis.
+    In dev: uses simulated rule-based scoring.
+
     Decision logic:
       confidence >= 0.85 → auto_approved
       confidence 0.50-0.84 → human_review
@@ -64,10 +67,26 @@ async def handle_verification_submitted(data: dict) -> None:
 
     logger.info("processing_verification", verification_id=verification_id, type=verif_type)
 
-    # ── AI Analysis (rule-based for Phase 1) ─────────────────────────
-    # In production this would call Vertex AI for document analysis,
-    # face match, data extraction, etc.
-    confidence = _analyze_verification(verif_type)
+    # ── AI Analysis ──────────────────────────────────────────────────
+    model_version = "rule-v1.0.0"
+    checks = []
+
+    try:
+        from src.vertex_ai import analyze_with_vertex, is_vertex_enabled
+
+        if is_vertex_enabled():
+            result = await analyze_with_vertex(verif_type, data)
+            if result is not None:
+                confidence = result.get("confidence", 0.5)
+                model_version = result.get("model", "vertex-unknown")
+                checks = result.get("checks", [])
+            else:
+                confidence = _analyze_verification(verif_type)
+        else:
+            confidence = _analyze_verification(verif_type)
+    except Exception:
+        logger.exception("ai_analysis_error", type=verif_type)
+        confidence = _analyze_verification(verif_type)
 
     # Decision logic
     if confidence >= 0.85:
@@ -86,6 +105,7 @@ async def handle_verification_submitted(data: dict) -> None:
         confidence=confidence,
         status=status,
         decision=decision,
+        model_version=model_version,
     )
 
     # ── Callback to PHP API ──────────────────────────────────────────
@@ -95,12 +115,12 @@ async def handle_verification_submitted(data: dict) -> None:
         await api_callback.patch(f"/verifications/{verification_id}", {
             "status": status,
             "confidence_score": round(confidence, 4),
-            "model_version": "verification-v1.0.0",
+            "model_version": model_version,
             "ai_result": {
                 "decision": decision,
                 "confidence": confidence,
                 "analysis_type": verif_type,
-                "checks_passed": _get_checks(verif_type, confidence),
+                "checks_passed": checks or _get_checks(verif_type, confidence),
             },
         })
 

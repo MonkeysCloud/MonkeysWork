@@ -85,58 +85,106 @@ final class UserController
     #[Route('POST', '/me/avatar', name: 'users.avatar', summary: 'Upload avatar', tags: ['Users'])]
     public function uploadAvatar(ServerRequestInterface $request): JsonResponse
     {
-        $userId = $this->userId($request);
-        if (!$userId) {
-            return $this->json(['error' => 'Authentication required'], 401);
+        try {
+            error_log('[UserController::uploadAvatar] START');
+            $userId = $this->userId($request);
+            error_log('[UserController::uploadAvatar] userId=' . $userId);
+            if (!$userId) {
+                return $this->json(['error' => 'Authentication required'], 401);
+            }
+
+            $uploadedFiles = $request->getUploadedFiles();
+            $raw = $uploadedFiles['avatar'] ?? null;
+
+            // Framework may return raw $_FILES array instead of PSR-7 UploadedFileInterface
+            if (is_array($raw) && isset($raw['tmp_name'])) {
+                // Raw $_FILES array — extract values directly
+                error_log('[UserController::uploadAvatar] handling raw $_FILES array');
+                $tmpName  = $raw['tmp_name'];
+                $rawMime  = $raw['type'] ?? '';
+                $rawSize  = (int) ($raw['size'] ?? 0);
+                $rawError = (int) ($raw['error'] ?? UPLOAD_ERR_NO_FILE);
+
+                if ($rawError !== UPLOAD_ERR_OK || !is_uploaded_file($tmpName)) {
+                    error_log('[UserController::uploadAvatar] upload error=' . $rawError);
+                    return $this->error('No avatar file uploaded');
+                }
+
+                $allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+                if (!in_array($rawMime, $allowedTypes, true)) {
+                    return $this->error('Invalid image type. Allowed: JPEG, PNG, WebP, GIF');
+                }
+                if ($rawSize > 5 * 1024 * 1024) {
+                    return $this->error('Avatar must be under 5 MB');
+                }
+
+                $extMap = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+                $ext = $extMap[$rawMime] ?? 'jpg';
+                $dir = '/app/www/public/files/avatars';
+                if (!is_dir($dir)) { mkdir($dir, 0755, true); }
+
+                $filename = "{$userId}.{$ext}";
+                $filePath = "{$dir}/{$filename}";
+
+                foreach (glob("{$dir}/{$userId}.*") as $old) { @unlink($old); }
+
+                if (!move_uploaded_file($tmpName, $filePath)) {
+                    error_log('[UserController::uploadAvatar] move_uploaded_file failed');
+                    return $this->error('Failed to save avatar file');
+                }
+            } elseif ($raw instanceof \Psr\Http\Message\UploadedFileInterface) {
+                // PSR-7 UploadedFileInterface
+                $file = $raw;
+                if ($file->getError() !== UPLOAD_ERR_OK) {
+                    return $this->error('No avatar file uploaded');
+                }
+
+                $allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+                $rawMime = $file->getClientMediaType();
+                if (!in_array($rawMime, $allowedTypes, true)) {
+                    return $this->error('Invalid image type. Allowed: JPEG, PNG, WebP, GIF');
+                }
+                if ($file->getSize() > 5 * 1024 * 1024) {
+                    return $this->error('Avatar must be under 5 MB');
+                }
+
+                $extMap = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
+                $ext = $extMap[$rawMime] ?? 'jpg';
+                $dir = '/app/www/public/files/avatars';
+                if (!is_dir($dir)) { mkdir($dir, 0755, true); }
+
+                $filename = "{$userId}.{$ext}";
+                $filePath = "{$dir}/{$filename}";
+
+                foreach (glob("{$dir}/{$userId}.*") as $old) { @unlink($old); }
+
+                $file->moveTo($filePath);
+            } else {
+                error_log('[UserController::uploadAvatar] unexpected avatar type: ' . gettype($raw));
+                return $this->error('No avatar file uploaded');
+            }
+
+            error_log('[UserController::uploadAvatar] file saved to ' . $filePath);
+
+            $avatarUrl = "/files/avatars/{$filename}";
+
+            $this->db->pdo()->prepare(
+                'UPDATE "user" SET avatar_url = :url, updated_at = :now WHERE id = :id'
+            )->execute([
+                'url' => $avatarUrl,
+                'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+                'id'  => $userId,
+            ]);
+
+            error_log('[UserController::uploadAvatar] SUCCESS url=' . $avatarUrl);
+            return $this->json([
+                'data' => ['avatar_url' => $avatarUrl],
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[UserController::uploadAvatar] ERROR: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            error_log('[UserController::uploadAvatar] TRACE: ' . $e->getTraceAsString());
+            return $this->json(['error' => $e->getMessage()], 500);
         }
-
-        $uploadedFiles = $request->getUploadedFiles();
-        $file = $uploadedFiles['avatar'] ?? null;
-
-        if (!$file || $file->getError() !== UPLOAD_ERR_OK) {
-            return $this->error('No avatar file uploaded');
-        }
-
-        $allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-        $mime = $file->getClientMediaType();
-        if (!in_array($mime, $allowedTypes, true)) {
-            return $this->error('Invalid image type. Allowed: JPEG, PNG, WebP, GIF');
-        }
-
-        if ($file->getSize() > 5 * 1024 * 1024) {
-            return $this->error('Avatar must be under 5 MB');
-        }
-
-        $extMap = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
-        $ext = $extMap[$mime] ?? 'jpg';
-        $dir = '/app/www/public/files/avatars';
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-
-        $filename = "{$userId}.{$ext}";
-        $filePath = "{$dir}/{$filename}";
-
-        // Remove old avatar files for this user
-        foreach (glob("{$dir}/{$userId}.*") as $old) {
-            @unlink($old);
-        }
-
-        $file->moveTo($filePath);
-
-        $avatarUrl = "/files/avatars/{$filename}";
-
-        $this->db->pdo()->prepare(
-            'UPDATE "user" SET avatar_url = :url, updated_at = :now WHERE id = :id'
-        )->execute([
-            'url' => $avatarUrl,
-            'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-            'id'  => $userId,
-        ]);
-
-        return $this->json([
-            'data' => ['avatar_url' => $avatarUrl],
-        ]);
     }
 
     /* ------------------------------------------------------------------ */

@@ -13,7 +13,7 @@ const API_BASE =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
 
 /* ── Types ──────────────────────────────────────────── */
-export type UserRole = "client" | "freelancer";
+export type UserRole = "client" | "freelancer" | "admin";
 
 export interface AuthUser {
     id: string;
@@ -21,6 +21,7 @@ export interface AuthUser {
     role: UserRole;
     display_name: string;
     profile_completed: boolean;
+    avatar_url: string | null;
 }
 
 interface AuthContextValue {
@@ -109,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: body.data.role as UserRole,
             display_name: body.data.display_name ?? email.split("@")[0],
             profile_completed: !!body.data.profile_completed,
+            avatar_url: body.data.avatar_url ?? null,
         };
         const authToken = body.data.token as string;
 
@@ -141,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 role: d.role as UserRole,
                 display_name: d.display_name ?? d.email?.split("@")[0],
                 profile_completed: !!d.profile_completed,
+                avatar_url: d.avatar_url ?? null,
             };
             setUser(updated);
             saveAuth(updated, token);

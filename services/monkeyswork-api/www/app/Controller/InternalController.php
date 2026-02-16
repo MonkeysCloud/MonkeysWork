@@ -5,6 +5,7 @@ namespace App\Controller;
 
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
+use App\Service\SocketEvent;
 use MonkeysLegion\Router\Attributes\Route;
 use MonkeysLegion\Router\Attributes\RoutePrefix;
 use Psr\Http\Message\ServerRequestInterface;
@@ -106,6 +107,23 @@ final class InternalController
 
         if ($stmt->rowCount() === 0) {
             return $this->notFound('Verification');
+        }
+
+        // If status changed, send notification
+        $newStatus = $data['status'] ?? null;
+        if ($newStatus && in_array($newStatus, ['approved', 'auto_approved', 'in_review', 'rejected'])) {
+            // Get user_id and type for this verification
+            $vStmt = $pdo->prepare('SELECT user_id, type FROM "verification" WHERE id = :id');
+            $vStmt->execute(['id' => $id]);
+            $vRow = $vStmt->fetch(\PDO::FETCH_ASSOC);
+
+            if ($vRow) {
+                $mappedStatus = ($newStatus === 'auto_approved') ? 'approved' : $newStatus;
+                $this->notifyVerificationStatus(
+                    $vRow['user_id'], $id, $vRow['type'], $mappedStatus,
+                    (float) ($data['confidence_score'] ?? 0.0), $pdo, $now
+                );
+            }
         }
 
         // If approved, recompute freelancer verification_level based on total approved verifications
@@ -212,6 +230,184 @@ final class InternalController
         }
 
         return $this->json(['message' => 'Scope stored']);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  PATCH /internal/jobs/{id}/moderation — AI stores moderation result  */
+    /* ------------------------------------------------------------------ */
+    #[Route('PATCH', '/jobs/{id}/moderation', name: 'internal.job.moderation', summary: 'Store AI moderation result', tags: ['Internal'])]
+    public function storeJobModeration(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        if ($err = $this->authorizeInternal($request)) return $err;
+
+        $data = $this->body($request);
+        $pdo  = $this->db->pdo();
+        $now  = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        $confidence = (float) ($data['confidence'] ?? 0.5);
+        $flags      = $data['flags'] ?? [];
+        $quality    = (float) ($data['quality'] ?? $confidence);
+        $model      = $data['model_version'] ?? 'vertex-ai/gemini-3-flash-preview';
+
+        $aiResult = json_encode([
+            'confidence'    => $confidence,
+            'flags'         => $flags,
+            'quality_score' => $quality,
+            'model'         => $model,
+            'reasoning'     => $data['reasoning'] ?? null,
+        ]);
+
+        // Determine moderation outcome
+        if ($confidence >= 0.85 && empty($flags)) {
+            $status    = 'published';
+            $modStatus = 'auto_approved';
+        } elseif ($confidence <= 0.30 || count($flags) >= 3) {
+            $status    = 'rejected';
+            $modStatus = 'auto_rejected';
+        } else {
+            $status    = 'pending_review';
+            $modStatus = 'human_review';
+        }
+
+        $stmt = $pdo->prepare(
+            'UPDATE "job" SET status = :status, moderation_status = :mod_status,
+                    moderation_ai_result = :ai, moderation_ai_confidence = :conf,
+                    moderation_ai_model_version = :model, updated_at = :now
+             WHERE id = :id
+             RETURNING client_id, title'
+        );
+        $stmt->execute([
+            'status'     => $status,
+            'mod_status' => $modStatus,
+            'ai'         => $aiResult,
+            'conf'       => number_format($confidence, 4),
+            'model'      => $model,
+            'now'        => $now,
+            'id'         => $id,
+        ]);
+
+        $job = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$job) {
+            return $this->notFound('Job');
+        }
+
+        // Send notification to job owner
+        $this->notifyJobModeration(
+            $job['client_id'], $id, $job['title'] ?? 'Job', $modStatus, $confidence, $pdo, $now
+        );
+
+        // Log AI decision
+        $decId = $this->uuid();
+        $pdo->prepare(
+            'INSERT INTO "aidecisionlog" (id, decision_type, model_name, model_version,
+                                          output_data, confidence, action_taken, latency_ms,
+                                          entity_id, entity_type, created_at)
+             VALUES (:id, :dtype, :mn, :mv, :out, :conf, :action, :lat, :eid, :et, :now)'
+        )->execute([
+            'id'     => $decId,
+            'dtype'  => 'content_moderation',
+            'mn'     => 'job-moderation',
+            'mv'     => $model,
+            'out'    => $aiResult,
+            'conf'   => $confidence,
+            'action' => $modStatus,
+            'lat'    => $data['latency_ms'] ?? 0,
+            'eid'    => $id,
+            'et'     => 'job',
+            'now'    => $now,
+        ]);
+
+        return $this->json([
+            'message'           => 'Moderation result stored',
+            'moderation_status' => $modStatus,
+            'job_status'        => $status,
+        ]);
+    }
+
+    /**
+     * Notify job owner about moderation status.
+     */
+    private function notifyJobModeration(
+        string $userId, string $jobId, string $title,
+        string $modStatus, float $confidence, \PDO $pdo, string $now
+    ): void {
+        $meta = match ($modStatus) {
+            'auto_approved' => [
+                'icon'     => '🎉',
+                'title'    => 'Job Published',
+                'body'     => "\"{$title}\" has been approved and is now live!",
+                'priority' => 'success',
+            ],
+            'human_review' => [
+                'icon'     => '🔍',
+                'title'    => 'Job Under Review',
+                'body'     => "\"{$title}\" is being reviewed by our team. You'll be notified once approved.",
+                'priority' => 'info',
+            ],
+            'auto_rejected' => [
+                'icon'     => '⚠️',
+                'title'    => 'Job Needs Revision',
+                'body'     => "\"{$title}\" did not pass content review. Please revise and resubmit.",
+                'priority' => 'warning',
+            ],
+            default => null,
+        };
+
+        if (!$meta) return;
+
+        $notifId = $this->uuid();
+
+        try {
+            $pdo->prepare(
+                'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
+                 VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
+            )->execute([
+                'id'    => $notifId,
+                'uid'   => $userId,
+                'type'  => "job.{$modStatus}",
+                'title' => "{$meta['icon']} {$meta['title']}",
+                'body'  => $meta['body'],
+                'data'  => json_encode([
+                    'job_id'     => $jobId,
+                    'status'     => $modStatus,
+                    'confidence' => $confidence,
+                    'link'       => "/dashboard/jobs/{$jobId}",
+                ]),
+                'prio'  => $meta['priority'],
+                'chan'   => 'in_app',
+                'now'   => $now,
+            ]);
+        } catch (\Throwable $e) {
+            error_log("[InternalController] job notification: " . $e->getMessage());
+        }
+
+        try {
+            $redisHost = getenv('REDIS_HOST') ?: 'redis';
+            $redisPort = (int) (getenv('REDIS_PORT') ?: 6379);
+            $redis = new \Redis();
+            $redis->connect($redisHost, $redisPort, 2.0);
+
+            $socket = new SocketEvent($redis);
+            $socket->toUser($userId, 'notification:new', [
+                'id'         => $notifId,
+                'type'       => "job.{$modStatus}",
+                'title'      => "{$meta['icon']} {$meta['title']}",
+                'body'       => $meta['body'],
+                'data'       => [
+                    'job_id'     => $jobId,
+                    'status'     => $modStatus,
+                    'confidence' => $confidence,
+                    'link'       => "/dashboard/jobs/{$jobId}",
+                ],
+                'priority'   => $meta['priority'],
+                'created_at' => $now,
+            ]);
+
+            $redis->close();
+        } catch (\Throwable $e) {
+            error_log("[InternalController] job socket emit: " . $e->getMessage());
+        }
     }
 
     /* ------------------------------------------------------------------ */
@@ -379,5 +575,101 @@ final class InternalController
             'UPDATE "freelancerprofile" SET verification_level = :level, updated_at = :now
              WHERE user_id = :uid'
         )->execute(['level' => $level, 'now' => $now, 'uid' => $userId]);
+    }
+
+    /**
+     * Create a notification record and push real-time event via Socket.IO/Redis.
+     */
+    private function notifyVerificationStatus(
+        string $userId, string $verificationId, string $type, string $status,
+        float $confidence, \PDO $pdo, string $now
+    ): void {
+        $typeLabels = [
+            'identity'         => 'Identity',
+            'skill_assessment' => 'Skill Assessment',
+            'portfolio'        => 'Portfolio',
+            'work_history'     => 'Work History',
+            'payment_method'   => 'Payment Method',
+        ];
+        $label = $typeLabels[$type] ?? ucfirst(str_replace('_', ' ', $type));
+
+        $meta = match ($status) {
+            'approved' => [
+                'icon'     => '✅',
+                'title'    => "{$label} Verified",
+                'body'     => "Your {$label} verification has been approved with " . round($confidence * 100) . "% confidence.",
+                'priority' => 'success',
+            ],
+            'in_review' => [
+                'icon'     => '🔄',
+                'title'    => "{$label} Under Review",
+                'body'     => "Your {$label} verification is being reviewed by our team.",
+                'priority' => 'info',
+            ],
+            'rejected' => [
+                'icon'     => '❌',
+                'title'    => "{$label} Verification Failed",
+                'body'     => "Your {$label} verification could not be approved. Please review and resubmit.",
+                'priority' => 'warning',
+            ],
+            default => null,
+        };
+
+        if (!$meta) return;
+
+        $notifId = $this->uuid();
+
+        try {
+            $pdo->prepare(
+                'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
+                 VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
+            )->execute([
+                'id'    => $notifId,
+                'uid'   => $userId,
+                'type'  => "verification.{$status}",
+                'title' => "{$meta['icon']} {$meta['title']}",
+                'body'  => $meta['body'],
+                'data'  => json_encode([
+                    'verification_id'   => $verificationId,
+                    'verification_type' => $type,
+                    'status'            => $status,
+                    'confidence'        => $confidence,
+                    'link'              => '/dashboard/settings/verification',
+                ]),
+                'prio'  => $meta['priority'],
+                'chan'   => 'in_app',
+                'now'   => $now,
+            ]);
+        } catch (\Throwable $e) {
+            error_log("[InternalController] notification insert: " . $e->getMessage());
+        }
+
+        try {
+            $redisHost = getenv('REDIS_HOST') ?: 'redis';
+            $redisPort = (int) (getenv('REDIS_PORT') ?: 6379);
+            $redis = new \Redis();
+            $redis->connect($redisHost, $redisPort, 2.0);
+
+            $socket = new SocketEvent($redis);
+            $socket->toUser($userId, 'notification:new', [
+                'id'         => $notifId,
+                'type'       => "verification.{$status}",
+                'title'      => "{$meta['icon']} {$meta['title']}",
+                'body'       => $meta['body'],
+                'data'       => [
+                    'verification_id'   => $verificationId,
+                    'verification_type' => $type,
+                    'status'            => $status,
+                    'confidence'        => $confidence,
+                    'link'              => '/dashboard/settings/verification',
+                ],
+                'priority'   => $meta['priority'],
+                'created_at' => $now,
+            ]);
+
+            $redis->close();
+        } catch (\Throwable $e) {
+            error_log("[InternalController] socket emit: " . $e->getMessage());
+        }
     }
 }

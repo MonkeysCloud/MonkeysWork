@@ -21,49 +21,68 @@ final class PaymentMethodController
     #[Route('GET', '', name: 'pm.index', summary: 'List payment methods', tags: ['Payment Methods'])]
     public function index(ServerRequestInterface $request): JsonResponse
     {
-        $userId = $this->userId($request);
+        try {
+            $userId = $this->userId($request);
 
-        $stmt = $this->db->pdo()->prepare(
-            'SELECT id, type, provider, last_four, brand, expiry_month, expiry_year,
-                    is_default, created_at
-             FROM "paymentmethod" WHERE user_id = :uid AND deleted_at IS NULL
-             ORDER BY is_default DESC, created_at DESC'
-        );
-        $stmt->execute(['uid' => $userId]);
+            $stmt = $this->db->pdo()->prepare(
+                'SELECT id, type, provider, last_four, expiry, is_default, is_active,
+                        metadata, created_at
+                 FROM "paymentmethod" WHERE user_id = :uid AND is_active = true
+                 ORDER BY is_default DESC, created_at DESC'
+            );
+            $stmt->execute(['uid' => $userId]);
 
-        return $this->json(['data' => $stmt->fetchAll(\PDO::FETCH_ASSOC)]);
+            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            foreach ($rows as &$row) {
+                $row['metadata'] = $row['metadata'] ? json_decode($row['metadata'], true) : null;
+            }
+
+            return $this->json(['data' => $rows]);
+        } catch (\Throwable $e) {
+            error_log('[PaymentMethodController] index ERROR: ' . $e->getMessage());
+            return $this->error('Failed to load payment methods: ' . $e->getMessage(), 500);
+        }
     }
 
     #[Route('POST', '', name: 'pm.create', summary: 'Add payment method', tags: ['Payment Methods'])]
     public function create(ServerRequestInterface $request): JsonResponse
     {
-        $userId = $this->userId($request);
-        $data   = $this->body($request);
+        try {
+            $userId = $this->userId($request);
+            $data   = $this->body($request);
 
-        $id  = $this->uuid();
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+            $id  = $this->uuid();
+            $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-        $this->db->pdo()->prepare(
-            'INSERT INTO "paymentmethod" (id, user_id, type, provider, provider_payment_method_id,
-                                          last_four, brand, expiry_month, expiry_year,
-                                          billing_address, is_default, is_verified, created_at)
-             VALUES (:id, :uid, :type, :prov, :ppid, :last4, :brand, :em, :ey, :ba, :def, false, :now)'
-        )->execute([
-            'id'    => $id,
-            'uid'   => $userId,
-            'type'  => $data['type'] ?? 'card',
-            'prov'  => $data['provider'] ?? 'stripe',
-            'ppid'  => $data['provider_payment_method_id'] ?? null,
-            'last4' => $data['last_four'] ?? null,
-            'brand' => $data['brand'] ?? null,
-            'em'    => $data['expiry_month'] ?? null,
-            'ey'    => $data['expiry_year'] ?? null,
-            'ba'    => json_encode($data['billing_address'] ?? []),
-            'def'   => empty($data['is_default']) ? 'false' : 'true',
-            'now'   => $now,
-        ]);
+            // If setting as default, clear other defaults first
+            if (!empty($data['is_default'])) {
+                $this->db->pdo()->prepare(
+                    'UPDATE "paymentmethod" SET is_default = false WHERE user_id = :uid'
+                )->execute(['uid' => $userId]);
+            }
 
-        return $this->created(['data' => ['id' => $id]]);
+            $this->db->pdo()->prepare(
+                'INSERT INTO "paymentmethod" (id, user_id, type, provider, last_four,
+                                              token, metadata, is_default, is_active,
+                                              created_at, updated_at)
+                 VALUES (:id, :uid, :type, :prov, :last4, :tok, :meta, :def, true, :now, :now)'
+            )->execute([
+                'id'    => $id,
+                'uid'   => $userId,
+                'type'  => $data['type'] ?? 'card',
+                'prov'  => $data['provider'] ?? $data['type'] ?? 'other',
+                'last4' => $data['last_four'] ?? '••••',
+                'tok'   => $data['token'] ?? null,
+                'meta'  => json_encode($data['metadata'] ?? []),
+                'def'   => empty($data['is_default']) ? 'false' : 'true',
+                'now'   => $now,
+            ]);
+
+            return $this->created(['data' => ['id' => $id]]);
+        } catch (\Throwable $e) {
+            error_log('[PaymentMethodController] create ERROR: ' . $e->getMessage());
+            return $this->error('Failed to add payment method: ' . $e->getMessage(), 500);
+        }
     }
 
     #[Route('DELETE', '/{id}', name: 'pm.delete', summary: 'Remove payment method', tags: ['Payment Methods'])]
@@ -72,7 +91,7 @@ final class PaymentMethodController
         $userId = $this->userId($request);
 
         $stmt = $this->db->pdo()->prepare(
-            'UPDATE "paymentmethod" SET deleted_at = :now WHERE id = :id AND user_id = :uid AND deleted_at IS NULL'
+            'UPDATE "paymentmethod" SET is_active = false, updated_at = :now WHERE id = :id AND user_id = :uid AND is_active = true'
         );
         $stmt->execute([
             'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),

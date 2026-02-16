@@ -56,7 +56,7 @@ class Job
     #[Field(type: 'char', length: 3, default: 'USD')]
     public string $currency = 'USD';
 
-    #[Field(type: 'enum', enumValues: ['draft', 'open', 'in_progress', 'completed', 'cancelled', 'suspended'], default: 'draft')]
+    #[Field(type: 'enum', enumValues: ['draft', 'pending_review', 'approved', 'rejected', 'revision_requested', 'open', 'in_progress', 'completed', 'cancelled', 'suspended'], default: 'draft')]
     public string $status = 'draft';
 
     #[Field(type: 'string', length: 20, default: 'public', comment: 'public, invite_only, private')]
@@ -91,6 +91,30 @@ class Job
 
     #[Field(type: 'decimal', precision: 5, scale: 4, nullable: true)]
     public ?string $ai_scope_confidence = null;
+
+    // ── Moderation fields ──
+
+    #[Field(type: 'enum', enumValues: ['none', 'pending', 'auto_approved', 'auto_rejected', 'human_review', 'approved', 'rejected'], default: 'none')]
+    public string $moderation_status = 'none';
+
+    #[Field(type: 'json', nullable: true, comment: 'AI content moderation output')]
+    public ?array $moderation_ai_result = null;
+
+    #[Field(type: 'decimal', precision: 5, scale: 4, nullable: true)]
+    public ?string $moderation_ai_confidence = null;
+
+    #[Field(type: 'string', length: 50, nullable: true)]
+    public ?string $moderation_ai_model_version = null;
+
+    #[Field(type: 'uuid', nullable: true)]
+    #[ManyToOne(targetEntity: User::class)]
+    public ?string $moderation_reviewed_by = null;
+
+    #[Field(type: 'text', nullable: true)]
+    public ?string $moderation_reviewer_notes = null;
+
+    #[Field(type: 'timestamptz', nullable: true)]
+    public ?\DateTimeImmutable $moderation_reviewed_at = null;
 
     #[Field(type: 'text', nullable: true, comment: 'tsvector for full-text search')]
     public ?string $search_vector = null;
@@ -153,6 +177,13 @@ class Job
     public function getAiScope(): ?array { return $this->ai_scope; }
     public function getAiScopeModelVersion(): ?string { return $this->ai_scope_model_version; }
     public function getAiScopeConfidence(): ?string { return $this->ai_scope_confidence; }
+    public function getModerationStatus(): string { return $this->moderation_status; }
+    public function getModerationAiResult(): ?array { return $this->moderation_ai_result; }
+    public function getModerationAiConfidence(): ?string { return $this->moderation_ai_confidence; }
+    public function getModerationAiModelVersion(): ?string { return $this->moderation_ai_model_version; }
+    public function getModerationReviewedBy(): ?string { return $this->moderation_reviewed_by; }
+    public function getModerationReviewerNotes(): ?string { return $this->moderation_reviewer_notes; }
+    public function getModerationReviewedAt(): ?\DateTimeImmutable { return $this->moderation_reviewed_at; }
     public function getSearchVector(): ?string { return $this->search_vector; }
     public function getPublishedAt(): ?\DateTimeImmutable { return $this->published_at; }
     public function getClosedAt(): ?\DateTimeImmutable { return $this->closed_at; }
@@ -189,6 +220,13 @@ class Job
     public function setAiScope(?array $v): self { $this->ai_scope = $v; return $this; }
     public function setAiScopeModelVersion(?string $v): self { $this->ai_scope_model_version = $v; return $this; }
     public function setAiScopeConfidence(?string $v): self { $this->ai_scope_confidence = $v; return $this; }
+    public function setModerationStatus(string $v): self { $this->moderation_status = $v; return $this; }
+    public function setModerationAiResult(?array $v): self { $this->moderation_ai_result = $v; return $this; }
+    public function setModerationAiConfidence(?string $v): self { $this->moderation_ai_confidence = $v; return $this; }
+    public function setModerationAiModelVersion(?string $v): self { $this->moderation_ai_model_version = $v; return $this; }
+    public function setModerationReviewedBy(?string $v): self { $this->moderation_reviewed_by = $v; return $this; }
+    public function setModerationReviewerNotes(?string $v): self { $this->moderation_reviewer_notes = $v; return $this; }
+    public function setModerationReviewedAt(?\DateTimeImmutable $v): self { $this->moderation_reviewed_at = $v; return $this; }
     public function setSearchVector(?string $v): self { $this->search_vector = $v; return $this; }
     public function setPublishedAt(?\DateTimeImmutable $v): self { $this->published_at = $v; return $this; }
     public function setClosedAt(?\DateTimeImmutable $v): self { $this->closed_at = $v; return $this; }
@@ -233,6 +271,65 @@ class Job
     public function close(?\DateTimeImmutable $at = null): self
     {
         $this->closed_at = $at ?? new \DateTimeImmutable();
+        return $this;
+    }
+
+    // ── Moderation domain methods ──
+
+    public function submitForReview(): self
+    {
+        $this->status = 'pending_review';
+        $this->moderation_status = 'pending';
+        return $this;
+    }
+
+    public function moderationAutoApprove(?array $aiResult = null, ?string $confidence = null): self
+    {
+        $this->moderation_status = 'auto_approved';
+        $this->moderation_ai_result = $aiResult;
+        $this->moderation_ai_confidence = $confidence;
+        $this->status = 'open';
+        $this->published_at = new \DateTimeImmutable();
+        return $this;
+    }
+
+    public function moderationAutoReject(?array $aiResult = null, ?string $confidence = null): self
+    {
+        $this->moderation_status = 'auto_rejected';
+        $this->moderation_ai_result = $aiResult;
+        $this->moderation_ai_confidence = $confidence;
+        $this->status = 'rejected';
+        return $this;
+    }
+
+    public function moderationApprove(string $reviewerId, ?string $notes = null): self
+    {
+        $this->moderation_status = 'approved';
+        $this->moderation_reviewed_by = $reviewerId;
+        $this->moderation_reviewer_notes = $notes;
+        $this->moderation_reviewed_at = new \DateTimeImmutable();
+        $this->status = 'open';
+        $this->published_at = new \DateTimeImmutable();
+        return $this;
+    }
+
+    public function moderationReject(string $reviewerId, ?string $notes = null): self
+    {
+        $this->moderation_status = 'rejected';
+        $this->moderation_reviewed_by = $reviewerId;
+        $this->moderation_reviewer_notes = $notes;
+        $this->moderation_reviewed_at = new \DateTimeImmutable();
+        $this->status = 'rejected';
+        return $this;
+    }
+
+    public function moderationRequestRevision(string $reviewerId, ?string $notes = null): self
+    {
+        $this->moderation_status = 'human_review';
+        $this->moderation_reviewed_by = $reviewerId;
+        $this->moderation_reviewer_notes = $notes;
+        $this->moderation_reviewed_at = new \DateTimeImmutable();
+        $this->status = 'revision_requested';
         return $this;
     }
 }

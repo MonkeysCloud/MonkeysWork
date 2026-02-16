@@ -24,9 +24,10 @@ export default function ProtectedRoute({ children, allowedRoles }: Props) {
             router.replace("/dashboard");
             return;
         }
-        // Redirect to profile completion wizard if profile not completed
+        // Redirect to profile completion wizard if profile not completed (skip for admins)
         if (
             user &&
+            user.role !== "admin" &&
             !user.profile_completed &&
             pathname !== "/dashboard/complete-profile"
         ) {

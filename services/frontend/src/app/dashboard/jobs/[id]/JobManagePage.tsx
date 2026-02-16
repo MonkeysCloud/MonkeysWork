@@ -28,6 +28,16 @@ type Job = {
     created_at?: string;
     skills?: { id: string; name: string; slug: string }[];
     attachments?: Attachment[];
+    moderation_status?: string;
+    moderation_ai_confidence?: string | number;
+    moderation_ai_result?: {
+        confidence?: number;
+        flags?: string[];
+        quality_score?: number;
+        model?: string;
+    } | null;
+    moderation_reviewer_notes?: string;
+    moderation_reviewed_at?: string;
 };
 
 type Attachment = {
@@ -47,10 +57,20 @@ const statusConfig: Record<
         color: "bg-yellow-100 text-yellow-800 border-yellow-200",
         icon: "📝",
     },
+    pending_review: {
+        label: "Pending Review",
+        color: "bg-orange-100 text-orange-800 border-orange-200",
+        icon: "🔍",
+    },
     open: {
         label: "Published",
         color: "bg-emerald-100 text-emerald-800 border-emerald-200",
         icon: "🟢",
+    },
+    approved: {
+        label: "Approved",
+        color: "bg-emerald-100 text-emerald-800 border-emerald-200",
+        icon: "✅",
     },
     in_progress: {
         label: "In Progress",
@@ -61,6 +81,21 @@ const statusConfig: Record<
         label: "Completed",
         color: "bg-indigo-100 text-indigo-800 border-indigo-200",
         icon: "✅",
+    },
+    rejected: {
+        label: "Rejected",
+        color: "bg-red-100 text-red-700 border-red-200",
+        icon: "❌",
+    },
+    revision_requested: {
+        label: "Revision Requested",
+        color: "bg-amber-100 text-amber-800 border-amber-200",
+        icon: "📝",
+    },
+    suspended: {
+        label: "Suspended",
+        color: "bg-gray-100 text-gray-700 border-gray-200",
+        icon: "⏸️",
     },
     cancelled: {
         label: "Closed",
@@ -145,16 +180,24 @@ export default function JobManagePage() {
                 method,
                 headers: { Authorization: `Bearer ${token}` },
             });
+            const body = await res.json().catch(() => ({}));
             if (res.ok) {
                 if (action === "delete") {
                     router.push("/dashboard");
                     return;
                 }
-                showToast(
-                    action === "publish"
-                        ? "Job published successfully!"
-                        : "Job closed.",
-                );
+                if (action === "publish") {
+                    const mStatus = body.moderation_status;
+                    if (mStatus === "auto_approved") {
+                        showToast("Job approved and published! 🎉");
+                    } else if (mStatus === "auto_rejected") {
+                        showToast("Job did not pass content review. Please revise and try again.");
+                    } else {
+                        showToast("Job submitted for review. You'll be notified once reviewed.");
+                    }
+                } else {
+                    showToast("Job closed.");
+                }
                 await fetchJob();
             } else {
                 const body = await res.json();
@@ -327,21 +370,23 @@ export default function JobManagePage() {
                     Actions
                 </h2>
                 <div className="flex flex-wrap gap-3">
-                    {job.status === "draft" && (
+                    {(job.status === "draft" || job.status === "revision_requested" || job.status === "rejected") && (
                         <button
                             onClick={() =>
                                 handleAction(
                                     "publish",
-                                    "Publish this job? It will be visible to freelancers.",
+                                    job.status === "draft"
+                                        ? "Submit this job for review? It will be checked by our moderation system."
+                                        : "Resubmit this job for review after your changes?",
                                 )
                             }
                             disabled={actionLoading}
                             className="px-5 py-2.5 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
                         >
-                            {actionLoading ? "Publishing…" : "🚀 Publish Now"}
+                            {actionLoading ? "Submitting…" : job.status === "draft" ? "🚀 Submit for Review" : "🔄 Resubmit"}
                         </button>
                     )}
-                    {(job.status === "draft" || job.status === "open") && (
+                    {(job.status === "draft" || job.status === "open" || job.status === "revision_requested" || job.status === "rejected") && (
                         <button
                             onClick={() =>
                                 router.push(`/dashboard/jobs/${id}/edit`)
@@ -381,6 +426,95 @@ export default function JobManagePage() {
                     )}
                 </div>
             </div>
+
+            {/* ── Moderation Status Card ── */}
+            {job.moderation_status && job.moderation_status !== "none" && (
+                <div className={`rounded-2xl border p-6 mb-6 ${job.status === "rejected" ? "bg-red-50 border-red-200" :
+                        job.status === "revision_requested" ? "bg-amber-50 border-amber-200" :
+                            job.status === "pending_review" ? "bg-orange-50 border-orange-200" :
+                                job.status === "open" && job.moderation_status.includes("approved") ? "bg-emerald-50 border-emerald-200" :
+                                    "bg-gray-50 border-gray-200"
+                    }`}>
+                    <h2 className="text-sm font-bold text-brand-dark uppercase tracking-wide mb-3">
+                        🔍 Moderation Status
+                    </h2>
+
+                    <div className="flex items-center gap-3 mb-3">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border ${statusConfig[job.status]?.color || "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                            {statusConfig[job.status]?.icon} {statusConfig[job.status]?.label || job.status}
+                        </span>
+                        <span className="text-xs text-brand-muted">
+                            {job.moderation_status.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                        </span>
+                    </div>
+
+                    {/* AI confidence */}
+                    {job.moderation_ai_confidence && Number(job.moderation_ai_confidence) > 0 && (
+                        <div className="mb-3">
+                            <div className="text-xs text-brand-muted mb-1">AI Quality Score</div>
+                            <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div
+                                        className={`h-full rounded-full ${Number(job.moderation_ai_confidence) >= 0.85 ? "bg-emerald-500" :
+                                                Number(job.moderation_ai_confidence) >= 0.5 ? "bg-yellow-500" : "bg-red-500"
+                                            }`}
+                                        style={{ width: `${Math.round(Number(job.moderation_ai_confidence) * 100)}%` }}
+                                    />
+                                </div>
+                                <span className="text-sm font-semibold">{(Number(job.moderation_ai_confidence) * 100).toFixed(0)}%</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Flags */}
+                    {job.moderation_ai_result?.flags && job.moderation_ai_result.flags.length > 0 && (
+                        <div className="mb-3">
+                            <div className="text-xs text-brand-muted mb-1">Issues Flagged</div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {job.moderation_ai_result.flags.map((f) => (
+                                    <span key={f} className="bg-red-100 text-red-700 text-xs px-2.5 py-1 rounded-full font-medium">
+                                        {f.replace(/_/g, " ")}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Reviewer notes */}
+                    {job.moderation_reviewer_notes && (
+                        <div className="bg-white rounded-lg border border-brand-border/40 p-4 mt-3">
+                            <div className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-1">
+                                Admin Notes
+                            </div>
+                            <p className="text-sm text-brand-dark whitespace-pre-wrap">
+                                {job.moderation_reviewer_notes}
+                            </p>
+                            {job.moderation_reviewed_at && (
+                                <p className="text-xs text-brand-muted mt-2">
+                                    {formatDate(job.moderation_reviewed_at)}
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    {/* State-specific messages */}
+                    {job.status === "pending_review" && (
+                        <p className="text-sm text-orange-700 mt-3">
+                            Your job is being reviewed by our team. You&apos;ll receive a notification once it&apos;s approved.
+                        </p>
+                    )}
+                    {job.status === "rejected" && (
+                        <p className="text-sm text-red-700 mt-3">
+                            Your job posting was not approved. Please review the feedback above, make necessary changes, and resubmit.
+                        </p>
+                    )}
+                    {job.status === "revision_requested" && (
+                        <p className="text-sm text-amber-700 mt-3">
+                            An admin has requested changes. Please update your job based on the notes above and click &quot;Resubmit&quot;.
+                        </p>
+                    )}
+                </div>
+            )}
 
             {/* Job details */}
             <div className="bg-white rounded-2xl border border-brand-border/60 p-6 sm:p-8 space-y-5 mb-6">

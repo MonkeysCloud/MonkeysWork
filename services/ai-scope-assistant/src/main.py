@@ -29,20 +29,30 @@ _subscriber_task = None
 
 
 async def _start_subscribers():
-    """Start Pub/Sub subscriber for job-published events."""
+    """Start Pub/Sub subscribers for job-published events."""
     try:
         from shared.pubsub import subscribe_async
-        from src.subscribers import handle_job_published
+        from src.subscribers import handle_job_published, handle_job_moderation
 
         global _subscriber_task
-        _subscriber_task = asyncio.create_task(
+        # Scope analysis subscriber
+        scope_task = asyncio.create_task(
             subscribe_async(
                 topic_name="job-published",
                 subscription_name="job-published-scope",
                 handler=handle_job_published,
             )
         )
-        logger.info("subscriber_started", topic="job-published")
+        # Content moderation subscriber
+        moderation_task = asyncio.create_task(
+            subscribe_async(
+                topic_name="job-published",
+                subscription_name="job-published-moderation",
+                handler=handle_job_moderation,
+            )
+        )
+        _subscriber_task = asyncio.gather(scope_task, moderation_task)
+        logger.info("subscribers_started", topics=["job-published-scope", "job-published-moderation"])
     except Exception:
         logger.exception("subscriber_start_failed")
 

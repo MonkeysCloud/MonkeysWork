@@ -1,8 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+
+const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), {
+    ssr: false,
+    loading: () => <div className="w-full h-[140px] bg-gray-50 rounded-xl animate-pulse" />,
+});
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
@@ -370,12 +376,19 @@ export default function EditJobPage() {
                 {/* Description */}
                 <div>
                     <label className={labelCls}>Description</label>
-                    <textarea
-                        className={inputCls(!!fieldErrors.description) + " min-h-[140px] resize-y"}
-                        placeholder="Describe the project in detail…"
+                    <RichTextEditor
                         value={form.description}
-                        onChange={set("description")}
-                        rows={6}
+                        onChange={(html) => {
+                            setForm((prev) => ({ ...prev, description: html }));
+                            setFieldErrors((prev) => {
+                                const copy = { ...prev };
+                                delete copy.description;
+                                return copy;
+                            });
+                        }}
+                        placeholder="Describe the project in detail…"
+                        hasError={!!fieldErrors.description}
+                        minHeight="140px"
                     />
                     {fieldErrors.description && (
                         <p className="text-xs text-red-500 mt-1">{fieldErrors.description}</p>

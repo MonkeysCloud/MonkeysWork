@@ -50,6 +50,10 @@ interface VerificationEvidence {
         selfie_url: string;
         full_name: string;
         date_of_birth: string;
+        country: string;
+        state: string;
+        city: string;
+        zip: string;
         address: string;
     };
     portfolio: {
@@ -64,8 +68,13 @@ interface VerificationEvidence {
         previous_jobs: string[];
     };
     payment_method: {
+        tax_id_type: string;
         tax_id: string;
+        billing_country: string;
+        billing_state: string;
+        billing_city: string;
         billing_address: string;
+        billing_zip: string;
     };
 }
 
@@ -100,11 +109,11 @@ const EMPTY: FormData = {
 };
 
 const EMPTY_VERIFICATION: VerificationEvidence = {
-    identity: { government_id_url: "", selfie_url: "", full_name: "", date_of_birth: "", address: "" },
+    identity: { government_id_url: "", selfie_url: "", full_name: "", date_of_birth: "", country: "", state: "", city: "", zip: "", address: "" },
     portfolio: { urls: [""], description: "" },
     skill_assessment: { certification_urls: [""], years_experience: "" },
     work_history: { previous_jobs: [""] },
-    payment_method: { tax_id: "", billing_address: "" },
+    payment_method: { tax_id_type: "", tax_id: "", billing_country: "", billing_state: "", billing_city: "", billing_address: "", billing_zip: "" },
 };
 
 const VERIFICATION_TYPES = [
@@ -681,7 +690,13 @@ export default function CompleteProfileWizard() {
             const draft = JSON.parse(saved);
             if (draft.form) setForm((prev) => ({ ...prev, ...draft.form }));
             if (typeof draft.step === "number") setStep(draft.step);
-            if (draft.verifEvidence) setVerifEvidence((prev) => ({ ...prev, ...draft.verifEvidence }));
+            if (draft.verifEvidence) setVerifEvidence((prev) => {
+                const merged = { ...prev };
+                for (const k of Object.keys(prev) as (keyof VerificationEvidence)[]) {
+                    if (draft.verifEvidence[k]) merged[k] = { ...prev[k], ...draft.verifEvidence[k] } as never;
+                }
+                return merged;
+            });
             if (Array.isArray(draft.userLanguages) && draft.userLanguages.length > 0) setUserLanguages(draft.userLanguages);
         } catch { /* ignore corrupt data */ }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -792,6 +807,23 @@ export default function CompleteProfileWizard() {
 
             setProfileCompleted();
             localStorage.removeItem(WIZARD_STORAGE_KEY);
+
+            // Auto-trigger verification evaluation for freelancers only
+            // (the endpoint requires a freelancer profile to evaluate)
+            if (!isClient) {
+                try {
+                    await fetch(`${API_BASE}/verifications/evaluate`, {
+                        method: "POST",
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                        },
+                    });
+                } catch {
+                    // Non-critical — verifications can be triggered later from settings
+                }
+            }
+
             router.push("/dashboard");
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Something went wrong");
@@ -1293,16 +1325,17 @@ export default function CompleteProfileWizard() {
                 if (form.linkedin_url) payload.linkedin_url = form.linkedin_url;
             }
 
-            const res = await fetch(`${API_BASE}/verification/submit`, {
+            const authToken = token || localStorage.getItem("mw_token");
+            const res = await fetch(`${API_BASE}/verifications/`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
+                    Authorization: `Bearer ${authToken}`,
                 },
                 body: JSON.stringify({
-                    user_id: user?.id,
-                    verification_type: type,
-                    evidence: payload,
+                    type,
+                    document_urls: payload.government_id_url ? [payload.government_id_url] : [],
+                    metadata: payload,
                 }),
             });
 
@@ -1552,10 +1585,64 @@ export default function CompleteProfileWizard() {
                                                     </div>
                                                 )}
                                             </div>
-                                            <Field label="Address">
+                                            <Field label="Country">
+                                                <SearchableCountrySelect
+                                                    value={verifEvidence.identity.country}
+                                                    onChange={(code) => setVerifEvidence((p) => ({
+                                                        ...p,
+                                                        identity: { ...p.identity, country: code, state: "" },
+                                                    }))}
+                                                    placeholder="Select your country…"
+                                                />
+                                            </Field>
+                                            <Field label="State / Province">
+                                                {verifEvidence.identity.country && getStatesForCountry(verifEvidence.identity.country).length > 0 ? (
+                                                    <SearchableStateSelect
+                                                        countryCode={verifEvidence.identity.country}
+                                                        value={verifEvidence.identity.state}
+                                                        onChange={(val) => setVerifEvidence((p) => ({
+                                                            ...p,
+                                                            identity: { ...p.identity, state: val },
+                                                        }))}
+                                                    />
+                                                ) : (
+                                                    <input
+                                                        className={inputCls}
+                                                        placeholder="e.g. California, Ontario…"
+                                                        value={verifEvidence.identity.state}
+                                                        onChange={(e) => setVerifEvidence((p) => ({
+                                                            ...p,
+                                                            identity: { ...p.identity, state: e.target.value },
+                                                        }))}
+                                                    />
+                                                )}
+                                            </Field>
+                                            <Field label="City">
                                                 <input
                                                     className={inputCls}
-                                                    placeholder="123 Main St, City, Country"
+                                                    placeholder="e.g. San Francisco, Toronto…"
+                                                    value={verifEvidence.identity.city}
+                                                    onChange={(e) => setVerifEvidence((p) => ({
+                                                        ...p,
+                                                        identity: { ...p.identity, city: e.target.value },
+                                                    }))}
+                                                />
+                                            </Field>
+                                            <Field label="ZIP / Postal Code">
+                                                <input
+                                                    className={inputCls}
+                                                    placeholder="e.g. 94102, M5V 2T6…"
+                                                    value={verifEvidence.identity.zip}
+                                                    onChange={(e) => setVerifEvidence((p) => ({
+                                                        ...p,
+                                                        identity: { ...p.identity, zip: e.target.value },
+                                                    }))}
+                                                />
+                                            </Field>
+                                            <Field label="Street Address">
+                                                <input
+                                                    className={inputCls}
+                                                    placeholder="123 Main St, Apt 4B"
                                                     value={verifEvidence.identity.address}
                                                     onChange={(e) => setVerifEvidence((p) => ({
                                                         ...p,
@@ -1737,8 +1824,8 @@ export default function CompleteProfileWizard() {
                                     )}
 
                                     {vt.key === "payment_method" && (() => {
-                                        const taxIdInfo: Record<string, { label: string; placeholder: string; hint?: string }> = {
-                                            US: { label: "SSN or EIN", placeholder: "XXX-XX-XXXX", hint: "Social Security Number (individual) or Employer Identification Number (business)" },
+                                        const taxIdInfo: Record<string, { label: string; placeholder: string; hint?: string; types?: { value: string; label: string }[] }> = {
+                                            US: { label: "Tax ID", placeholder: "XXX-XX-XXXX", hint: "Required for tax reporting (1099)", types: [{ value: "ssn", label: "SSN (Social Security Number)" }, { value: "itin", label: "ITIN (Individual Taxpayer ID)" }, { value: "ein", label: "EIN (Employer Identification Number)" }] },
                                             MX: { label: "RFC", placeholder: "XAXX010101000", hint: "Registro Federal de Contribuyentes" },
                                             CA: { label: "SIN or BN", placeholder: "XXX-XXX-XXX", hint: "Social Insurance Number (individual) or Business Number" },
                                             GB: { label: "UTR or NI Number", placeholder: "XX-XX-XX-XX-X", hint: "Unique Taxpayer Reference or National Insurance Number" },
@@ -1755,34 +1842,118 @@ export default function CompleteProfileWizard() {
                                             JP: { label: "マイナンバー (My Number)", placeholder: "XXXX-XXXX-XXXX", hint: "Individual Number" },
                                             KR: { label: "주민등록번호", placeholder: "XXXXXX-XXXXXXX", hint: "Resident Registration Number" },
                                         };
-                                        const info = taxIdInfo[form.country] || { label: "Tax ID / VAT Number", placeholder: "Enter your tax identification number" };
+                                        const billingCountry = verifEvidence.payment_method.billing_country || form.country;
+                                        const info = taxIdInfo[billingCountry] || { label: "Tax ID / VAT Number", placeholder: "Enter your tax identification number" };
                                         return (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                <Field label={info.label}>
-                                                    <input
-                                                        className={inputCls}
-                                                        placeholder={info.placeholder}
-                                                        value={verifEvidence.payment_method.tax_id}
-                                                        onChange={(e) => setVerifEvidence((p) => ({
-                                                            ...p,
-                                                            payment_method: { ...p.payment_method, tax_id: e.target.value },
-                                                        }))}
-                                                    />
-                                                    {info.hint && (
-                                                        <p className="text-[11px] text-brand-muted mt-1">{info.hint}</p>
+                                            <div className="space-y-4">
+                                                {/* Tax ID Section */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    {info.types && info.types.length > 0 && (
+                                                        <Field label="Tax ID Type" required>
+                                                            <select
+                                                                className={selectCls}
+                                                                value={verifEvidence.payment_method.tax_id_type}
+                                                                onChange={(e) => setVerifEvidence((p) => ({
+                                                                    ...p,
+                                                                    payment_method: { ...p.payment_method, tax_id_type: e.target.value },
+                                                                }))}
+                                                            >
+                                                                <option value="">Select type…</option>
+                                                                {info.types.map((t) => (
+                                                                    <option key={t.value} value={t.value}>{t.label}</option>
+                                                                ))}
+                                                            </select>
+                                                        </Field>
                                                     )}
-                                                </Field>
-                                                <Field label="Billing Address">
-                                                    <input
-                                                        className={inputCls}
-                                                        placeholder="123 Main St, City, Country"
-                                                        value={verifEvidence.payment_method.billing_address}
-                                                        onChange={(e) => setVerifEvidence((p) => ({
-                                                            ...p,
-                                                            payment_method: { ...p.payment_method, billing_address: e.target.value },
-                                                        }))}
-                                                    />
-                                                </Field>
+                                                    <Field label={info.types ? "Number" : info.label} required>
+                                                        <input
+                                                            className={inputCls}
+                                                            placeholder={info.placeholder}
+                                                            value={verifEvidence.payment_method.tax_id}
+                                                            onChange={(e) => setVerifEvidence((p) => ({
+                                                                ...p,
+                                                                payment_method: { ...p.payment_method, tax_id: e.target.value },
+                                                            }))}
+                                                        />
+                                                        {info.hint && (
+                                                            <p className="text-[11px] text-brand-muted mt-1">{info.hint}</p>
+                                                        )}
+                                                    </Field>
+                                                </div>
+
+                                                {/* Billing Address Section — same approach as Identity */}
+                                                <div className="border-t border-brand-border/30 pt-4">
+                                                    <label className="block text-xs font-semibold text-brand-dark mb-3">Billing Address</label>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                        <Field label="Country" required>
+                                                            <SearchableCountrySelect
+                                                                value={verifEvidence.payment_method.billing_country || form.country}
+                                                                onChange={(code) => setVerifEvidence((p) => ({
+                                                                    ...p,
+                                                                    payment_method: { ...p.payment_method, billing_country: code, billing_state: "" },
+                                                                }))}
+                                                                placeholder="Select your country…"
+                                                            />
+                                                        </Field>
+                                                        <Field label="State / Province" required>
+                                                            {(verifEvidence.payment_method.billing_country || form.country) && getStatesForCountry(verifEvidence.payment_method.billing_country || form.country).length > 0 ? (
+                                                                <SearchableStateSelect
+                                                                    countryCode={verifEvidence.payment_method.billing_country || form.country}
+                                                                    value={verifEvidence.payment_method.billing_state}
+                                                                    onChange={(val) => setVerifEvidence((p) => ({
+                                                                        ...p,
+                                                                        payment_method: { ...p.payment_method, billing_state: val },
+                                                                    }))}
+                                                                />
+                                                            ) : (
+                                                                <input
+                                                                    className={inputCls}
+                                                                    placeholder="e.g. California, Ontario…"
+                                                                    value={verifEvidence.payment_method.billing_state}
+                                                                    onChange={(e) => setVerifEvidence((p) => ({
+                                                                        ...p,
+                                                                        payment_method: { ...p.payment_method, billing_state: e.target.value },
+                                                                    }))}
+                                                                />
+                                                            )}
+                                                        </Field>
+                                                        <Field label="City" required>
+                                                            <input
+                                                                className={inputCls}
+                                                                placeholder="e.g. San Francisco, Toronto…"
+                                                                value={verifEvidence.payment_method.billing_city}
+                                                                onChange={(e) => setVerifEvidence((p) => ({
+                                                                    ...p,
+                                                                    payment_method: { ...p.payment_method, billing_city: e.target.value },
+                                                                }))}
+                                                            />
+                                                        </Field>
+                                                        <Field label="ZIP / Postal Code" required>
+                                                            <input
+                                                                className={inputCls}
+                                                                placeholder="e.g. 94102, M5V 2T6…"
+                                                                value={verifEvidence.payment_method.billing_zip}
+                                                                onChange={(e) => setVerifEvidence((p) => ({
+                                                                    ...p,
+                                                                    payment_method: { ...p.payment_method, billing_zip: e.target.value },
+                                                                }))}
+                                                            />
+                                                        </Field>
+                                                        <div className="sm:col-span-2">
+                                                            <Field label="Street Address" required>
+                                                                <input
+                                                                    className={inputCls}
+                                                                    placeholder="123 Main St, Apt 4B"
+                                                                    value={verifEvidence.payment_method.billing_address}
+                                                                    onChange={(e) => setVerifEvidence((p) => ({
+                                                                        ...p,
+                                                                        payment_method: { ...p.payment_method, billing_address: e.target.value },
+                                                                    }))}
+                                                                />
+                                                            </Field>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         );
                                     })()}

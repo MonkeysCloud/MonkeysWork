@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+
+const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), {
+    ssr: false,
+    loading: () => <div className="w-full h-[120px] bg-gray-50 rounded-xl animate-pulse" />,
+});
 import { useAuth } from "@/contexts/AuthContext";
 
 const API_BASE =
@@ -57,6 +63,13 @@ const inputCls = (hasError?: boolean) =>
 
 const labelCls =
     "block text-xs font-semibold text-brand-muted mb-1.5 uppercase tracking-wide";
+
+/* strip HTML tags for text-only length checking */
+function stripHtml(html: string): string {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
+}
 
 /* ── Step indicator ─────────────────────────────────── */
 function StepBar({ current, total }: { current: number; total: number }) {
@@ -279,9 +292,9 @@ export default function CreateJobForm() {
             else if (form.title.trim().length > 200)
                 errs.title = "Title must be under 200 characters";
 
-            if (!form.description.trim())
+            if (!stripHtml(form.description).trim())
                 errs.description = "Description is required";
-            else if (form.description.trim().length < 20)
+            else if (stripHtml(form.description).trim().length < 20)
                 errs.description =
                     "Description must be at least 20 characters";
 
@@ -509,16 +522,22 @@ export default function CreateJobForm() {
 
                     {/* description */}
                     <div>
-                        <label htmlFor="description" className={labelCls}>
+                        <label className={labelCls}>
                             Description
                         </label>
-                        <textarea
-                            id="description"
+                        <RichTextEditor
                             value={form.description}
-                            onChange={set("description")}
+                            onChange={(html) => {
+                                setForm((prev) => ({ ...prev, description: html }));
+                                setFieldErrors((prev) => {
+                                    const next = { ...prev };
+                                    delete next.description;
+                                    return next;
+                                });
+                                setError(null);
+                            }}
                             placeholder="Describe the project scope, deliverables, and any specific requirements…"
-                            rows={6}
-                            className={`${inputCls(!!fieldErrors.description)} resize-y min-h-[120px]`}
+                            hasError={!!fieldErrors.description}
                         />
                         {fieldErrors.description && (
                             <p className="mt-1 text-xs text-red-500">
@@ -972,14 +991,15 @@ export default function CreateJobForm() {
 
                     <div className="space-y-4">
                         <ReviewRow label="Title" value={form.title} />
-                        <ReviewRow
-                            label="Description"
-                            value={
-                                form.description.length > 200
-                                    ? form.description.slice(0, 200) + "…"
-                                    : form.description
-                            }
-                        />
+                        <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                            <div className="text-xs font-semibold text-brand-muted uppercase tracking-wide w-32 shrink-0 pt-0.5">
+                                Description
+                            </div>
+                            <div
+                                className="text-sm text-brand-dark flex-1 prose prose-sm max-w-none"
+                                dangerouslySetInnerHTML={{ __html: form.description }}
+                            />
+                        </div>
                         <ReviewRow
                             label="Category"
                             value={

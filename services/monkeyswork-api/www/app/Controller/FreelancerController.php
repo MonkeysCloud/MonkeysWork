@@ -12,7 +12,6 @@ use MonkeysLegion\Router\Attributes\RoutePrefix;
 use Psr\Http\Message\ServerRequestInterface;
 
 #[RoutePrefix('/api/v1/freelancers')]
-#[Middleware('auth')]
 final class FreelancerController
 {
     use ApiController;
@@ -73,11 +72,111 @@ final class FreelancerController
         return $this->paginated($stmt->fetchAll(\PDO::FETCH_ASSOC), $total, $p['page'], $p['perPage']);
     }
 
+    /* ------------------------------------------------------------------ */
+    /*  GET /me – Current user's freelancer profile (never 404s)          */
+    /* ------------------------------------------------------------------ */
+    #[Route('GET', '/me', name: 'freelancers.me', summary: 'Own profile', tags: ['Freelancers'])]
+    #[Middleware(['auth'])]
+    public function me(ServerRequestInterface $request): JsonResponse
+    {
+        try {
+            error_log('[FreelancerController::me] START');
+            $userId = $this->userId($request);
+            error_log('[FreelancerController::me] userId=' . $userId);
+
+            $stmt = $this->db->pdo()->prepare(
+                'SELECT fp.*, u.display_name, u.avatar_url, u.country, u.first_name, u.last_name,
+                        u.phone, u.state, u.languages, u.created_at AS member_since
+                 FROM "freelancerprofile" fp
+                 JOIN "user" u ON u.id = fp.user_id
+                 WHERE fp.user_id = :id'
+            );
+            $stmt->execute(['id' => $userId]);
+            $profile = $stmt->fetch(\PDO::FETCH_ASSOC);
+            error_log('[FreelancerController::me] profile found=' . ($profile ? 'yes' : 'no'));
+
+            if (!$profile) {
+                // Return minimal defaults so the frontend can render empty fields
+                $uStmt = $this->db->pdo()->prepare(
+                    'SELECT id, display_name, avatar_url, country, first_name, last_name,
+                            phone, state, languages, created_at AS member_since
+                     FROM "user" WHERE id = :id'
+                );
+                $uStmt->execute(['id' => $userId]);
+                $u = $uStmt->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+                $profile = array_merge($u, [
+                    'user_id'               => $userId,
+                    'headline'              => null,
+                    'bio'                   => null,
+                    'hourly_rate'           => null,
+                    'currency'              => 'USD',
+                    'experience_years'      => null,
+                    'availability_status'   => 'available',
+                    'availability_hours_week' => 40,
+                    'website_url'           => null,
+                    'github_url'            => null,
+                    'linkedin_url'          => null,
+                    'profile_completeness'  => 0,
+                    'skills'                => [],
+                    'verifications'         => [],
+                    'verification_badges'   => [],
+                ]);
+
+                error_log('[FreelancerController::me] returning defaults');
+                return $this->json(['data' => $profile]);
+            }
+
+            // Attach skills
+            error_log('[FreelancerController::me] loading skills');
+            $skills = $this->db->pdo()->prepare(
+                'SELECT s.id, s.name, s.slug, fs.years_experience, fs.proficiency
+                 FROM "freelancer_skills" fs
+                 JOIN "skill" s ON s.id = fs.skill_id
+                 WHERE fs.freelancer_id = :id'
+            );
+            $skills->execute(['id' => $userId]);
+            $profile['skills'] = $skills->fetchAll(\PDO::FETCH_ASSOC);
+
+            // Attach verification badges
+            error_log('[FreelancerController::me] loading verifications');
+            $verifs = $this->db->pdo()->prepare(
+                'SELECT type, status, ai_confidence AS confidence_score, updated_at
+                 FROM "verification"
+                 WHERE user_id = :id
+                 ORDER BY type ASC'
+            );
+            $verifs->execute(['id' => $userId]);
+            $verificationRows = $verifs->fetchAll(\PDO::FETCH_ASSOC);
+
+            $profile['verifications'] = $verificationRows;
+            error_log('[FreelancerController::me] building badges');
+            $profile['verification_badges'] = $this->buildVerificationBadges($verificationRows);
+
+            // Decode JSONB fields so frontend receives arrays, not JSON strings
+            foreach (['portfolio_urls', 'education', 'certifications', 'languages'] as $jsonCol) {
+                if (isset($profile[$jsonCol]) && is_string($profile[$jsonCol])) {
+                    $profile[$jsonCol] = json_decode($profile[$jsonCol], true) ?? [];
+                }
+            }
+
+            error_log('[FreelancerController::me] SUCCESS');
+            return $this->json(['data' => $profile]);
+        } catch (\Throwable $e) {
+            error_log('[FreelancerController::me] ERROR: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            error_log('[FreelancerController::me] TRACE: ' . $e->getTraceAsString());
+            return $this->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
     #[Route('GET', '/{id}', name: 'freelancers.show', summary: 'Profile detail', tags: ['Freelancers'])]
     public function show(ServerRequestInterface $request, string $id): JsonResponse
     {
-        $stmt = $this->db->pdo()->prepare(
-            'SELECT fp.*, u.display_name, u.avatar_url, u.country, u.created_at AS member_since
+        $pdo = $this->db->pdo();
+
+        $stmt = $pdo->prepare(
+            'SELECT fp.*, u.display_name, u.avatar_url, u.country, u.first_name, u.last_name,
+                    u.languages, u.created_at AS member_since
              FROM "freelancerprofile" fp
              JOIN "user" u ON u.id = fp.user_id
              WHERE fp.user_id = :id'
@@ -89,8 +188,38 @@ final class FreelancerController
             return $this->notFound('Freelancer');
         }
 
-        // Attach skills
-        $skills = $this->db->pdo()->prepare(
+        // ── Visibility check ──
+        $visibility = $profile['profile_visibility'] ?? 'public';
+
+        if ($visibility === 'private') {
+            // Only the owner can see their own private profile
+            try {
+                $currentUserId = $this->userId($request);
+            } catch (\Throwable) {
+                $currentUserId = null;
+            }
+            if ($currentUserId !== $id) {
+                return $this->json(['error' => 'This profile is private'], 403);
+            }
+        }
+
+        if ($visibility === 'logged_in') {
+            try {
+                $this->userId($request); // throws if not authenticated
+            } catch (\Throwable) {
+                return $this->json(['error' => 'Login required to view this profile'], 401);
+            }
+        }
+
+        // ── Decode JSONB fields ──
+        foreach (['portfolio_urls', 'education', 'certifications', 'languages'] as $jsonCol) {
+            if (isset($profile[$jsonCol]) && is_string($profile[$jsonCol])) {
+                $profile[$jsonCol] = json_decode($profile[$jsonCol], true) ?? [];
+            }
+        }
+
+        // ── Attach skills ──
+        $skills = $pdo->prepare(
             'SELECT s.id, s.name, s.slug, fs.years_experience, fs.proficiency
              FROM "freelancer_skills" fs
              JOIN "skill" s ON s.id = fs.skill_id
@@ -99,8 +228,8 @@ final class FreelancerController
         $skills->execute(['id' => $id]);
         $profile['skills'] = $skills->fetchAll(\PDO::FETCH_ASSOC);
 
-        // Attach verification badges
-        $verifs = $this->db->pdo()->prepare(
+        // ── Attach verification badges ──
+        $verifs = $pdo->prepare(
             'SELECT type, status, ai_confidence AS confidence_score, updated_at
              FROM "verification"
              WHERE user_id = :id
@@ -112,14 +241,52 @@ final class FreelancerController
         $profile['verifications'] = $verificationRows;
         $profile['verification_badges'] = $this->buildVerificationBadges($verificationRows);
 
+        // ── Attach public reviews ──
+        $revStmt = $pdo->prepare(
+            'SELECT r.id, r.overall_rating, r.communication_rating, r.quality_rating,
+                    r.timeliness_rating, r.professionalism_rating,
+                    r.comment, r.response, r.response_at, r.created_at,
+                    u.display_name AS reviewer_name, u.avatar_url AS reviewer_avatar,
+                    c.title AS contract_title
+             FROM "review" r
+             JOIN "user" u ON u.id = r.reviewer_id
+             LEFT JOIN "contract" c ON c.id = r.contract_id
+             WHERE r.reviewee_id = :uid AND r.is_public = true
+             ORDER BY r.created_at DESC
+             LIMIT 20'
+        );
+        $revStmt->execute(['uid' => $id]);
+        $profile['reviews'] = $revStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        // ── Attach work history (completed contracts) ──
+        $whStmt = $pdo->prepare(
+            'SELECT c.id, c.title, c.contract_type, c.status,
+                    c.started_at, c.completed_at,
+                    u.display_name AS client_name
+             FROM "contract" c
+             JOIN "user" u ON u.id = c.client_id
+             WHERE c.freelancer_id = :uid AND c.status = :status
+             ORDER BY c.completed_at DESC
+             LIMIT 20'
+        );
+        $whStmt->execute(['uid' => $id, 'status' => 'completed']);
+        $profile['work_history'] = $whStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        // ── Strip sensitive fields ──
+        unset($profile['profile_embedding']);
+
         return $this->json(['data' => $profile]);
     }
 
     #[Route('PUT', '/me', name: 'freelancers.update', summary: 'Update own profile', tags: ['Freelancers'])]
+    #[Middleware(['auth'])]
     public function update(ServerRequestInterface $request): JsonResponse
     {
+        try {
+        error_log('[FreelancerController::update] START');
         $userId = $this->userId($request);
         $data   = $this->body($request);
+        error_log('[FreelancerController::update] userId=' . $userId . ' data_keys=' . implode(',', array_keys($data)));
         $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         // --- Update user-level fields ---
@@ -141,11 +308,18 @@ final class FreelancerController
             $this->db->pdo()->prepare($sql)->execute($userParams);
         }
 
+        // --- Ensure freelancer profile row exists (handles first-time or failed wizard) ---
+        $this->db->pdo()->prepare(
+            'INSERT INTO "freelancerprofile" (user_id, created_at, updated_at)
+             VALUES (:id, :now, :now)
+             ON CONFLICT (user_id) DO NOTHING'
+        )->execute(['id' => $userId, 'now' => $now]);
+
         // --- Update profile fields ---
         $profileFields = ['headline', 'bio', 'hourly_rate', 'currency', 'experience_years',
                           'education', 'certifications', 'portfolio_urls', 'website_url',
                           'github_url', 'linkedin_url', 'availability_status',
-                          'availability_hours_week'];
+                          'availability_hours_week', 'profile_visibility'];
         $sets   = [];
         $params = ['id' => $userId];
 
@@ -188,14 +362,21 @@ final class FreelancerController
             }
         }
 
+        error_log('[FreelancerController::update] SUCCESS completeness=' . $completeness);
         return $this->json([
             'message'              => 'Profile updated',
             'profile_completed'    => true,
             'profile_completeness' => $completeness,
         ]);
+        } catch (\Throwable $e) {
+            error_log('[FreelancerController::update] ERROR: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            error_log('[FreelancerController::update] TRACE: ' . $e->getTraceAsString());
+            return $this->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     #[Route('PUT', '/me/skills', name: 'freelancers.skills', summary: 'Set skills', tags: ['Freelancers'])]
+    #[Middleware(['auth'])]
     public function updateSkills(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
@@ -233,6 +414,7 @@ final class FreelancerController
     }
 
     #[Route('GET', '/me/stats', name: 'freelancers.stats', summary: 'Earnings/stats', tags: ['Freelancers'])]
+    #[Middleware(['auth'])]
     public function stats(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
@@ -253,6 +435,7 @@ final class FreelancerController
     }
 
     #[Route('GET', '/me/reviews', name: 'freelancers.reviews', summary: 'Reviews received', tags: ['Freelancers'])]
+    #[Middleware(['auth'])]
     public function reviews(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);

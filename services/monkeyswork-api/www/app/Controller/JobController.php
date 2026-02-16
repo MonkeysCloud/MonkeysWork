@@ -6,6 +6,8 @@ namespace App\Controller;
 use App\Event\JobCreated;
 use App\Event\JobPublished;
 use App\Service\PubSubPublisher;
+use App\Service\SocketEvent;
+use App\Service\VertexAiScorer;
 use App\Validator\JobValidator;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
@@ -255,12 +257,12 @@ final class JobController
         return $this->json(['message' => 'Job updated']);
     }
 
-    #[Route('POST', '/{id}/publish', name: 'jobs.publish', summary: 'Publish draft', tags: ['Jobs'])]
+    #[Route('POST', '/{id}/publish', name: 'jobs.publish', summary: 'Submit for moderation & publish', tags: ['Jobs'])]
     public function publish(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
 
-        $stmt = $this->db->pdo()->prepare('SELECT client_id, status FROM "job" WHERE id = :id');
+        $stmt = $this->db->pdo()->prepare('SELECT client_id, status, title, description, budget_type, budget_min, budget_max, experience_level, category_id FROM "job" WHERE id = :id');
         $stmt->execute(['id' => $id]);
         $job = $stmt->fetch(\PDO::FETCH_ASSOC);
 
@@ -270,50 +272,211 @@ final class JobController
         if ($job['client_id'] !== $userId) {
             return $this->forbidden();
         }
-        if ($job['status'] !== 'draft') {
-            return $this->error('Job can only be published from draft status');
+        if (!in_array($job['status'], ['draft', 'revision_requested'], true)) {
+            return $this->error('Job can only be published from draft or revision_requested status');
         }
 
+        $pdo = $this->db->pdo();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $this->db->pdo()->prepare(
-            'UPDATE "job" SET status = \'open\', published_at = :now, updated_at = :now WHERE id = :id'
+
+        $env = getenv('APP_ENV') ?: 'prod';
+
+        // ── DEV MODE — Inline simulated scoring for instant feedback ──
+        if ($env === 'dev') {
+            $pdo->prepare(
+                'UPDATE "job" SET status = \'pending_review\', moderation_status = \'pending\', updated_at = :now WHERE id = :id'
+            )->execute(['now' => $now, 'id' => $id]);
+
+            $scorer  = new VertexAiScorer();
+            $aiScore = $scorer->scoreJob($job);
+            $aiResult = [
+                'confidence'    => $aiScore['confidence'],
+                'flags'         => $aiScore['flags'],
+                'quality_score' => $aiScore['quality'],
+                'model'         => $aiScore['model'],
+            ];
+            $confidence = number_format($aiScore['confidence'], 4);
+
+            if ($aiScore['confidence'] >= 0.85) {
+                $pdo->prepare(
+                    'UPDATE "job" SET status = \'open\', moderation_status = \'auto_approved\',
+                            moderation_ai_result = :ai, moderation_ai_confidence = :conf,
+                            moderation_ai_model_version = :model,
+                            published_at = :now, updated_at = :now
+                     WHERE id = :id'
+                )->execute([
+                    'ai' => json_encode($aiResult), 'conf' => $confidence,
+                    'model' => $aiScore['model'], 'now' => $now, 'id' => $id,
+                ]);
+
+                $this->events?->dispatch(new JobPublished($id, $userId));
+                $this->publishToPubSub($id, $pdo);
+                $this->notifyJobModeration($userId, $id, $job['title'], 'approved', $aiScore['confidence'], $pdo, $now);
+
+                return $this->json(['message' => 'Job auto-approved and published', 'moderation_status' => 'auto_approved']);
+
+            } elseif ($aiScore['confidence'] <= 0.3) {
+                $pdo->prepare(
+                    'UPDATE "job" SET status = \'rejected\', moderation_status = \'auto_rejected\',
+                            moderation_ai_result = :ai, moderation_ai_confidence = :conf,
+                            moderation_ai_model_version = :model, updated_at = :now
+                     WHERE id = :id'
+                )->execute([
+                    'ai' => json_encode($aiResult), 'conf' => $confidence,
+                    'model' => $aiScore['model'], 'now' => $now, 'id' => $id,
+                ]);
+
+                $this->notifyJobModeration($userId, $id, $job['title'], 'rejected', $aiScore['confidence'], $pdo, $now);
+                return $this->json(['message' => 'Job did not pass content moderation', 'moderation_status' => 'auto_rejected', 'flags' => $aiScore['flags']]);
+
+            } else {
+                $pdo->prepare(
+                    'UPDATE "job" SET status = \'pending_review\', moderation_status = \'human_review\',
+                            moderation_ai_result = :ai, moderation_ai_confidence = :conf,
+                            moderation_ai_model_version = :model, updated_at = :now
+                     WHERE id = :id'
+                )->execute([
+                    'ai' => json_encode($aiResult), 'conf' => $confidence,
+                    'model' => $aiScore['model'], 'now' => $now, 'id' => $id,
+                ]);
+
+                $this->notifyJobModeration($userId, $id, $job['title'], 'in_review', $aiScore['confidence'], $pdo, $now);
+                return $this->json(['message' => 'Job submitted for admin review', 'moderation_status' => 'human_review']);
+            }
+        }
+
+        // ── PRODUCTION — Async via Pub/Sub → Python AI services ──
+        $pdo->prepare(
+            'UPDATE "job" SET status = \'pending_review\', moderation_status = \'pending\',
+                    updated_at = :now WHERE id = :id'
         )->execute(['now' => $now, 'id' => $id]);
 
-        // Dispatch domain event
-        $this->events?->dispatch(new JobPublished($id, $userId));
+        // Publish to Pub/Sub — triggers moderation, scope analysis, and matching
+        $this->publishToPubSub($id, $pdo);
 
-        // Publish to Pub/Sub (triggers scope analysis + freelancer matching)
-        $pubsub = $this->pubsub ?? new PubSubPublisher();
+        $this->notifyJobModeration($userId, $id, $job['title'], 'in_review', 0.0, $pdo, $now);
+
+        return $this->json([
+            'message'           => 'Job submitted for AI review',
+            'moderation_status' => 'pending',
+        ]);
+    }
+
+    /**
+     * Extract Pub/Sub publish logic (reused from original publish)
+     */
+    private function publishToPubSub(string $id, \PDO $pdo): void
+    {
         try {
-            // Fetch job details for the event payload
-            $jobStmt = $this->db->pdo()->prepare(
+            $pubsub = $this->pubsub ?? new PubSubPublisher();
+            $jobStmt = $pdo->prepare(
                 'SELECT title, description, category_id, budget_type, budget_min, budget_max,
                         experience_level FROM "job" WHERE id = :id'
             );
             $jobStmt->execute(['id' => $id]);
             $jobData = $jobStmt->fetch(\PDO::FETCH_ASSOC);
 
-            // Fetch attached skills
-            $skillStmt = $this->db->pdo()->prepare(
+            $skillStmt = $pdo->prepare(
                 'SELECT s.name FROM "job_skill" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = :jid'
             );
             $skillStmt->execute(['jid' => $id]);
             $skillNames = array_column($skillStmt->fetchAll(\PDO::FETCH_ASSOC), 'name');
 
             $pubsub->jobPublished($id, [
-                'title'            => $jobData['title'] ?? '',
-                'description'      => $jobData['description'] ?? '',
-                'skills'           => $skillNames,
-                'budget_min'       => isset($jobData['budget_min']) ? (float) $jobData['budget_min'] : null,
-                'budget_max'       => isset($jobData['budget_max']) ? (float) $jobData['budget_max'] : null,
-                'category_id'      => $jobData['category_id'] ?? null,
+                'title' => $jobData['title'] ?? '',
+                'description' => $jobData['description'] ?? '',
+                'skills' => $skillNames,
+                'budget_min' => isset($jobData['budget_min']) ? (float)$jobData['budget_min'] : null,
+                'budget_max' => isset($jobData['budget_max']) ? (float)$jobData['budget_max'] : null,
+                'category_id' => $jobData['category_id'] ?? null,
                 'experience_level' => $jobData['experience_level'] ?? null,
             ]);
         } catch (\Throwable) {
-            // Non-critical: don't fail publish if Pub/Sub is down
+            // Non-critical
+        }
+    }
+
+    /* (Job moderation scoring is now handled by VertexAiScorer service) */
+
+    /**
+     * Notify client about moderation status.
+     */
+    private function notifyJobModeration(
+        string $userId, string $jobId, string $title, string $status,
+        float $confidence, \PDO $pdo, string $now
+    ): void {
+        $meta = match ($status) {
+            'approved' => [
+                'icon' => '✅', 'title' => 'Job Approved',
+                'body' => "Your job \"{$title}\" has been approved and is now live!",
+                'priority' => 'success',
+            ],
+            'in_review' => [
+                'icon' => '🔄', 'title' => 'Job Under Review',
+                'body' => "Your job \"{$title}\" has been submitted for admin review.",
+                'priority' => 'info',
+            ],
+            'rejected' => [
+                'icon' => '❌', 'title' => 'Job Not Approved',
+                'body' => "Your job \"{$title}\" did not pass content moderation. Please review and update.",
+                'priority' => 'warning',
+            ],
+            'revision_requested' => [
+                'icon' => '📝', 'title' => 'Revision Requested',
+                'body' => "An admin has requested changes to your job \"{$title}\".",
+                'priority' => 'warning',
+            ],
+            default => null,
+        };
+
+        if (!$meta) return;
+
+        $notifId = $this->uuid();
+        try {
+            $pdo->prepare(
+                'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
+                 VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
+            )->execute([
+                'id' => $notifId, 'uid' => $userId,
+                'type' => "job_moderation.{$status}",
+                'title' => "{$meta['icon']} {$meta['title']}",
+                'body' => $meta['body'],
+                'data' => json_encode([
+                    'job_id' => $jobId, 'status' => $status,
+                    'confidence' => $confidence,
+                    'link' => "/dashboard/jobs/{$jobId}",
+                ]),
+                'prio' => $meta['priority'], 'chan' => 'in_app', 'now' => $now,
+            ]);
+        } catch (\Throwable $e) {
+            error_log("[JobController] notification insert: " . $e->getMessage());
         }
 
-        return $this->json(['message' => 'Job published']);
+        // Real-time push via Redis → Socket.IO
+        try {
+            $redisHost = getenv('REDIS_HOST') ?: 'redis';
+            $redisPort = (int)(getenv('REDIS_PORT') ?: 6379);
+            $redis = new \Redis();
+            $redis->connect($redisHost, $redisPort, 2.0);
+
+            $socket = new SocketEvent($redis);
+            $socket->toUser($userId, 'notification:new', [
+                'id' => $notifId,
+                'type' => "job_moderation.{$status}",
+                'title' => "{$meta['icon']} {$meta['title']}",
+                'body' => $meta['body'],
+                'data' => [
+                    'job_id' => $jobId, 'status' => $status,
+                    'confidence' => $confidence,
+                    'link' => "/dashboard/jobs/{$jobId}",
+                ],
+                'priority' => $meta['priority'],
+                'created_at' => $now,
+            ]);
+            $redis->close();
+        } catch (\Throwable $e) {
+            error_log("[JobController] socket emit: " . $e->getMessage());
+        }
     }
 
     #[Route('POST', '/{id}/close', name: 'jobs.close', summary: 'Close job', tags: ['Jobs'])]

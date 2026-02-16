@@ -1,21 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNotifications } from "@/hooks/useNotifications";
 import { getMenuForRole, type MenuItem } from "./sidebarMenus";
+
+const API =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
 
 /* ── Sidebar nav item ───────────────────────────────── */
 function NavItem({
     item,
     pathname,
     collapsed,
+    badgeCounts = {},
 }: {
     item: MenuItem;
     pathname: string;
     collapsed: boolean;
+    badgeCounts?: Record<string, number>;
 }) {
     const isActive =
         pathname === item.href ||
@@ -49,9 +55,9 @@ function NavItem({
                 {!collapsed && (
                     <>
                         <span className="flex-1 truncate">{item.label}</span>
-                        {item.badge && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-brand-orange/20 text-brand-orange rounded-full">
-                                0
+                        {item.badge && (badgeCounts[item.badge] ?? 0) > 0 && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-brand-orange/20 text-brand-orange rounded-full min-w-[18px] text-center">
+                                {badgeCounts[item.badge]}
                             </span>
                         )}
                         {item.children && (
@@ -106,11 +112,41 @@ export default function DashboardShell({
 }: {
     children: React.ReactNode;
 }) {
-    const { user, logout } = useAuth();
+    const { user, token, logout } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
+
+    /* ── Live notification count ── */
+    const { unreadCount: liveUnread } = useNotifications(token ?? undefined);
+    const [serverUnread, setServerUnread] = useState(0);
+
+    const fetchUnreadCount = useCallback(async () => {
+        if (!token) return;
+        try {
+            const res = await fetch(`${API}/notifications/unread-count`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const json = await res.json();
+            setServerUnread(json.data?.unread_count ?? 0);
+        } catch { /* ignore */ }
+    }, [token]);
+
+    useEffect(() => {
+        fetchUnreadCount();
+        const iv = setInterval(fetchUnreadCount, 30_000);
+        return () => clearInterval(iv);
+    }, [fetchUnreadCount]);
+
+    // Combine: server count + any new live notifs since last fetch
+    const totalUnread = serverUnread + liveUnread;
+
+    const badgeCounts: Record<string, number> = {
+        messages: totalUnread,
+        notifications: totalUnread,
+        verifications: 0, // could be wired to pending verifications count
+    };
 
     if (!user) return null;
 
@@ -170,6 +206,7 @@ export default function DashboardShell({
                         item={item}
                         pathname={pathname}
                         collapsed={collapsed}
+                        badgeCounts={badgeCounts}
                     />
                 ))}
             </nav>
@@ -185,6 +222,7 @@ export default function DashboardShell({
                         item={item}
                         pathname={pathname}
                         collapsed={collapsed}
+                        badgeCounts={badgeCounts}
                     />
                 ))}
                 {/* logout */}
@@ -205,9 +243,17 @@ export default function DashboardShell({
                 <div
                     className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}
                 >
-                    <div className="w-9 h-9 rounded-full bg-brand-orange/20 flex items-center justify-center text-brand-orange font-bold text-sm flex-shrink-0">
-                        {user.display_name?.[0]?.toUpperCase() ?? "U"}
-                    </div>
+                    {user.avatar_url ? (
+                        <img
+                            src={user.avatar_url.startsWith("http") ? user.avatar_url : `${new URL(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086").origin}${user.avatar_url}`}
+                            alt={user.display_name}
+                            className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                        />
+                    ) : (
+                        <div className="w-9 h-9 rounded-full bg-brand-orange/20 flex items-center justify-center text-brand-orange font-bold text-sm flex-shrink-0">
+                            {user.display_name?.[0]?.toUpperCase() ?? "U"}
+                        </div>
+                    )}
                     {!collapsed && (
                         <div className="min-w-0">
                             <div className="text-sm font-semibold text-white truncate">
@@ -299,13 +345,26 @@ export default function DashboardShell({
                                 <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
                                 <path d="M13.73 21a2 2 0 01-3.46 0" />
                             </svg>
+                            {totalUnread > 0 && (
+                                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold bg-red-500 text-white rounded-full px-1">
+                                    {totalUnread > 99 ? "99+" : totalUnread}
+                                </span>
+                            )}
                         </Link>
 
                         {/* user mini */}
                         <div className="flex items-center gap-2 pl-3 border-l border-brand-border/60">
-                            <div className="w-8 h-8 rounded-full bg-brand-orange/10 flex items-center justify-center text-brand-orange font-bold text-xs">
-                                {user.display_name?.[0]?.toUpperCase() ?? "U"}
-                            </div>
+                            {user.avatar_url ? (
+                                <img
+                                    src={user.avatar_url.startsWith("http") ? user.avatar_url : `${new URL(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086").origin}${user.avatar_url}`}
+                                    alt={user.display_name}
+                                    className="w-8 h-8 rounded-full object-cover"
+                                />
+                            ) : (
+                                <div className="w-8 h-8 rounded-full bg-brand-orange/10 flex items-center justify-center text-brand-orange font-bold text-xs">
+                                    {user.display_name?.[0]?.toUpperCase() ?? "U"}
+                                </div>
+                            )}
                             <span className="hidden sm:block text-sm font-medium text-brand-dark">
                                 {user.display_name}
                             </span>

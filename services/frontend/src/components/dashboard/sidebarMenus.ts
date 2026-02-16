@@ -253,7 +253,82 @@ const FREELANCER_MENU: MenuConfig = {
     ],
 };
 
+/* ── Admin ──────────────────────────────────────────── */
+const ADMIN_MENU: MenuConfig = {
+    main: [
+        { icon: "📊", label: "Dashboard", href: "/dashboard/admin" },
+        {
+            icon: "👥",
+            label: "Users",
+            href: "/dashboard/admin/users",
+            children: [
+                { label: "All Users", href: "/dashboard/admin/users" },
+                {
+                    label: "Active",
+                    href: "/dashboard/admin/users?status=active",
+                },
+                {
+                    label: "Suspended",
+                    href: "/dashboard/admin/users?status=suspended",
+                },
+                {
+                    label: "Pending",
+                    href: "/dashboard/admin/users?status=pending_verification",
+                },
+            ],
+        },
+        {
+            icon: "📋",
+            label: "Jobs",
+            href: "/dashboard/admin/jobs",
+            children: [
+                { label: "All Jobs", href: "/dashboard/admin/jobs" },
+                {
+                    label: "Open",
+                    href: "/dashboard/admin/jobs?status=open",
+                },
+                {
+                    label: "Suspended",
+                    href: "/dashboard/admin/jobs?status=suspended",
+                },
+            ],
+        },
+        {
+            icon: "✅",
+            label: "Verifications",
+            href: "/dashboard/admin/verifications",
+            badge: "verifications",
+        },
+        {
+            icon: "⚠️",
+            label: "Disputes",
+            href: "/dashboard/admin/disputes",
+            badge: "disputes",
+        },
+        {
+            icon: "🚩",
+            label: "Reports",
+            href: "/dashboard/admin/reports",
+            badge: "reports",
+        },
+    ],
+    secondary: [
+        {
+            icon: "📜",
+            label: "Activity Log",
+            href: "/dashboard/admin/activity",
+        },
+        {
+            icon: "🏁",
+            label: "Feature Flags",
+            href: "/dashboard/admin/flags",
+        },
+        { icon: "⚙️", label: "Settings", href: "/dashboard/settings" },
+    ],
+};
+
 /* ── Accessor ───────────────────────────────────────── */
 export function getMenuForRole(role: UserRole): MenuConfig {
+    if (role === "admin") return ADMIN_MENU;
     return role === "client" ? CLIENT_MENU : FREELANCER_MENU;
 }

@@ -115,7 +115,7 @@ final class AuthController
         }
 
         $stmt = $this->db->pdo()->prepare(
-            'SELECT id, password_hash, role, status, display_name, token_version, profile_completed
+            'SELECT id, password_hash, role, status, display_name, token_version, profile_completed, avatar_url
              FROM "user" WHERE email = :email AND deleted_at IS NULL'
         );
         $stmt->execute(['email' => strtolower(trim($data['email']))]);
@@ -130,7 +130,7 @@ final class AuthController
         }
 
         // Generate JWT
-        $jwtSecret = $_ENV['JWT_SECRET'] ?? 'changeme-use-at-least-32-characters-of-randomness';
+        $jwtSecret = getenv('JWT_SECRET') ?: 'changeme-use-at-least-32-characters-of-randomness';
         $now = time();
 
         $header = self::base64UrlEncode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
@@ -164,6 +164,7 @@ final class AuthController
                 'role'               => $user['role'],
                 'display_name'       => $user['display_name'] ?? null,
                 'profile_completed'  => (bool) $user['profile_completed'],
+                'avatar_url'         => $user['avatar_url'] ?? null,
                 'token'              => $accessToken,
                 'refresh'            => $refreshToken,
             ],
