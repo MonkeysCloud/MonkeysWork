@@ -60,7 +60,7 @@ final class JobController
             $params['search']     = "%{$q['search']}%";
         }
         if (!empty($q['skill'])) {
-            $where[]              = 'EXISTS (SELECT 1 FROM "job_skill" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = j.id AND s.slug = :skill)';
+            $where[]              = 'EXISTS (SELECT 1 FROM "job_skills" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = j.id AND s.slug = :skill)';
             $params['skill']      = $q['skill'];
         }
 
@@ -141,7 +141,7 @@ final class JobController
         $skillIds = $data['skill_ids'] ?? $data['skills'] ?? [];
         if (!empty($skillIds)) {
             $insert = $this->db->pdo()->prepare(
-                'INSERT INTO "job_skill" (job_id, skill_id) VALUES (:jid, :sid) ON CONFLICT DO NOTHING'
+                'INSERT INTO "job_skills" (job_id, skill_id) VALUES (:jid, :sid) ON CONFLICT DO NOTHING'
             );
             foreach ($skillIds as $skillId) {
                 $insert->execute(['jid' => $id, 'sid' => $skillId]);
@@ -196,7 +196,7 @@ final class JobController
 
         // Attach skills
         $skills = $this->db->pdo()->prepare(
-            'SELECT s.id, s.name, s.slug FROM "job_skill" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = :jid'
+            'SELECT s.id, s.name, s.slug FROM "job_skills" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = :jid'
         );
         $skills->execute(['jid' => $id]);
         $job['skills'] = $skills->fetchAll(\PDO::FETCH_ASSOC);
@@ -377,7 +377,7 @@ final class JobController
             $jobData = $jobStmt->fetch(\PDO::FETCH_ASSOC);
 
             $skillStmt = $pdo->prepare(
-                'SELECT s.name FROM "job_skill" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = :jid'
+                'SELECT s.name FROM "job_skills" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = :jid'
             );
             $skillStmt->execute(['jid' => $id]);
             $skillNames = array_column($skillStmt->fetchAll(\PDO::FETCH_ASSOC), 'name');
@@ -600,7 +600,7 @@ final class JobController
 
         // Fetch job skills
         $skillStmt = $this->db->pdo()->prepare(
-            'SELECT s.name FROM "job_skill" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = :jid'
+            'SELECT s.name FROM "job_skills" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = :jid'
         );
         $skillStmt->execute(['jid' => $id]);
         $jobSkills = array_column($skillStmt->fetchAll(\PDO::FETCH_ASSOC), 'name');

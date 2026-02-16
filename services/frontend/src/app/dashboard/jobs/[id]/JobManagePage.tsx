@@ -15,6 +15,7 @@ type Job = {
     title: string;
     slug: string;
     description: string;
+    description_html?: string;
     status: string;
     budget_type: string;
     budget_min: number;
@@ -430,10 +431,10 @@ export default function JobManagePage() {
             {/* ── Moderation Status Card ── */}
             {job.moderation_status && job.moderation_status !== "none" && (
                 <div className={`rounded-2xl border p-6 mb-6 ${job.status === "rejected" ? "bg-red-50 border-red-200" :
-                        job.status === "revision_requested" ? "bg-amber-50 border-amber-200" :
-                            job.status === "pending_review" ? "bg-orange-50 border-orange-200" :
-                                job.status === "open" && job.moderation_status.includes("approved") ? "bg-emerald-50 border-emerald-200" :
-                                    "bg-gray-50 border-gray-200"
+                    job.status === "revision_requested" ? "bg-amber-50 border-amber-200" :
+                        job.status === "pending_review" ? "bg-orange-50 border-orange-200" :
+                            job.status === "open" && job.moderation_status.includes("approved") ? "bg-emerald-50 border-emerald-200" :
+                                "bg-gray-50 border-gray-200"
                     }`}>
                     <h2 className="text-sm font-bold text-brand-dark uppercase tracking-wide mb-3">
                         🔍 Moderation Status
@@ -456,7 +457,7 @@ export default function JobManagePage() {
                                 <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                                     <div
                                         className={`h-full rounded-full ${Number(job.moderation_ai_confidence) >= 0.85 ? "bg-emerald-500" :
-                                                Number(job.moderation_ai_confidence) >= 0.5 ? "bg-yellow-500" : "bg-red-500"
+                                            Number(job.moderation_ai_confidence) >= 0.5 ? "bg-yellow-500" : "bg-red-500"
                                             }`}
                                         style={{ width: `${Math.round(Number(job.moderation_ai_confidence) * 100)}%` }}
                                     />
@@ -552,9 +553,10 @@ export default function JobManagePage() {
                     <div className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-2">
                         Description
                     </div>
-                    <p className="text-sm text-brand-dark leading-relaxed whitespace-pre-wrap">
-                        {job.description}
-                    </p>
+                    <div
+                        className="text-sm text-brand-dark leading-relaxed prose prose-sm max-w-none"
+                        dangerouslySetInnerHTML={{ __html: job.description_html || job.description }}
+                    />
                 </div>
 
                 {job.skills && job.skills.length > 0 && (

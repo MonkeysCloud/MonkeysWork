@@ -135,7 +135,7 @@ final class AdminJobController
 
         // Attach skills
         $skills = $pdo->prepare(
-            'SELECT s.id, s.name, s.slug FROM "job_skill" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = :jid'
+            'SELECT s.id, s.name, s.slug FROM "job_skills" js JOIN "skill" s ON s.id = js.skill_id WHERE js.job_id = :jid'
         );
         $skills->execute(['jid' => $id]);
         $job['skills'] = $skills->fetchAll(\PDO::FETCH_ASSOC);
