@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import AdminTable, { type Column } from "@/components/admin/AdminTable";
 import StatusBadge from "@/components/admin/StatusBadge";
@@ -25,6 +25,7 @@ const PER_PAGE = 20;
 export default function AdminDisputesPage() {
     const { token } = useAuth();
     const searchParams = useSearchParams();
+    const router = useRouter();
 
     const [disputes, setDisputes] = useState<Dispute[]>([]);
     const [total, setTotal] = useState(0);
@@ -111,9 +112,11 @@ export default function AdminDisputesPage() {
                 >
                     <option value="">All Statuses</option>
                     <option value="open">Open</option>
-                    <option value="in_review">In Review</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="escalated">Escalated</option>
+                    <option value="resolved_client">Resolved (Client)</option>
+                    <option value="resolved_freelancer">Resolved (Freelancer)</option>
+                    <option value="resolved_split">Resolved (Split)</option>
                 </select>
             </div>
 
@@ -125,6 +128,7 @@ export default function AdminDisputesPage() {
                 totalPages={Math.ceil(total / PER_PAGE)}
                 total={total}
                 onPageChange={setPage}
+                onRowClick={(d) => router.push(`/dashboard/admin/disputes/${d.id}`)}
                 emptyMessage="No disputes found."
             />
         </div>

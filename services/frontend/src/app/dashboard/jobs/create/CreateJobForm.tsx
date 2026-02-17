@@ -59,8 +59,8 @@ function formatBytes(bytes: number) {
 
 /* ── Helpers ────────────────────────────────────────── */
 const inputCls = (hasError?: boolean) =>
-    `w - full px - 3.5 py - 2.5 text - sm border rounded - lg focus: outline - none focus: ring - 2 focus: ring - brand - orange / 30 focus: border - brand - orange text - brand - dark placeholder: text - brand - muted / 50 transition - colors ${hasError ? "border-red-400 bg-red-50/30" : "border-brand-border/60"
-    } `;
+    `w-full px-3.5 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange text-brand-dark placeholder:text-brand-muted/50 transition-colors ${hasError ? "border-red-400 bg-red-50/30" : "border-brand-border/60"
+    }`;
 
 const labelCls =
     "block text-xs font-semibold text-brand-muted mb-1.5 uppercase tracking-wide";
@@ -89,21 +89,21 @@ function StepBar({ current, total }: { current: number; total: number }) {
             {Array.from({ length: total }, (_, i) => (
                 <div key={i} className="flex items-center gap-2 flex-1">
                     <div
-                        className={`w - 8 h - 8 rounded - full flex items - center justify - center text - xs font - bold shrink - 0 transition - colors ${i < current
-                                ? "bg-brand-orange text-white"
-                                : i === current
-                                    ? "bg-brand-orange/10 text-brand-orange border-2 border-brand-orange"
-                                    : "bg-brand-border/30 text-brand-muted"
-                            } `}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${i < current
+                            ? "bg-brand-orange text-white"
+                            : i === current
+                                ? "bg-brand-orange/10 text-brand-orange border-2 border-brand-orange"
+                                : "bg-brand-border/30 text-brand-muted"
+                            }`}
                     >
                         {i < current ? "✓" : i + 1}
                     </div>
                     {i < total - 1 && (
                         <div
-                            className={`flex - 1 h - 0.5 rounded ${i < current
-                                    ? "bg-brand-orange"
-                                    : "bg-brand-border/40"
-                                } `}
+                            className={`flex-1 h-0.5 rounded ${i < current
+                                ? "bg-brand-orange"
+                                : "bg-brand-border/40"
+                                }`}
                         />
                     )}
                 </div>
@@ -140,6 +140,15 @@ export default function CreateJobForm() {
     const [attachedFiles, setAttachedFiles] = useState<AttachmentFile[]>([]);
     const [dragOver, setDragOver] = useState(false);
 
+    /* milestone state (fixed-price jobs) */
+    const [milestones, setMilestones] = useState<{ title: string; amount: string; description: string }[]>([]);
+    const milestoneTotal = milestones.reduce((s, m) => s + (parseFloat(m.amount) || 0), 0);
+    function addMilestone() { setMilestones((p) => [...p, { title: "", amount: "", description: "" }]); }
+    function updateMilestone(i: number, field: string, value: string) {
+        setMilestones((p) => p.map((m, idx) => (idx === i ? { ...m, [field]: value } : m)));
+    }
+    function removeMilestone(i: number) { setMilestones((p) => p.filter((_, idx) => idx !== i)); }
+
     const [form, setForm] = useState({
         title: "",
         description: "",
@@ -162,9 +171,9 @@ export default function CreateJobForm() {
     /* fetch categories */
     useEffect(() => {
         const headers: Record<string, string> = {};
-        if (token) headers.Authorization = `Bearer ${token} `;
+        if (token) headers.Authorization = `Bearer ${token}`;
 
-        fetch(`${API_BASE} /categories/`, { headers })
+        fetch(`${API_BASE}/categories/`, { headers })
             .then((r) => r.json())
             .then((body) => setCategories(body.data ?? []))
             .catch((err) => console.warn("Failed to fetch categories:", err));
@@ -185,9 +194,9 @@ export default function CreateJobForm() {
                     const params = new URLSearchParams({ q: query });
                     if (form.category_id) params.set("category_id", form.category_id);
                     const headers: Record<string, string> = {};
-                    if (token) headers.Authorization = `Bearer ${token} `;
+                    if (token) headers.Authorization = `Bearer ${token}`;
                     const res = await fetch(
-                        `${API_BASE} /skills/search ? ${params} `,
+                        `${API_BASE}/skills/search?${params}`,
                         { headers }
                     );
                     const body = await res.json();
@@ -273,9 +282,9 @@ export default function CreateJobForm() {
         fd.append('entity_type', 'job');
         fd.append('entity_id', jobId);
         attachedFiles.forEach((af) => fd.append('files[]', af.file));
-        await fetch(`${API_BASE} /attachments/upload`, {
+        await fetch(`${API_BASE}/attachments/upload`, {
             method: 'POST',
-            headers: { Authorization: `Bearer ${token} ` },
+            headers: { Authorization: `Bearer ${token}` },
             body: fd,
         });
     }
@@ -368,12 +377,17 @@ export default function CreateJobForm() {
                 payload.duration_weeks = Number(form.duration_weeks);
             if (selectedSkills.length > 0)
                 payload.skill_ids = selectedSkills.map((s) => s.id);
+            if (form.budget_type === "fixed" && milestones.length > 0) {
+                payload.milestones_suggested = milestones
+                    .filter((m) => m.title.trim())
+                    .map((m) => ({ title: m.title.trim(), amount: parseFloat(m.amount) || 0, description: m.description.trim() || undefined }));
+            }
 
-            const res = await fetch(`${API_BASE} /jobs/`, {
+            const res = await fetch(`${API_BASE}/jobs/`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${token} `,
+                    Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify(payload),
             });
@@ -415,7 +429,7 @@ export default function CreateJobForm() {
 
             // Redirect to job management page
             if (jobId) {
-                router.push(`/ dashboard / jobs / ${jobId} `);
+                router.push(`/dashboard/jobs/${jobId}`);
                 return;
             }
             setSuccessId(jobId);
@@ -433,7 +447,7 @@ export default function CreateJobForm() {
         if (!successId) return;
         setLoading(true);
         try {
-            await fetch(`${API_BASE} /jobs/${successId}/publish`, {
+            await fetch(`${API_BASE}/jobs/${successId}/publish`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -876,6 +890,67 @@ export default function CreateJobForm() {
                         />
                     </div>
 
+                    {/* ── Milestones (fixed-price only) ──────── */}
+                    {form.budget_type === "fixed" && (
+                        <div className="border-t border-brand-border/40 pt-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="text-sm font-bold text-brand-dark flex items-center gap-2">🎯 Suggested Milestones</h3>
+                                    <p className="text-xs text-brand-muted mt-0.5">Define the milestones you expect for this project. Freelancers will see these when submitting proposals.</p>
+                                </div>
+                                {milestones.length > 0 && (
+                                    <div className="text-right shrink-0 ml-4">
+                                        <div className="text-xs text-brand-muted">Total</div>
+                                        <div className={`text-sm font-bold ${milestoneTotal > 0 ? "text-emerald-600" : "text-brand-muted"}`}>
+                                            ${milestoneTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {milestones.length > 0 && (
+                                <div className="space-y-3 mb-4">
+                                    {milestones.map((ms, idx) => (
+                                        <div key={idx} className="relative border border-brand-border/60 rounded-xl p-4 bg-slate-50/50 hover:bg-white transition-colors">
+                                            <button type="button" onClick={() => removeMilestone(idx)}
+                                                className="absolute top-3 right-3 text-brand-muted hover:text-red-500 transition-colors" title="Remove">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                            </button>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-orange/10 text-brand-orange text-xs font-bold shrink-0">{idx + 1}</span>
+                                                <span className="text-xs font-medium text-brand-muted uppercase tracking-wide">Milestone {idx + 1}</span>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3">
+                                                <input type="text" value={ms.title} onChange={(e) => updateMilestone(idx, "title", e.target.value)}
+                                                    placeholder="e.g. Design mockups, Backend API, Final delivery..."
+                                                    className={inputCls()} />
+                                                <div className="relative">
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-brand-muted">$</span>
+                                                    <input type="number" min="0" step="0.01" value={ms.amount}
+                                                        onChange={(e) => updateMilestone(idx, "amount", e.target.value)}
+                                                        placeholder="0.00" className={`${inputCls()} pl-7`} />
+                                                </div>
+                                            </div>
+                                            <textarea value={ms.description} onChange={(e) => updateMilestone(idx, "description", e.target.value)}
+                                                placeholder="Brief description of deliverables (optional)" rows={2}
+                                                className={`${inputCls()} mt-3 resize-none`} />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <button type="button" onClick={addMilestone}
+                                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-brand-orange bg-brand-orange/10 hover:bg-brand-orange/20 rounded-xl transition-colors border border-brand-orange/20">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                                Add Milestone
+                            </button>
+
+                            {milestones.length === 0 && (
+                                <p className="text-xs text-brand-muted mt-2">💡 Adding milestones helps freelancers understand your project structure. This is optional — you can also add milestones later.</p>
+                            )}
+                        </div>
+                    )}
+
                     {/* ── Location Targeting ──────────── */}
                     <div>
                         <label className={labelCls}>Location Targeting</label>
@@ -1195,6 +1270,26 @@ export default function CreateJobForm() {
                                 label="Duration"
                                 value={`${form.duration_weeks} week${Number(form.duration_weeks) === 1 ? "" : "s"}`}
                             />
+                        )}
+                        {milestones.length > 0 && form.budget_type === "fixed" && (
+                            <>
+                                <div className="border-t border-brand-border/40 pt-4" />
+                                <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4">
+                                    <div className="text-xs font-semibold text-brand-muted uppercase tracking-wide w-32 shrink-0 pt-0.5">Milestones</div>
+                                    <div className="flex-1 space-y-1.5">
+                                        {milestones.map((ms, i) => (
+                                            <div key={i} className="flex items-center justify-between text-sm">
+                                                <span className="text-brand-dark"><span className="text-brand-orange font-bold mr-1">{i + 1}.</span> {ms.title || "Untitled"}</span>
+                                                <span className="text-brand-muted font-medium">${parseFloat(ms.amount || "0").toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            </div>
+                                        ))}
+                                        <div className="flex items-center justify-between text-sm font-bold border-t border-brand-border/40 pt-1">
+                                            <span className="text-brand-dark">Total</span>
+                                            <span className="text-emerald-600">${milestoneTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
                         )}
                         <ReviewRow
                             label="Visibility"

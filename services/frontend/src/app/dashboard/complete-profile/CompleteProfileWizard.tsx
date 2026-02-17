@@ -41,7 +41,14 @@ interface FormData {
     website_url: string;
     github_url: string;
     linkedin_url: string;
-    skill_ids: string[];
+    selected_skills: SelectedSkill[];
+}
+
+interface SelectedSkill {
+    skill_id: string;
+    name: string;
+    proficiency: string;
+    years_experience: number;
 }
 
 interface VerificationEvidence {
@@ -105,7 +112,7 @@ const EMPTY: FormData = {
     website_url: "",
     github_url: "",
     linkedin_url: "",
-    skill_ids: [],
+    selected_skills: [],
 };
 
 const EMPTY_VERIFICATION: VerificationEvidence = {
@@ -173,6 +180,13 @@ interface Skill {
     name: string;
     category_name?: string;
 }
+
+const PROFICIENCY_OPTIONS = [
+    { value: "beginner", label: "Beginner" },
+    { value: "intermediate", label: "Intermediate" },
+    { value: "advanced", label: "Advanced" },
+    { value: "expert", label: "Expert" },
+];
 
 /* ── Stepper ────────────────────────────────────── */
 function Stepper({
@@ -792,15 +806,19 @@ export default function CompleteProfileWizard() {
             }
 
             /* Save skills for freelancer */
-            if (!isClient && form.skill_ids.length > 0) {
-                await fetch(`${API_BASE}/freelancers/me/skills/`, {
+            if (!isClient && form.selected_skills.length > 0) {
+                await fetch(`${API_BASE}/freelancers/me/skills`, {
                     method: "PUT",
                     headers: {
                         "Content-Type": "application/json",
                         Authorization: `Bearer ${token}`,
                     },
                     body: JSON.stringify({
-                        skill_ids: form.skill_ids,
+                        skills: form.selected_skills.map((s) => ({
+                            skill_id: s.skill_id,
+                            proficiency: s.proficiency,
+                            years_experience: s.years_experience,
+                        })),
                     }),
                 });
             }
@@ -1190,88 +1208,131 @@ export default function CompleteProfileWizard() {
         s.name.toLowerCase().includes(skillSearch.toLowerCase())
     );
 
+    const addSkill = (skill: Skill) => {
+        if (form.selected_skills.some((s) => s.skill_id === skill.id)) return;
+        setForm((prev) => ({
+            ...prev,
+            selected_skills: [
+                ...prev.selected_skills,
+                {
+                    skill_id: skill.id,
+                    name: skill.name,
+                    proficiency: "intermediate",
+                    years_experience: 1,
+                },
+            ],
+        }));
+        setSkillSearch("");
+    };
+
+    const removeSkill = (skillId: string) => {
+        setForm((prev) => ({
+            ...prev,
+            selected_skills: prev.selected_skills.filter((s) => s.skill_id !== skillId),
+        }));
+    };
+
+    const updateSkillField = (skillId: string, field: "proficiency" | "years_experience", value: string | number) => {
+        setForm((prev) => ({
+            ...prev,
+            selected_skills: prev.selected_skills.map((s) =>
+                s.skill_id === skillId ? { ...s, [field]: value } : s
+            ),
+        }));
+    };
+
     const renderFreelancerSkillsStep = () => (
         <div className="space-y-6">
             {/* Skills picker */}
             <div>
                 <label className="block text-sm font-semibold text-brand-dark mb-2">
                     Skills
+                    <span className="text-brand-muted/50 font-normal ml-1">(select at least 3)</span>
                 </label>
-                {/* selected */}
-                {form.skill_ids.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                        {form.skill_ids.map((sid) => {
-                            const s = skills.find((x) => x.id === sid);
-                            return (
-                                <button
-                                    key={sid}
-                                    type="button"
-                                    onClick={() =>
-                                        set(
-                                            "skill_ids",
-                                            form.skill_ids.filter(
-                                                (x) => x !== sid
-                                            )
-                                        )
-                                    }
-                                    className="px-3 py-1.5 text-xs font-semibold bg-brand-orange/10 text-brand-orange border border-brand-orange/30 rounded-full hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-all"
-                                >
-                                    {s?.name ?? sid} ×
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
-                {/* search */}
+
+                {/* Search input */}
                 <input
                     className={inputCls + " mb-2"}
                     placeholder="Search skills…"
                     value={skillSearch}
                     onChange={(e) => setSkillSearch(e.target.value)}
                 />
-                <div className="max-h-48 overflow-y-auto border border-brand-border/40 rounded-xl p-2 space-y-1">
-                    {filteredSkills.length === 0 && (
-                        <p className="text-xs text-brand-muted text-center py-3">
-                            No skills found
+
+                {/* Search results dropdown */}
+                {skillSearch.length >= 2 && (
+                    <div className="max-h-48 overflow-y-auto border border-brand-border/40 rounded-xl p-2 space-y-1 mb-4">
+                        {filteredSkills.filter((s) => !form.selected_skills.some((ss) => ss.skill_id === s.id)).length === 0 && (
+                            <p className="text-xs text-brand-muted text-center py-3">
+                                No matching skills found
+                            </p>
+                        )}
+                        {filteredSkills
+                            .filter((s) => !form.selected_skills.some((ss) => ss.skill_id === s.id))
+                            .slice(0, 20)
+                            .map((s) => (
+                                <button
+                                    key={s.id}
+                                    type="button"
+                                    onClick={() => addSkill(s)}
+                                    className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-gray-50 text-brand-dark transition-all"
+                                >
+                                    {s.name}
+                                    {s.category_name && (
+                                        <span className="text-brand-muted text-xs ml-2">— {s.category_name}</span>
+                                    )}
+                                </button>
+                            ))}
+                    </div>
+                )}
+
+                {/* Selected skills with proficiency & years */}
+                {form.selected_skills.length === 0 ? (
+                    <div className="text-center py-6 border-2 border-dashed border-brand-border/40 rounded-xl">
+                        <p className="text-sm text-brand-muted">No skills added yet.</p>
+                        <p className="text-xs text-brand-muted mt-1">Search and add skills above to get started.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {form.selected_skills.map((s) => (
+                            <div key={s.skill_id} className="flex items-center gap-3 p-3 bg-brand-bg/50 rounded-xl border border-brand-border/30">
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-brand-dark truncate">{s.name}</p>
+                                </div>
+                                <select
+                                    className="px-2 py-1.5 text-xs rounded-lg border border-brand-border/60 bg-white appearance-none"
+                                    value={s.proficiency}
+                                    onChange={(e) => updateSkillField(s.skill_id, "proficiency", e.target.value)}
+                                >
+                                    {PROFICIENCY_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                    ))}
+                                </select>
+                                <div className="flex items-center gap-1">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={50}
+                                        className="w-14 px-2 py-1.5 text-xs rounded-lg border border-brand-border/60 bg-white text-center"
+                                        value={s.years_experience}
+                                        onChange={(e) => updateSkillField(s.skill_id, "years_experience", parseInt(e.target.value) || 0)}
+                                    />
+                                    <span className="text-[10px] text-brand-muted whitespace-nowrap">yrs</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => removeSkill(s.skill_id)}
+                                    className="p-1 text-brand-muted hover:text-red-500 transition-colors"
+                                    title="Remove skill"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        ))}
+                        <p className="text-[11px] text-brand-muted">
+                            {form.selected_skills.length} skill{form.selected_skills.length !== 1 ? "s" : ""} selected
                         </p>
-                    )}
-                    {filteredSkills.slice(0, 50).map((s) => {
-                        const selected = form.skill_ids.includes(s.id);
-                        return (
-                            <button
-                                key={s.id}
-                                type="button"
-                                onClick={() => {
-                                    if (selected) {
-                                        set(
-                                            "skill_ids",
-                                            form.skill_ids.filter(
-                                                (x) => x !== s.id
-                                            )
-                                        );
-                                    } else {
-                                        set("skill_ids", [
-                                            ...form.skill_ids,
-                                            s.id,
-                                        ]);
-                                    }
-                                }}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${selected
-                                    ? "bg-brand-orange/10 text-brand-orange font-semibold"
-                                    : "hover:bg-gray-50 text-brand-dark"
-                                    }`}
-                            >
-                                {selected ? "✓ " : ""}
-                                {s.name}
-                                {s.category_name && (
-                                    <span className="text-brand-muted text-xs ml-2">
-                                        — {s.category_name}
-                                    </span>
-                                )}
-                            </button>
-                        );
-                    })}
-                </div>
+                    </div>
+                )}
             </div>
 
             {/* Links */}

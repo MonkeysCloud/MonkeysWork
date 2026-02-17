@@ -48,6 +48,12 @@ interface Job {
     skills?: string[];
 }
 
+interface ProposedMilestone {
+    title: string;
+    amount: string;
+    description: string;
+}
+
 export default function ProposalPage() {
     const { id: jobId } = useParams<{ id: string }>();
     const router = useRouter();
@@ -67,6 +73,17 @@ export default function ProposalPage() {
     const [durationWeeks, setDurationWeeks] = useState<number>(4);
     const [attachments, setAttachments] = useState<File[]>([]);
     const fileRef = useRef<HTMLInputElement>(null);
+
+    // Milestones state
+    const [milestones, setMilestones] = useState<ProposedMilestone[]>([]);
+
+    const isFixed = job?.budget_type === "fixed";
+
+    // Compute milestone total
+    const milestoneTotal = milestones.reduce(
+        (sum, m) => sum + (parseFloat(m.amount) || 0),
+        0
+    );
 
     // Fetch job details + check existing proposal
     useEffect(() => {
@@ -95,6 +112,31 @@ export default function ProposalPage() {
             .finally(() => setLoading(false));
     }, [token, jobId]);
 
+    /* ── Milestone helpers ─────────────────────────────── */
+    function addMilestone() {
+        setMilestones((prev) => [
+            ...prev,
+            { title: "", amount: "", description: "" },
+        ]);
+    }
+
+    function updateMilestone(idx: number, field: keyof ProposedMilestone, value: string) {
+        setMilestones((prev) =>
+            prev.map((m, i) => (i === idx ? { ...m, [field]: value } : m))
+        );
+    }
+
+    function removeMilestone(idx: number) {
+        setMilestones((prev) => prev.filter((_, i) => i !== idx));
+    }
+
+    /* ── Auto-sync bid amount from milestones ─────────── */
+    useEffect(() => {
+        if (isFixed && milestones.length > 0 && milestoneTotal > 0) {
+            setBidAmount(milestoneTotal.toFixed(2));
+        }
+    }, [milestoneTotal, isFixed, milestones.length]);
+
     function handleFileAdd(e: React.ChangeEvent<HTMLInputElement>) {
         const files = Array.from(e.target.files || []);
         setAttachments((prev) => [...prev, ...files].slice(0, 5)); // max 5
@@ -114,6 +156,13 @@ export default function ProposalPage() {
         if (stripHtml(coverLetter).length < 50) errs.cover_letter = "Cover letter must be at least 50 characters.";
         if (!bidAmount || parseFloat(bidAmount) <= 0) errs.bid_amount = "Enter a valid bid amount.";
         if (!durationWeeks) errs.estimated_duration_weeks = "Select an estimated duration.";
+
+        // Milestone validation for fixed projects
+        if (isFixed && milestones.length > 0) {
+            const hasEmpty = milestones.some((m) => !m.title.trim() || !m.amount || parseFloat(m.amount) <= 0);
+            if (hasEmpty) errs.milestones = "Each milestone needs a title and valid amount.";
+        }
+
         if (Object.keys(errs).length) { setFieldErrors(errs); return; }
 
         setSubmitting(true);
@@ -121,19 +170,31 @@ export default function ProposalPage() {
         setFieldErrors({});
 
         try {
+            const payload: Record<string, unknown> = {
+                job_id: jobId,
+                cover_letter: coverLetter,
+                bid_amount: parseFloat(bidAmount),
+                bid_type: job?.budget_type === "hourly" ? "hourly" : "fixed",
+                estimated_duration_weeks: durationWeeks,
+                currency: job?.currency || "USD",
+            };
+
+            // Include milestones if any are defined
+            if (isFixed && milestones.length > 0) {
+                payload.milestones_proposed = milestones.map((m) => ({
+                    title: m.title.trim(),
+                    amount: parseFloat(m.amount).toFixed(2),
+                    description: m.description.trim() || undefined,
+                }));
+            }
+
             const res = await fetch(`${API_BASE}/proposals`, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({
-                    job_id: jobId,
-                    cover_letter: coverLetter,
-                    bid_amount: parseFloat(bidAmount),
-                    estimated_duration_weeks: durationWeeks,
-                    currency: job?.currency || "USD",
-                }),
+                body: JSON.stringify(payload),
             });
 
             const body = await res.json();
@@ -340,13 +401,19 @@ export default function ProposalPage() {
                                     value={bidAmount}
                                     onChange={(e) => setBidAmount(e.target.value)}
                                     placeholder="0.00"
-                                    className={`w-full rounded-xl border ${fieldErrors.bid_amount ? "border-red-300" : "border-brand-border/60"} bg-white pl-8 pr-4 py-3 text-sm text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-colors`}
+                                    readOnly={isFixed && milestones.length > 0}
+                                    className={`w-full rounded-xl border ${fieldErrors.bid_amount ? "border-red-300" : "border-brand-border/60"} bg-white pl-8 pr-4 py-3 text-sm text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-colors ${isFixed && milestones.length > 0 ? "bg-slate-50 cursor-not-allowed" : ""}`}
                                 />
                             </div>
                             {fieldErrors.bid_amount && (
                                 <p className="text-xs text-red-500 mt-1">{fieldErrors.bid_amount}</p>
                             )}
-                            {job?.budget_min && job?.budget_max && (
+                            {isFixed && milestones.length > 0 && (
+                                <p className="text-xs text-brand-muted mt-1">
+                                    Auto-calculated from milestones below
+                                </p>
+                            )}
+                            {job?.budget_min && job?.budget_max && !(isFixed && milestones.length > 0) && (
                                 <p className="text-xs text-brand-muted mt-1">
                                     Client budget: ${job.budget_min.toLocaleString()} – ${job.budget_max.toLocaleString()}
                                 </p>
@@ -375,6 +442,147 @@ export default function ProposalPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* ── Milestones (fixed-price only) ──────────── */}
+                {isFixed && (
+                    <div className="bg-white rounded-2xl border border-brand-border/60 p-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-sm font-bold text-brand-dark flex items-center gap-2">
+                                    🎯 Project Milestones
+                                </h3>
+                                <p className="text-xs text-brand-muted mt-0.5">
+                                    Break down your project into milestones so the client knows your plan and can fund escrow per milestone.
+                                </p>
+                            </div>
+                            {milestones.length > 0 && (
+                                <div className="text-right shrink-0 ml-4">
+                                    <div className="text-xs text-brand-muted">Total</div>
+                                    <div className={`text-sm font-bold ${milestoneTotal > 0 ? "text-emerald-600" : "text-brand-muted"}`}>
+                                        ${milestoneTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {fieldErrors.milestones && (
+                            <div className="mb-3 px-3 py-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl">
+                                {fieldErrors.milestones}
+                            </div>
+                        )}
+
+                        {/* Milestone list */}
+                        {milestones.length > 0 && (
+                            <div className="space-y-3 mb-4">
+                                {milestones.map((ms, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="relative border border-brand-border/60 rounded-xl p-4 bg-slate-50/50 hover:bg-white transition-colors"
+                                    >
+                                        {/* Remove button */}
+                                        <button
+                                            type="button"
+                                            onClick={() => removeMilestone(idx)}
+                                            className="absolute top-3 right-3 text-brand-muted hover:text-red-500 transition-colors"
+                                            title="Remove milestone"
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                                <line x1="18" y1="6" x2="6" y2="18" />
+                                                <line x1="6" y1="6" x2="18" y2="18" />
+                                            </svg>
+                                        </button>
+
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-orange/10 text-brand-orange text-xs font-bold shrink-0">
+                                                {idx + 1}
+                                            </span>
+                                            <span className="text-xs font-medium text-brand-muted uppercase tracking-wide">
+                                                Milestone {idx + 1}
+                                            </span>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3">
+                                            {/* Title */}
+                                            <input
+                                                type="text"
+                                                value={ms.title}
+                                                onChange={(e) => updateMilestone(idx, "title", e.target.value)}
+                                                placeholder="e.g. Design mockups, Backend API, Final delivery..."
+                                                className="w-full rounded-lg border border-brand-border/60 bg-white px-3 py-2.5 text-sm text-brand-dark placeholder:text-brand-muted/50 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-colors"
+                                            />
+                                            {/* Amount */}
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-brand-muted">$</span>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={ms.amount}
+                                                    onChange={(e) => updateMilestone(idx, "amount", e.target.value)}
+                                                    placeholder="0.00"
+                                                    className="w-full rounded-lg border border-brand-border/60 bg-white pl-7 pr-3 py-2.5 text-sm text-brand-dark placeholder:text-brand-muted/50 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-colors"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Description (optional) */}
+                                        <textarea
+                                            value={ms.description}
+                                            onChange={(e) => updateMilestone(idx, "description", e.target.value)}
+                                            placeholder="Brief description of deliverables for this milestone (optional)"
+                                            rows={2}
+                                            className="w-full mt-3 rounded-lg border border-brand-border/60 bg-white px-3 py-2 text-sm text-brand-dark placeholder:text-brand-muted/50 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-colors resize-none"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Add milestone button */}
+                        <button
+                            type="button"
+                            onClick={addMilestone}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-brand-orange bg-brand-orange/10 hover:bg-brand-orange/20 rounded-xl transition-colors border border-brand-orange/20"
+                        >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            Add Milestone
+                        </button>
+
+                        {milestones.length === 0 && (
+                            <p className="text-xs text-brand-muted mt-2">
+                                💡 Adding milestones helps clients understand your plan and allows escrow funding per milestone.
+                                You can also skip this — the client can add milestones after accepting.
+                            </p>
+                        )}
+
+                        {/* Budget comparison */}
+                        {milestones.length > 0 && job?.budget_min && job?.budget_max && (
+                            <div className="mt-4 pt-3 border-t border-brand-border/40">
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-brand-muted">Client budget range</span>
+                                    <span className="font-medium text-brand-dark">
+                                        ${job.budget_min.toLocaleString()} – ${job.budget_max.toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between text-xs mt-1">
+                                    <span className="text-brand-muted">Your milestone total</span>
+                                    <span className={`font-bold ${milestoneTotal >= (job.budget_min || 0) && milestoneTotal <= (job.budget_max || Infinity)
+                                        ? "text-emerald-600"
+                                        : "text-amber-600"
+                                        }`}>
+                                        ${milestoneTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        {milestoneTotal > 0 && milestoneTotal < (job.budget_min || 0) && " ⬇ below range"}
+                                        {milestoneTotal > (job.budget_max || Infinity) && " ⬆ above range"}
+                                        {milestoneTotal >= (job.budget_min || 0) && milestoneTotal <= (job.budget_max || Infinity) && milestoneTotal > 0 && " ✓"}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Attachments */}
                 <div className="bg-white rounded-2xl border border-brand-border/60 p-5">

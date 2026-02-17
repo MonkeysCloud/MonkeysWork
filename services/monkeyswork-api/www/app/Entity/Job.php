@@ -92,6 +92,9 @@ class Job
     #[Field(type: 'text', nullable: true, comment: 'VECTOR(384) — pgvector')]
     public ?string $job_embedding = null;
 
+    #[Field(type: 'json', default: '[]', comment: 'Client-defined milestones for fixed-price jobs')]
+    public array $milestones_suggested = [];
+
     #[Field(type: 'json', nullable: true, comment: 'AI scope breakdown')]
     public ?array $ai_scope = null;
 
@@ -186,6 +189,7 @@ class Job
     public function getProposalsCount(): int { return $this->proposals_count; }
     public function getViewsCount(): int { return $this->views_count; }
     public function getJobEmbedding(): ?string { return $this->job_embedding; }
+    public function getMilestonesSuggested(): array { return $this->milestones_suggested; }
     public function getAiScope(): ?array { return $this->ai_scope; }
     public function getAiScopeModelVersion(): ?string { return $this->ai_scope_model_version; }
     public function getAiScopeConfidence(): ?string { return $this->ai_scope_confidence; }
@@ -229,6 +233,7 @@ class Job
     public function setProposalsCount(int $v): self { $this->proposals_count = $v; return $this; }
     public function setViewsCount(int $v): self { $this->views_count = $v; return $this; }
     public function setJobEmbedding(?string $v): self { $this->job_embedding = $v; return $this; }
+    public function setMilestonesSuggested(array $v): self { $this->milestones_suggested = $v; return $this; }
     public function setAiScope(?array $v): self { $this->ai_scope = $v; return $this; }
     public function setAiScopeModelVersion(?string $v): self { $this->ai_scope_model_version = $v; return $this; }
     public function setAiScopeConfidence(?string $v): self { $this->ai_scope_confidence = $v; return $this; }

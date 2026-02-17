@@ -45,8 +45,13 @@ final class ContractController
         $total = (int) $cnt->fetchColumn();
 
         $stmt = $this->db->pdo()->prepare(
-            "SELECT c.*, j.title AS job_title
-             FROM \"contract\" c JOIN \"job\" j ON j.id = c.job_id
+            "SELECT c.*, j.title AS job_title,
+                    uc.display_name AS client_name,
+                    uf.display_name AS freelancer_name
+             FROM \"contract\" c
+             JOIN \"job\" j  ON j.id  = c.job_id
+             JOIN \"user\" uc ON uc.id = c.client_id
+             JOIN \"user\" uf ON uf.id = c.freelancer_id
              WHERE {$where}
              ORDER BY c.created_at DESC LIMIT :lim OFFSET :off"
         );

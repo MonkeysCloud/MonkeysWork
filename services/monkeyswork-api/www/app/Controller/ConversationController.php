@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\SocketEvent;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -33,7 +34,7 @@ final class ConversationController
 
         $stmt = $this->db->pdo()->prepare(
             'SELECT c.*, cp.unread_count,
-                    (SELECT body FROM "message" m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message
+                    (SELECT content FROM "message" m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message
              FROM "conversation" c
              JOIN "conversation_participants" cp ON cp.conversation_id = c.id
              WHERE cp.user_id = :uid
@@ -65,13 +66,13 @@ final class ConversationController
         $pdo->beginTransaction();
         try {
             $pdo->prepare(
-                'INSERT INTO "conversation" (id, contract_id, subject, created_at, updated_at)
-                 VALUES (:id, :cid, :subj, :now, :now)'
+                'INSERT INTO "conversation" (id, contract_id, title, created_at, updated_at)
+                 VALUES (:id, :cid, :title, :now, :now)'
             )->execute([
-                'id'   => $id,
-                'cid'  => $data['contract_id'] ?? null,
-                'subj' => $data['subject'] ?? null,
-                'now'  => $now,
+                'id'    => $id,
+                'cid'   => $data['contract_id'] ?? null,
+                'title' => $data['subject'] ?? $data['title'] ?? null,
+                'now'   => $now,
             ]);
 
             // Add participants (including self)
@@ -87,7 +88,9 @@ final class ConversationController
             $pdo->commit();
         } catch (\Throwable $e) {
             $pdo->rollBack();
-            return $this->error('Failed to create conversation', 500);
+            error_log('[ConversationController::create] ERROR: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            error_log('[ConversationController::create] TRACE: ' . $e->getTraceAsString());
+            return $this->json(['error' => true, 'message' => 'Failed to create conversation', 'debug' => $e->getMessage()], 500);
         }
 
         return $this->created(['data' => ['id' => $id]]);
@@ -147,8 +150,18 @@ final class ConversationController
         $userId = $this->userId($request);
         $data   = $this->body($request);
 
-        if (empty($data['body'])) {
+        $body = $data['body'] ?? $data['content'] ?? '';
+        if (empty($body)) {
             return $this->error('Message body is required');
+        }
+
+        // Build attachments JSONB from attachment_url(s) if provided
+        $attachments = '[]';
+        if (!empty($data['attachment_url'])) {
+            $urls = array_map('trim', explode(',', $data['attachment_url']));
+            $attachments = json_encode(array_map(fn($u) => ['url' => $u], $urls));
+        } elseif (!empty($data['attachments'])) {
+            $attachments = is_string($data['attachments']) ? $data['attachments'] : json_encode($data['attachments']);
         }
 
         $msgId = $this->uuid();
@@ -158,17 +171,17 @@ final class ConversationController
         $pdo->beginTransaction();
         try {
             $pdo->prepare(
-                'INSERT INTO "message" (id, conversation_id, sender_id, body, message_type,
-                                        attachment_url, created_at)
-                 VALUES (:id, :cid, :uid, :body, :type, :att, :now)'
+                'INSERT INTO "message" (id, conversation_id, sender_id, content, message_type,
+                                        attachments, created_at)
+                 VALUES (:id, :cid, :uid, :content, :type, :att, :now)'
             )->execute([
-                'id'   => $msgId,
-                'cid'  => $id,
-                'uid'  => $userId,
-                'body' => $data['body'],
-                'type' => $data['message_type'] ?? 'text',
-                'att'  => $data['attachment_url'] ?? null,
-                'now'  => $now,
+                'id'      => $msgId,
+                'cid'     => $id,
+                'uid'     => $userId,
+                'content' => $body,
+                'type'    => $data['message_type'] ?? 'text',
+                'att'     => $attachments,
+                'now'     => $now,
             ]);
 
             // Update conversation timestamp
@@ -185,7 +198,37 @@ final class ConversationController
             $pdo->commit();
         } catch (\Throwable $e) {
             $pdo->rollBack();
-            return $this->error('Failed to send message', 500);
+            error_log('[ConversationController::sendMessage] ERROR: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            return $this->json(['error' => true, 'message' => 'Failed to send message', 'debug' => $e->getMessage()], 500);
+        }
+
+        // Fetch sender display_name for the socket payload
+        $senderStmt = $pdo->prepare('SELECT display_name FROM "user" WHERE id = :uid');
+        $senderStmt->execute(['uid' => $userId]);
+        $senderName = $senderStmt->fetchColumn() ?: 'Unknown';
+
+        // Push real-time via Redis → Socket.IO
+        try {
+            $redisHost = getenv('REDIS_HOST') ?: 'redis';
+            $redisPort = (int) (getenv('REDIS_PORT') ?: 6379);
+            $redis = new \Redis();
+            $redis->connect($redisHost, $redisPort, 2.0);
+
+            $socket = new SocketEvent($redis);
+            $socket->toConversation($id, 'message:new', [
+                'id'              => $msgId,
+                'conversation_id' => $id,
+                'sender_id'       => $userId,
+                'sender_name'     => $senderName,
+                'content'         => $body,
+                'message_type'    => $data['message_type'] ?? 'text',
+                'attachments'     => json_decode($attachments, true),
+                'created_at'      => $now,
+            ]);
+
+            $redis->close();
+        } catch (\Throwable $e) {
+            error_log('[ConversationController::sendMessage] socket emit: ' . $e->getMessage());
         }
 
         return $this->created(['data' => ['id' => $msgId]]);

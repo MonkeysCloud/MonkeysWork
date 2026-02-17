@@ -164,6 +164,12 @@ final class ProposalController
         $where = 'j.client_id = :uid';
         $params = ['uid' => $userId];
 
+        // Optional job_id filter
+        if (!empty($qs['job_id'])) {
+            $where .= ' AND p.job_id = :jid';
+            $params['jid'] = $qs['job_id'];
+        }
+
         if ($status) {
             $placeholders = [];
             foreach ($status as $i => $s) {
@@ -184,10 +190,16 @@ final class ProposalController
             "SELECT p.*, j.title AS job_title,
                     u.first_name AS freelancer_first_name,
                     u.last_name  AS freelancer_last_name,
-                    u.email      AS freelancer_email
+                    u.email      AS freelancer_email,
+                    u.avatar_url AS freelancer_avatar,
+                    fp.hourly_rate AS freelancer_hourly_rate,
+                    fp.headline AS freelancer_headline,
+                    fp.bio AS freelancer_bio,
+                    fp.experience_years AS freelancer_experience_years
              FROM \"proposal\" p
              JOIN \"job\" j ON j.id = p.job_id
              JOIN \"user\" u ON u.id = p.freelancer_id
+             LEFT JOIN \"freelancerprofile\" fp ON fp.user_id = p.freelancer_id
              WHERE {$where}
              ORDER BY p.created_at DESC LIMIT :lim OFFSET :off"
         );
@@ -318,25 +330,97 @@ final class ProposalController
     {
         $userId = $this->userId($request);
 
-        // Get proposal + job info before status change
+        // Get full proposal + job info
         $stmt = $this->db->pdo()->prepare(
-            'SELECT p.id, p.job_id, p.freelancer_id, j.client_id
+            'SELECT p.id, p.job_id, p.freelancer_id, p.bid_amount, p.bid_type,
+                    p.milestones_proposed, p.cover_letter,
+                    j.client_id, j.title AS job_title
              FROM "proposal" p JOIN "job" j ON j.id = p.job_id WHERE p.id = :id'
         );
         $stmt->execute(['id' => $id]);
         $info = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-        $result = $this->updateStatusByClient($request, $id, 'accepted');
-
-        // Dispatch event after successful acceptance
-        if ($info && $info['client_id'] === $userId) {
-            $this->events?->dispatch(new ProposalAccepted(
-                $id, $info['job_id'], $info['freelancer_id'], $userId
-            ));
+        if (!$info || $info['client_id'] !== $userId) {
+            return $this->forbidden();
         }
 
-        // TODO: create contract from accepted proposal
-        return $result;
+        // Update proposal status
+        $result = $this->updateStatusByClient($request, $id, 'accepted');
+
+        // Dispatch event
+        $this->events?->dispatch(new ProposalAccepted(
+            $id, $info['job_id'], $info['freelancer_id'], $userId
+        ));
+
+        // ── Create contract from accepted proposal ──
+        $pdo = $this->db->pdo();
+        $now = (new \DateTimeImmutable())->format('Y-m-d\TH:i:sP');
+        $contractId = $this->uuid();
+
+        $isHourly = $info['bid_type'] === 'hourly';
+
+        $pdo->prepare(
+            'INSERT INTO "contract"
+                (id, job_id, proposal_id, client_id, freelancer_id,
+                 title, description, contract_type, total_amount,
+                 hourly_rate, currency, status, platform_fee_percent,
+                 started_at, created_at, updated_at)
+             VALUES
+                (:id, :job_id, :proposal_id, :client_id, :freelancer_id,
+                 :title, :description, :contract_type, :total_amount,
+                 :hourly_rate, :currency, :status, :platform_fee,
+                 :started_at, :created_at, :updated_at)'
+        )->execute([
+            'id'              => $contractId,
+            'job_id'          => $info['job_id'],
+            'proposal_id'     => $id,
+            'client_id'       => $info['client_id'],
+            'freelancer_id'   => $info['freelancer_id'],
+            'title'           => $info['job_title'],
+            'description'     => $info['cover_letter'],
+            'contract_type'   => $info['bid_type'],
+            'total_amount'    => $info['bid_amount'],
+            'hourly_rate'     => $isHourly ? $info['bid_amount'] : null,
+            'currency'        => 'USD',
+            'status'          => 'active',
+            'platform_fee'    => '10.00',
+            'started_at'      => $now,
+            'created_at'      => $now,
+            'updated_at'      => $now,
+        ]);
+
+        // ── Create milestones from proposal ──
+        $milestones = json_decode($info['milestones_proposed'] ?? '[]', true);
+        if (is_array($milestones) && count($milestones) > 0) {
+            $msStmt = $pdo->prepare(
+                'INSERT INTO "milestone"
+                    (id, contract_id, title, description, amount, currency,
+                     status, sort_order, escrow_funded, escrow_released,
+                     revision_count, created_at, updated_at)
+                 VALUES
+                    (:id, :cid, :title, :desc, :amount, :currency,
+                     :status, :sort, false, false,
+                     0, :created_at, :updated_at)'
+            );
+            foreach ($milestones as $i => $ms) {
+                $msStmt->execute([
+                    'id'         => $this->uuid(),
+                    'cid'        => $contractId,
+                    'title'      => $ms['title'] ?? ('Milestone ' . ($i + 1)),
+                    'desc'       => $ms['description'] ?? null,
+                    'amount'     => $ms['amount'] ?? '0.00',
+                    'currency'   => 'USD',
+                    'status'     => 'pending',
+                    'sort'       => $i + 1,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
+        }
+
+        return $this->json([
+            'data' => ['proposal_status' => 'accepted', 'contract_id' => $contractId],
+        ]);
     }
 
     #[Route('POST', '/{id}/reject', name: 'proposals.reject', summary: 'Reject proposal', tags: ['Proposals'])]

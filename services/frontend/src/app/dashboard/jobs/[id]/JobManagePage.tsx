@@ -58,6 +58,7 @@ type Job = {
     location_type?: string;
     location_regions?: string[];
     location_countries?: string[];
+    milestones_suggested?: { title: string; amount: number; description?: string }[];
 };
 
 type Attachment = {
@@ -456,6 +457,12 @@ export default function JobManagePage() {
                             Actions
                         </h2>
                         <div className="flex flex-wrap gap-3">
+                            <button
+                                onClick={() => router.push(`/dashboard/jobs/${id}/proposals`)}
+                                className="px-5 py-2.5 text-sm font-bold text-white bg-violet-600 hover:bg-violet-700 rounded-xl shadow-[0_4px_24px_rgba(124,58,237,0.3)] hover:shadow-[0_6px_32px_rgba(124,58,237,0.45)] transition-all duration-200 hover:-translate-y-0.5"
+                            >
+                                📋 View Proposals
+                            </button>
                             {(job.status === "draft" || job.status === "revision_requested" || job.status === "rejected") && (
                                 <button
                                     onClick={() =>
@@ -531,10 +538,10 @@ export default function JobManagePage() {
                                         <p className="text-sm text-brand-muted">Submitted {formatDate(myProposal.created_at)}</p>
                                     </div>
                                     <span className={`inline-flex items-center px-3 py-1.5 text-xs font-bold rounded-full border capitalize ${myProposal.status === "accepted" ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
-                                            myProposal.status === "rejected" ? "bg-red-100 text-red-700 border-red-200" :
-                                                myProposal.status === "withdrawn" ? "bg-gray-100 text-gray-600 border-gray-200" :
-                                                    myProposal.status === "shortlisted" ? "bg-violet-100 text-violet-700 border-violet-200" :
-                                                        "bg-amber-100 text-amber-700 border-amber-200"
+                                        myProposal.status === "rejected" ? "bg-red-100 text-red-700 border-red-200" :
+                                            myProposal.status === "withdrawn" ? "bg-gray-100 text-gray-600 border-gray-200" :
+                                                myProposal.status === "shortlisted" ? "bg-violet-100 text-violet-700 border-violet-200" :
+                                                    "bg-amber-100 text-amber-700 border-amber-200"
                                         }`}>
                                         {myProposal.status === "submitted" ? "⏳ Pending" :
                                             myProposal.status === "viewed" ? "👁️ Viewed" :
@@ -699,6 +706,41 @@ export default function JobManagePage() {
                         label="Budget"
                         value={`${job.budget_type === "hourly" ? "Hourly" : "Fixed"}: $${Number(job.budget_min).toLocaleString()} – $${Number(job.budget_max).toLocaleString()} ${job.currency}`}
                     />
+                    {/* Suggested Milestones */}
+                    {job.budget_type === "fixed" && (() => {
+                        const ms = Array.isArray(job.milestones_suggested)
+                            ? job.milestones_suggested
+                            : typeof job.milestones_suggested === "string"
+                                ? (() => { try { return JSON.parse(job.milestones_suggested as unknown as string); } catch { return []; } })()
+                                : [];
+                        if (ms.length === 0) return null;
+                        const total = ms.reduce((s: number, m: { amount: number }) => s + (Number(m.amount) || 0), 0);
+                        return (
+                            <div className="border-t border-brand-border/40 pt-4">
+                                <div className="text-xs font-semibold text-brand-muted uppercase tracking-wide mb-3">
+                                    🎯 Suggested Milestones
+                                </div>
+                                <div className="space-y-2">
+                                    {ms.map((m: { title: string; amount: number; description?: string }, i: number) => (
+                                        <div key={i} className="flex items-start gap-3 bg-gray-50/80 rounded-xl px-4 py-3 border border-brand-border/30">
+                                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-orange/10 text-brand-orange text-xs font-bold shrink-0 mt-0.5">{i + 1}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-sm font-semibold text-brand-dark">{m.title || "Untitled"}</span>
+                                                    <span className="text-sm font-bold text-emerald-600 shrink-0">${Number(m.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                </div>
+                                                {m.description && <p className="text-xs text-brand-muted mt-0.5">{m.description}</p>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div className="flex items-center justify-between px-4 py-2 border-t border-brand-border/40">
+                                        <span className="text-xs font-bold text-brand-dark uppercase">Total</span>
+                                        <span className="text-sm font-bold text-emerald-600">${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
                     <DetailRow
                         label="Visibility"
                         value={

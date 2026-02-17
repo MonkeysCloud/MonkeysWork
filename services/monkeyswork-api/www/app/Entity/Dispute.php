@@ -58,6 +58,13 @@ class Dispute
     #[Field(type: 'timestamptz', nullable: true)]
     public ?\DateTimeImmutable $resolved_at = null;
 
+    #[Field(type: 'timestamptz', nullable: true, comment: 'deadline for awaiting party to respond')]
+    public ?\DateTimeImmutable $response_deadline = null;
+
+    #[Field(type: 'uuid', nullable: true, comment: 'user who must respond next')]
+    #[ManyToOne(targetEntity: User::class)]
+    public ?string $awaiting_response_from = null;
+
     #[Field(type: 'timestamptz')]
     public \DateTimeImmutable $created_at;
 
@@ -81,6 +88,8 @@ class Dispute
     public function getResolutionNotes(): ?string { return $this->resolution_notes; }
     public function getResolvedBy(): ?string { return $this->resolved_by; }
     public function getResolvedAt(): ?\DateTimeImmutable { return $this->resolved_at; }
+    public function getResponseDeadline(): ?\DateTimeImmutable { return $this->response_deadline; }
+    public function getAwaitingResponseFrom(): ?string { return $this->awaiting_response_from; }
     public function getCreatedAt(): \DateTimeImmutable { return $this->created_at; }
     public function getUpdatedAt(): \DateTimeImmutable { return $this->updated_at; }
     public function getMessages(): array { return $this->messages; }
@@ -98,6 +107,8 @@ class Dispute
     public function setResolutionNotes(?string $v): self { $this->resolution_notes = $v; return $this; }
     public function setResolvedBy(?string $v): self { $this->resolved_by = $v; return $this; }
     public function setResolvedAt(?\DateTimeImmutable $v): self { $this->resolved_at = $v; return $this; }
+    public function setResponseDeadline(?\DateTimeImmutable $v): self { $this->response_deadline = $v; return $this; }
+    public function setAwaitingResponseFrom(?string $v): self { $this->awaiting_response_from = $v; return $this; }
     public function setUpdatedAt(\DateTimeImmutable $at): self { $this->updated_at = $at; return $this; }
 
     // ── Collection mutators ──

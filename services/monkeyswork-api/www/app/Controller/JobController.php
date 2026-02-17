@@ -125,10 +125,12 @@ final class JobController
                                 budget_min, budget_max, currency, estimated_duration,
                                 experience_level, status, visibility, ai_scope,
                                 location_type, location_regions, location_countries,
+                                milestones_suggested,
                                 created_at, updated_at)
              VALUES (:id, :client_id, :title, :slug, :desc, :cat, :bt, :bmin, :bmax, :cur,
                      :dur, :exp, \'draft\', :vis, :ai,
                      :loc_type, :loc_regions, :loc_countries,
+                     :milestones,
                      :now, :now)'
         )->execute([
             'id'             => $id,
@@ -148,6 +150,7 @@ final class JobController
             'loc_type'       => $data['location_type'] ?? 'worldwide',
             'loc_regions'    => json_encode($data['location_regions'] ?? []),
             'loc_countries'  => json_encode($data['location_countries'] ?? []),
+            'milestones'     => json_encode($data['milestones_suggested'] ?? []),
             'now'            => $now,
         ]);
 
@@ -248,9 +251,9 @@ final class JobController
 
         $allowed = ['title', 'description', 'category_id', 'budget_type', 'budget_min',
                      'budget_max', 'currency', 'estimated_duration', 'experience_level', 'visibility',
-                     'location_type', 'location_regions', 'location_countries'];
+                     'location_type', 'location_regions', 'location_countries', 'milestones_suggested'];
 
-        $jsonFields = ['location_regions', 'location_countries'];
+        $jsonFields = ['location_regions', 'location_countries', 'milestones_suggested'];
 
         $sets   = [];
         $params = ['id' => $id];

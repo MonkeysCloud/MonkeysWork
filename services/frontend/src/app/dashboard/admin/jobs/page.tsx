@@ -633,9 +633,12 @@ export default function AdminJobsPage() {
                                 {/* Job content */}
                                 <div>
                                     <h3 className="text-sm font-semibold text-gray-700 mb-2">📝 Description</h3>
-                                    <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 whitespace-pre-wrap max-h-60 overflow-y-auto">
-                                        {detailJob.description || "No description provided."}
-                                    </div>
+                                    {detailJob.description ? (
+                                        <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 prose prose-sm max-w-none max-h-60 overflow-y-auto"
+                                            dangerouslySetInnerHTML={{ __html: detailJob.description }} />
+                                    ) : (
+                                        <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-400 italic">No description provided.</div>
+                                    )}
                                 </div>
 
                                 {/* Meta grid */}
