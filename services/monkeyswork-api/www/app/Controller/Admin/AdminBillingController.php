@@ -490,7 +490,8 @@ final class AdminBillingController
     private function countByFilter(\PDO $pdo, string $table, string $dateFilter): int
     {
         $col = $table === 'invoice' ? 'i' : 'et';
-        $sql = "SELECT COUNT(*) FROM \"$table\" $col WHERE 1=1 $dateFilter";
+        $aliasedFilter = str_replace('et.created_at', "$col.created_at", $dateFilter);
+        $sql = "SELECT COUNT(*) FROM \"$table\" $col WHERE 1=1 $aliasedFilter";
         return (int) $pdo->query($sql)->fetchColumn();
     }
 }
