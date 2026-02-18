@@ -42,7 +42,7 @@ const FAQS = [
     },
     {
         q: "What payment methods are accepted?",
-        a: "Clients can pay by card (and eligible bank methods). Freelancers can receive payouts via supported bank rails, PayPal, and (where available) crypto.",
+        a: "Clients can pay by card (and eligible bank methods). Freelancers can receive payouts via supported bank rails and PayPal.",
     },
     {
         q: "Are there refunds?",
@@ -94,7 +94,7 @@ function FeeCalculator() {
     const [amount, setAmount] = useState(5000);
     const [feeTier, setFeeTier] = useState<10 | 5>(10);
     const [paymentMethod, setPaymentMethod] = useState<"card" | "bank">("card");
-    const [payoutMethod, setPayoutMethod] = useState<"bank" | "paypal" | "crypto">("bank");
+    const [payoutMethod, setPayoutMethod] = useState<"bank" | "paypal">("bank");
 
     // Client side
     const clientPlatformFee = amount * 0.05;
@@ -103,7 +103,7 @@ function FeeCalculator() {
 
     // Freelancer side
     const freelancerPlatformFee = amount * (feeTier / 100);
-    const payoutFees: Record<string, number> = { bank: 0, paypal: amount * 0.01, crypto: amount * 0.005 };
+    const payoutFees: Record<string, number> = { bank: 0, paypal: amount * 0.01 };
     const freelancerPayout = payoutFees[payoutMethod];
     const freelancerReceives = amount - freelancerPlatformFee - freelancerPayout;
 
@@ -160,12 +160,11 @@ function FeeCalculator() {
                         <label className="block text-xs font-semibold text-brand-muted mb-1.5">Freelancer Payout Method</label>
                         <select
                             value={payoutMethod}
-                            onChange={(e) => setPayoutMethod(e.target.value as "bank" | "paypal" | "crypto")}
+                            onChange={(e) => setPayoutMethod(e.target.value as "bank" | "paypal")}
                             className="w-full px-3 py-2.5 text-sm border border-brand-border/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange text-brand-dark bg-white"
                         >
                             <option value="bank">Bank Transfer (Free)</option>
                             <option value="paypal">PayPal (1%)</option>
-                            <option value="crypto">Crypto (0.5%)</option>
                         </select>
                     </div>
                 </div>
@@ -318,7 +317,7 @@ export default function PricingClient() {
                                     <span className="text-brand-muted ml-2 text-sm">then 5% after $10K/client</span>
                                 </div>
                                 <p className="mt-2 text-xs text-brand-muted">
-                                    Payouts: Bank (free) · PayPal (1%) · Crypto (0.5%). Availability depends on country and compliance.
+                                    Payouts: Bank (free) · PayPal (1%). Availability depends on country and compliance.
                                 </p>
                             </div>
                             <div className="p-7 sm:p-8">

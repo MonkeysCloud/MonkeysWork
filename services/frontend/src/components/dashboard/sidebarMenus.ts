@@ -82,8 +82,8 @@ const CLIENT_MENU: MenuConfig = {
             href: "/dashboard/billing",
             children: [
                 {
-                    label: "Escrow Balance",
-                    href: "/dashboard/billing/escrow",
+                    label: "Overview",
+                    href: "/dashboard/billing",
                 },
                 {
                     label: "Transactions",
@@ -191,20 +191,16 @@ const FREELANCER_MENU: MenuConfig = {
         },
         {
             icon: "💰",
-            label: "Earnings",
-            href: "/dashboard/earnings",
+            label: "Billing",
+            href: "/dashboard/billing",
             children: [
-                { label: "Overview", href: "/dashboard/earnings" },
+                { label: "Overview", href: "/dashboard/billing" },
                 {
                     label: "Transactions",
-                    href: "/dashboard/earnings/transactions",
+                    href: "/dashboard/billing/transactions",
                 },
-                { label: "Payouts", href: "/dashboard/earnings/payouts" },
-                { label: "Invoices", href: "/dashboard/earnings/invoices" },
-                {
-                    label: "Tax Documents",
-                    href: "/dashboard/earnings/tax",
-                },
+                { label: "Payouts", href: "/dashboard/billing/payouts" },
+                { label: "Invoices", href: "/dashboard/billing/invoices" },
             ],
         },
     ],
@@ -310,6 +306,17 @@ const ADMIN_MENU: MenuConfig = {
             label: "Reports",
             href: "/dashboard/admin/reports",
             badge: "reports",
+        },
+        {
+            icon: "💰",
+            label: "Billing",
+            href: "/dashboard/admin/billing",
+            children: [
+                { label: "Overview", href: "/dashboard/admin/billing" },
+                { label: "Transactions", href: "/dashboard/admin/billing/transactions" },
+                { label: "Invoices", href: "/dashboard/admin/billing/invoices" },
+                { label: "Payouts", href: "/dashboard/admin/billing/payouts" },
+            ],
         },
     ],
     secondary: [

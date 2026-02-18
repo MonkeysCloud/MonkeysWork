@@ -83,16 +83,6 @@ const PAYOUT_TYPES = [
             { key: "currency", label: "Preferred Currency", placeholder: "e.g. USD, EUR, GBP" },
         ],
     },
-    {
-        value: "crypto",
-        label: "Cryptocurrency",
-        icon: "₿",
-        desc: "Receive payments in crypto",
-        fields: [
-            { key: "network", label: "Network", placeholder: "e.g. Bitcoin, Ethereum, USDC" },
-            { key: "wallet_address", label: "Wallet Address", placeholder: "Your wallet address", mask: true },
-        ],
-    },
 ];
 
 const PAYOUT_ICONS: Record<string, string> = Object.fromEntries(PAYOUT_TYPES.map(t => [t.value, t.icon]));
@@ -184,11 +174,58 @@ export default function PayoutMethodsPage() {
             lastFour = (formData.account_number || "").slice(-4);
         } else if (selectedType === "wire") {
             lastFour = (formData.iban || "").slice(-4);
-        } else if (selectedType === "crypto") {
-            lastFour = (formData.wallet_address || "").slice(-4);
         }
 
         try {
+            // If bank_transfer, also create/update Stripe Connect account + add bank
+            if (selectedType === "bank_transfer") {
+                // Step 1: Check if Connect already exists, create if not
+                const statusRes = await fetch(`${API_BASE}/connect/status`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                const statusData = statusRes.ok ? await statusRes.json() : null;
+
+                if (!statusData?.data?.account_id) {
+                    const createRes = await fetch(`${API_BASE}/connect/create-account`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                    });
+                    if (!createRes.ok) {
+                        const err = await createRes.json().catch(() => ({}));
+                        throw new Error(err.message || "Failed to create Stripe account");
+                    }
+                }
+
+                // Step 2: Update identity if we have the holder name
+                if (formData.account_holder) {
+                    const names = formData.account_holder.split(" ");
+                    await fetch(`${API_BASE}/connect/update-identity`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            first_name: names[0] || "",
+                            last_name: names.slice(1).join(" ") || "",
+                        }),
+                    });
+                }
+
+                // Step 3: Add bank account to Stripe
+                const bankRes = await fetch(`${API_BASE}/connect/add-bank`, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        routing_number: formData.routing_number,
+                        account_number: formData.account_number,
+                        account_holder_name: formData.account_holder || "Account Holder",
+                    }),
+                });
+                if (!bankRes.ok) {
+                    const err = await bankRes.json().catch(() => ({}));
+                    throw new Error(err.message || "Failed to add bank to Stripe");
+                }
+            }
+
+            // Save payout method record to our DB
             const res = await fetch(`${API_BASE}/payment-methods`, {
                 method: "POST",
                 headers: {
@@ -306,8 +343,8 @@ export default function PayoutMethodsPage() {
                                 <div
                                     key={m.id}
                                     className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${m.is_default
-                                            ? "border-brand-orange/40 bg-brand-orange/5"
-                                            : "border-brand-border/60"
+                                        ? "border-brand-orange/40 bg-brand-orange/5"
+                                        : "border-brand-border/60"
                                         }`}
                                 >
                                     <div className="text-2xl w-10 h-10 flex items-center justify-center flex-shrink-0">
@@ -325,9 +362,7 @@ export default function PayoutMethodsPage() {
                                         <p className="text-xs text-brand-muted mt-0.5">
                                             {m.type === "paypal" || m.type === "wise"
                                                 ? meta.paypal_email || meta.wise_email || `••••${m.last_four}`
-                                                : m.type === "crypto"
-                                                    ? `${meta.network || "Crypto"} ••••${m.last_four}`
-                                                    : `${meta.bank_name || m.provider} ••••${m.last_four}`}
+                                                : `${meta.bank_name || m.provider} ••••${m.last_four}`}
                                         </p>
                                         <p className="text-[10px] text-brand-muted/70 mt-0.5">
                                             Added {new Date(m.created_at).toLocaleDateString()}
@@ -384,8 +419,8 @@ export default function PayoutMethodsPage() {
                                     <label
                                         key={pt.value}
                                         className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${selectedType === pt.value
-                                                ? "border-brand-orange bg-brand-orange/5 ring-2 ring-brand-orange/20"
-                                                : "border-brand-border/60 hover:bg-brand-bg/50"
+                                            ? "border-brand-orange bg-brand-orange/5 ring-2 ring-brand-orange/20"
+                                            : "border-brand-border/60 hover:bg-brand-bg/50"
                                             }`}
                                     >
                                         <input

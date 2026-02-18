@@ -7,6 +7,8 @@ use App\Event\EscrowFunded;
 use App\Event\EscrowReleased;
 use App\Event\MilestoneAccepted;
 use App\Event\MilestoneSubmitted;
+use App\Service\FeeCalculator;
+use App\Service\StripeService;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -21,10 +23,23 @@ final class MilestoneController
 {
     use ApiController;
 
+    private ?StripeService  $stripe = null;
+    private ?FeeCalculator  $fees   = null;
+
     public function __construct(
         private ConnectionInterface $db,
         private ?EventDispatcherInterface $events = null,
     ) {}
+
+    private function stripe(): StripeService
+    {
+        return $this->stripe ??= new StripeService();
+    }
+
+    private function fees(): FeeCalculator
+    {
+        return $this->fees ??= new FeeCalculator();
+    }
 
     #[Route('GET', '/{id}', name: 'milestones.show', summary: 'Milestone detail', tags: ['Milestones'])]
     public function show(ServerRequestInterface $request, string $id): JsonResponse
@@ -74,9 +89,10 @@ final class MilestoneController
         return $this->json(['message' => 'Milestone updated']);
     }
 
-    #[Route('POST', '/{id}/fund', name: 'milestones.fund', summary: 'Fund escrow', tags: ['Milestones'])]
+    #[Route('POST', '/{id}/fund', name: 'milestones.fund', summary: 'Fund escrow via Stripe', tags: ['Milestones'])]
     public function fund(ServerRequestInterface $request, string $id): JsonResponse
     {
+      try {
         $userId = $this->userId($request);
         $ms     = $this->findOrFail($id, $userId);
 
@@ -88,38 +104,119 @@ final class MilestoneController
             return $this->forbidden('Only the client can fund milestones');
         }
 
-        $now  = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $txId = $this->uuid();
+        if ($ms['escrow_funded']) {
+            return $this->error('Milestone is already funded', 409);
+        }
 
         $pdo = $this->db->pdo();
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        // Calculate fees
+        $amount      = (string) $ms['amount'];
+        $clientFee   = $this->fees()->calculateClientFee($amount);
+        $totalCharge = $this->fees()->totalClientCharge($amount);
+        $amountCents = $this->fees()->toCents($totalCharge);
+
+        // Get client's default payment method
+        $pmStmt = $pdo->prepare(
+            'SELECT stripe_payment_method_id FROM "paymentmethod"
+             WHERE user_id = :uid AND is_active = true AND stripe_payment_method_id IS NOT NULL
+             ORDER BY is_default DESC, created_at DESC LIMIT 1'
+        );
+        $pmStmt->execute(['uid' => $userId]);
+        $stripePm = $pmStmt->fetchColumn();
+
+        if (!$stripePm) {
+            return $this->error('No payment method on file. Please add a card first.', 400);
+        }
+
+        // Get Stripe customer ID
+        $custStmt = $pdo->prepare('SELECT stripe_customer_id, email, first_name, last_name FROM "user" WHERE id = :uid');
+        $custStmt->execute(['uid' => $userId]);
+        $user = $custStmt->fetch(\PDO::FETCH_ASSOC);
+
+        $customerId = $this->stripe()->getOrCreateCustomer(
+            $userId, $user['email'],
+            trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')),
+            $pdo
+        );
+
+        // Charge via Stripe
+        try {
+            $pi = $this->stripe()->createPaymentIntent(
+                $amountCents, 'usd', $customerId, $stripePm,
+                [
+                    'mw_type'      => 'milestone_fund',
+                    'mw_milestone' => $id,
+                    'mw_contract'  => $ms['contract_id'],
+                ]
+            );
+        } catch (\Throwable $e) {
+            error_log('[MilestoneController] Stripe charge failed: ' . $e->getMessage());
+            return $this->error('Payment failed: ' . $e->getMessage(), 402);
+        }
+
+        $txId = $this->uuid();
         $pdo->beginTransaction();
         try {
+            // Update milestone
             $pdo->prepare(
-                'UPDATE "milestone" SET funded_at = :now, status = \'in_progress\', updated_at = :now WHERE id = :id'
+                'UPDATE "milestone" SET funded_at = :now, escrow_funded = true, status = \'in_progress\', updated_at = :now WHERE id = :id'
             )->execute(['now' => $now, 'id' => $id]);
 
+            // Escrow fund transaction
             $pdo->prepare(
-                'INSERT INTO "escrowtransaction" (id, contract_id, milestone_id, type, amount, currency, status, created_at)
-                 VALUES (:id, :cid, :mid, \'fund\', :amt, :cur, \'completed\', :now)'
+                'INSERT INTO "escrowtransaction" (id, contract_id, milestone_id, type, amount, currency, status, gateway_reference, processed_at, created_at)
+                 VALUES (:id, :cid, :mid, \'fund\', :amt, \'USD\', \'completed\', :ref, :now, :now)'
             )->execute([
-                'id'  => $txId,
-                'cid' => $ms['contract_id'],
-                'mid' => $id,
-                'amt' => $ms['amount'],
-                'cur' => $ms['currency'] ?? 'USD',
-                'now' => $now,
+                'id'  => $txId, 'cid' => $ms['contract_id'], 'mid' => $id,
+                'amt' => $amount, 'ref' => $pi->id, 'now' => $now,
+            ]);
+
+            // Client fee transaction
+            $pdo->prepare(
+                'INSERT INTO "escrowtransaction" (id, contract_id, milestone_id, type, amount, currency, status, gateway_reference, processed_at, created_at)
+                 VALUES (:id, :cid, :mid, \'client_fee\', :amt, \'USD\', \'completed\', :ref, :now, :now)'
+            )->execute([
+                'id'  => $this->uuid(), 'cid' => $ms['contract_id'], 'mid' => $id,
+                'amt' => $clientFee, 'ref' => $pi->id, 'now' => $now,
+            ]);
+
+            // Auto-generate invoice
+            $invId  = $this->uuid();
+            $invNum = 'INV-' . strtoupper(substr($invId, 0, 8));
+            $total  = $totalCharge;
+            $pdo->prepare(
+                'INSERT INTO "invoice" (id, contract_id, invoice_number, subtotal, platform_fee, tax_amount, total, currency, status, issued_at, due_at, notes, created_at, updated_at)
+                 VALUES (:id, :cid, :num, :sub, :fee, \'0.00\', :total, \'USD\', \'paid\', :now, :now, :notes, :now, :now)'
+            )->execute([
+                'id' => $invId, 'cid' => $ms['contract_id'], 'num' => $invNum,
+                'sub' => $amount, 'fee' => $clientFee, 'total' => $total,
+                'now' => $now, 'notes' => 'Milestone escrow: ' . ($ms['title'] ?? $id),
             ]);
 
             $pdo->commit();
         } catch (\Throwable $e) {
             $pdo->rollBack();
-            return $this->error('Failed to fund milestone', 500);
+            error_log('[MilestoneController] fund DB error: ' . $e->getMessage());
+            return $this->error('Payment succeeded but recording failed. Contact support.', 500);
         }
 
-        // Dispatch event
-        $this->events?->dispatch(new EscrowFunded($txId, $id, $ms['contract_id'], (string) $ms['amount']));
+        $this->events?->dispatch(new EscrowFunded($txId, $id, $ms['contract_id'], $amount));
 
-        return $this->json(['message' => 'Milestone funded', 'data' => ['transaction_id' => $txId]]);
+        return $this->json([
+            'message' => 'Milestone funded',
+            'data'    => [
+                'transaction_id' => $txId,
+                'charged'        => $totalCharge,
+                'client_fee'     => $clientFee,
+                'stripe_pi'      => $pi->id,
+            ],
+        ]);
+      } catch (\Throwable $ex) {
+            error_log('[MilestoneController] fund ERROR: ' . $ex->getMessage() . ' in ' . $ex->getFile() . ':' . $ex->getLine());
+            return $this->json(['error' => true, 'message' => $ex->getMessage()], 500);
+      }
     }
 
     #[Route('POST', '/{id}/submit', name: 'milestones.submit', summary: 'Submit work', tags: ['Milestones'])]
@@ -147,7 +244,7 @@ final class MilestoneController
         return $this->json(['message' => 'Work submitted for review']);
     }
 
-    #[Route('POST', '/{id}/accept', name: 'milestones.accept', summary: 'Accept + release', tags: ['Milestones'])]
+    #[Route('POST', '/{id}/accept', name: 'milestones.accept', summary: 'Accept + release with commission', tags: ['Milestones'])]
     public function accept(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
@@ -161,40 +258,64 @@ final class MilestoneController
             return $this->forbidden('Only the client can accept');
         }
 
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $pdo    = $this->db->pdo();
+        $amount = (string) $ms['amount'];
 
-        $pdo = $this->db->pdo();
+        // Calculate tiered freelancer commission
+        $feeInfo = $this->fees()->calculateFreelancerCommission(
+            $amount, $ms['client_id'], $ms['freelancer_id'], $pdo
+        );
+        $commission = $feeInfo['commission'];
+        $netRelease = number_format((float) $amount - (float) $commission, 2, '.', '');
+
         $pdo->beginTransaction();
         try {
+            // Update milestone status
             $pdo->prepare(
-                'UPDATE "milestone" SET status = \'accepted\', accepted_at = :now, updated_at = :now WHERE id = :id'
+                'UPDATE "milestone" SET status = \'accepted\', escrow_released = true, accepted_at = :now, updated_at = :now WHERE id = :id'
             )->execute(['now' => $now, 'id' => $id]);
 
-            // Release escrow
+            // Release to freelancer (net of commission)
             $txId = $this->uuid();
             $pdo->prepare(
-                'INSERT INTO "escrowtransaction" (id, contract_id, milestone_id, type, amount, currency, status, created_at)
-                 VALUES (:id, :cid, :mid, \'release\', :amt, :cur, \'completed\', :now)'
+                'INSERT INTO "escrowtransaction" (id, contract_id, milestone_id, type, amount, currency, status, processed_at, created_at)
+                 VALUES (:id, :cid, :mid, \'release\', :amt, \'USD\', \'completed\', :now, :now)'
             )->execute([
-                'id'  => $txId,
-                'cid' => $ms['contract_id'],
-                'mid' => $id,
-                'amt' => $ms['amount'],
-                'cur' => $ms['currency'] ?? 'USD',
-                'now' => $now,
+                'id'  => $txId, 'cid' => $ms['contract_id'], 'mid' => $id,
+                'amt' => $netRelease, 'now' => $now,
             ]);
+
+            // Platform commission transaction
+            $pdo->prepare(
+                'INSERT INTO "escrowtransaction" (id, contract_id, milestone_id, type, amount, currency, status, processed_at, created_at)
+                 VALUES (:id, :cid, :mid, \'platform_fee\', :amt, \'USD\', \'completed\', :now, :now)'
+            )->execute([
+                'id'  => $this->uuid(), 'cid' => $ms['contract_id'], 'mid' => $id,
+                'amt' => $commission, 'now' => $now,
+            ]);
+
+            // Update cumulative billing for tiered commission
+            $this->fees()->updateCumulativeBilling($amount, $ms['client_id'], $ms['freelancer_id'], $pdo);
 
             $pdo->commit();
         } catch (\Throwable $e) {
             $pdo->rollBack();
+            error_log('[MilestoneController] accept error: ' . $e->getMessage());
             return $this->error('Failed to accept milestone', 500);
         }
 
-        // Dispatch events
-        $this->events?->dispatch(new MilestoneAccepted($id, $ms['contract_id'], $userId, (string) $ms['amount']));
-        $this->events?->dispatch(new EscrowReleased($txId, $id, $ms['contract_id'], (string) $ms['amount']));
+        $this->events?->dispatch(new MilestoneAccepted($id, $ms['contract_id'], $userId, $amount));
+        $this->events?->dispatch(new EscrowReleased($txId, $id, $ms['contract_id'], $netRelease));
 
-        return $this->json(['message' => 'Milestone accepted, escrow released']);
+        return $this->json([
+            'message' => 'Milestone accepted, escrow released',
+            'data'    => [
+                'released'       => $netRelease,
+                'commission'     => $commission,
+                'commission_rate'=> $feeInfo['rate_used'],
+            ],
+        ]);
     }
 
     #[Route('POST', '/{id}/request-revision', name: 'milestones.revision', summary: 'Request revision', tags: ['Milestones'])]
@@ -258,21 +379,26 @@ final class MilestoneController
     #[Route('GET', '/{id}/deliverables', name: 'milestones.deliverables', summary: 'List deliverables', tags: ['Milestones'])]
     public function deliverables(ServerRequestInterface $request, string $id): JsonResponse
     {
-        $userId = $this->userId($request);
-        $ms     = $this->findOrFail($id, $userId);
+        try {
+            $userId = $this->userId($request);
+            $ms     = $this->findOrFail($id, $userId);
 
-        if ($ms instanceof JsonResponse) {
-            return $ms;
+            if ($ms instanceof JsonResponse) {
+                return $ms;
+            }
+
+            $stmt = $this->db->pdo()->prepare(
+                'SELECT d.*
+                 FROM "deliverable" d
+                 WHERE d.milestone_id = :mid ORDER BY d.version DESC, d.created_at DESC'
+            );
+            $stmt->execute(['mid' => $id]);
+
+            return $this->json(['data' => $stmt->fetchAll(\PDO::FETCH_ASSOC)]);
+        } catch (\Throwable $ex) {
+            error_log('[MilestoneController] deliverables ERROR: ' . $ex->getMessage() . ' in ' . $ex->getFile() . ':' . $ex->getLine());
+            return $this->json(['error' => true, 'message' => $ex->getMessage()], 500);
         }
-
-        $stmt = $this->db->pdo()->prepare(
-            'SELECT d.*, u.display_name AS uploader_name
-             FROM "deliverable" d JOIN "user" u ON u.id = d.uploaded_by
-             WHERE d.milestone_id = :mid ORDER BY d.version DESC, d.created_at DESC'
-        );
-        $stmt->execute(['mid' => $id]);
-
-        return $this->json(['data' => $stmt->fetchAll(\PDO::FETCH_ASSOC)]);
     }
 
     /* ---- helpers ---- */

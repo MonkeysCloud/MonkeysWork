@@ -71,7 +71,7 @@ const FREELANCER_STEPS = [
     {
         num: "05",
         title: "Get Paid",
-        desc: "When the client approves a milestone, funds are released immediately. Choose your payout method: bank transfer, PayPal, or crypto. Weekly automated payouts.",
+        desc: "When the client approves a milestone, funds are released immediately. Choose your payout method: bank transfer or PayPal. Weekly automated payouts.",
         visual: "payout",
     },
     {
@@ -262,7 +262,7 @@ function StepVisual({ type, isClient }: { type: string; isClient: boolean }) {
                 <div className="text-3xl font-bold text-emerald-400">$4,250</div>
                 <div className="text-xs text-white/40">Released to your account</div>
                 <div className="flex justify-center gap-2">
-                    {["🏦", "💳", "₿"].map((m) => (
+                    {["🏦", "💸"].map((m) => (
                         <div key={m} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-lg border border-white/10">{m}</div>
                     ))}
                 </div>
@@ -329,8 +329,8 @@ export default function HowItWorksPage() {
                                 key={t}
                                 onClick={() => setTab(t)}
                                 className={`px-6 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${tab === t
-                                        ? "bg-brand-orange text-white shadow-md"
-                                        : "text-brand-muted hover:text-brand-dark"
+                                    ? "bg-brand-orange text-white shadow-md"
+                                    : "text-brand-muted hover:text-brand-dark"
                                     }`}
                             >
                                 For {t === "clients" ? "Clients" : "Freelancers"}
