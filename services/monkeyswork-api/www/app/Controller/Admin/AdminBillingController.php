@@ -178,7 +178,7 @@ final class AdminBillingController
 
         $w = implode(' AND ', $where);
 
-        $cnt = $pdo->prepare("SELECT COUNT(*) FROM \"escrowtransaction\" et $w");
+        $cnt = $pdo->prepare("SELECT COUNT(*) FROM \"escrowtransaction\" et WHERE $w");
         $cnt->execute($bind);
         $total = (int) $cnt->fetchColumn();
 
