@@ -280,22 +280,38 @@ final class StatsController
         $stmt->execute(['id' => $uid]);
         $activeContracts = (int) $stmt->fetchColumn();
 
-        // ── Jobs breakdown ──
+        // ── Total hires (distinct freelancers with active or completed contracts) ──
+        $hiresStmt = $pdo->prepare(
+            "SELECT COUNT(DISTINCT freelancer_id) FROM \"contract\"
+             WHERE client_id = :id AND status IN ('active', 'completed')"
+        );
+        $hiresStmt->execute(['id' => $uid]);
+        $totalHires = (int) $hiresStmt->fetchColumn();
+
+        // ── Jobs breakdown (proposals counted from proposal table, views from job table) ──
         $jobStats = $pdo->prepare(
             "SELECT
                 COUNT(*)                                          AS total,
-                COUNT(*) FILTER (WHERE status = 'draft')         AS draft,
-                COUNT(*) FILTER (WHERE status = 'open')          AS open,
-                COUNT(*) FILTER (WHERE status = 'in_progress')   AS in_progress,
-                COUNT(*) FILTER (WHERE status = 'completed')     AS completed,
-                COUNT(*) FILTER (WHERE status = 'closed')        AS closed,
-                COUNT(*) FILTER (WHERE status = 'cancelled')     AS cancelled,
-                COALESCE(SUM(proposals_count), 0)                 AS total_proposals,
-                COALESCE(SUM(views_count), 0)                     AS total_views
-             FROM \"job\" WHERE client_id = :id{$dateFilt}"
+                COUNT(*) FILTER (WHERE j.status = 'draft')       AS draft,
+                COUNT(*) FILTER (WHERE j.status = 'open')        AS open,
+                COUNT(*) FILTER (WHERE j.status = 'in_progress') AS in_progress,
+                COUNT(*) FILTER (WHERE j.status = 'completed')   AS completed,
+                COUNT(*) FILTER (WHERE j.status = 'closed')      AS closed,
+                COUNT(*) FILTER (WHERE j.status = 'cancelled')   AS cancelled,
+                COALESCE(SUM(j.views_count), 0)                   AS total_views
+             FROM \"job\" j WHERE j.client_id = :id{$dateFilt}"
         );
         $jobStats->execute(['id' => $uid]);
         $jobs = $jobStats->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+        // ── Total proposals received (counted from actual proposal table) ──
+        $totalPropStmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM \"proposal\" p
+             JOIN \"job\" j ON j.id = p.job_id
+             WHERE j.client_id = :id"
+        );
+        $totalPropStmt->execute(['id' => $uid]);
+        $totalProposals = (int) $totalPropStmt->fetchColumn();
 
         // ── Contracts breakdown ──
         $contractStats = $pdo->prepare(
@@ -376,7 +392,7 @@ final class StatsController
                 'period_spent'      => $periodSpending,
                 'active_contracts'  => $activeContracts,
                 'jobs_posted'       => (int) ($p['total_jobs_posted'] ?? 0),
-                'total_hires'       => (int) ($p['total_hires'] ?? 0),
+                'total_hires'       => $totalHires,
                 'avg_rating_given'  => (float) ($p['avg_rating_given'] ?? 0),
                 'payment_verified'  => (bool) ($p['payment_verified'] ?? false),
                 'verification_level'=> $p['verification_level'] ?? 'none',
@@ -389,10 +405,10 @@ final class StatsController
                 'completed'      => (int) ($jobs['completed'] ?? 0),
                 'closed'         => (int) ($jobs['closed'] ?? 0),
                 'cancelled'      => (int) ($jobs['cancelled'] ?? 0),
-                'total_proposals' => (int) ($jobs['total_proposals'] ?? 0),
+                'total_proposals' => $totalProposals,
                 'total_views'    => (int) ($jobs['total_views'] ?? 0),
                 'avg_proposals_per_job' => ((int) ($jobs['total'] ?? 0)) > 0
-                    ? round(((int) ($jobs['total_proposals'] ?? 0)) / ((int) $jobs['total']), 1)
+                    ? round($totalProposals / ((int) $jobs['total']), 1)
                     : 0,
             ],
             'contracts' => [

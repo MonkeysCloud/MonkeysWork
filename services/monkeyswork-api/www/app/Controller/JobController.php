@@ -229,6 +229,11 @@ final class JobController
         $att->execute(['jid' => $id]);
         $job['attachments'] = $att->fetchAll(\PDO::FETCH_ASSOC);
 
+        // Increment views_count
+        $this->db->pdo()->prepare(
+            'UPDATE "job" SET views_count = views_count + 1 WHERE id = :id'
+        )->execute(['id' => $id]);
+
         return $this->json(['data' => $job]);
     }
 

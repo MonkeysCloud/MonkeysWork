@@ -71,6 +71,11 @@ final class ProposalController
             'now' => $now,
         ]);
 
+        // Increment proposals_count on the job
+        $this->db->pdo()->prepare(
+            'UPDATE "job" SET proposals_count = proposals_count + 1 WHERE id = :jid'
+        )->execute(['jid' => $data['job_id']]);
+
         // ── Sync fraud check (feature-flag controlled) ──────────────
         $fraudResult = null;
         $flags = $this->flags ?? new FeatureFlagService($this->db);
