@@ -6,14 +6,14 @@ services:
     environment:
       POSTGRES_DB: monkeyswork
       POSTGRES_USER: mw_app
-      POSTGRES_PASSWORD: localdev
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./data/migrations:/docker-entrypoint-initdb.d
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U mw_app -d monkeyswork" ]
+      test: ["CMD-SHELL", "pg_isready -U mw_app -d monkeyswork"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -94,7 +94,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -112,21 +112,21 @@ services:
       DB_PORT: 5432
       DB_DATABASE: monkeyswork
       DB_USER: mw_app
-      DB_PASSWORD: localdev
+      DB_PASSWORD: ${DB_PASSWORD}
       REDIS_URL: redis://redis:6379
-      INTERNAL_API_TOKEN: dev-internal-token
-      JWT_SECRET: dev-secret-change-me
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      JWT_SECRET: ${JWT_SECRET}
       PUBSUB_EMULATOR_HOST: pubsub-emulator:8085
       GCP_PROJECT_ID: monkeyswork-dev
       AI_FRAUD_URL: http://ai-fraud-v1:8080/api/v1/fraud/check
       AI_MATCH_URL: http://ai-match-v1:8080/api/v1/match/rank
       AI_SCOPE_URL: http://ai-scope-assistant:8080/api/v1/scope/analyze
-      STRIPE_SECRET_KEY: sk_test_51RG4ZIB6hBd009cxqOg4bBKnSbKl00rd0Hrkr1xVnDTnqESDBYn4KaJ22tjyaX45hMNJDsGdnu6AZSxxo4jFnqrL00QyR9QEvj
-      STRIPE_PUBLISHABLE_KEY: pk_test_51RG4ZIB6hBd009cxqOg4bBKnSbKl00rd0Hrkr1xVnDTnqESDBYn4KaJ22tjyaX45hMNJDsGdnu6AZSxxo4jFnqrL00QyR9QEvj
-      STRIPE_WEBHOOK_SECRET: ""
-      PAYPAL_CLIENT_ID: "AaiiwYh24eGrAK0A0A36DkYDBvUvL_69gAPnoFA0gqWwLn0TAZS3Z1odagLIccEMOZxTEYcvSZC4aBjS"
-      PAYPAL_SECRET: "EJOnByE9Ou0VvMiZos3UQR_tmkm3UAVgJVNICat272OhjvUbY8kuaXOmm-7qWaxE38k6jJvLscPHYFHM"
-      PAYPAL_MODE: sandbox
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID}
+      PAYPAL_SECRET: ${PAYPAL_SECRET}
+      PAYPAL_MODE: ${PAYPAL_MODE:-sandbox}
     depends_on:
       postgres:
         condition: service_healthy
@@ -171,7 +171,7 @@ services:
     image: dpage/pgadmin4:latest
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@monkeyswork.com
-      PGADMIN_DEFAULT_PASSWORD: localdev
+      PGADMIN_DEFAULT_PASSWORD: ${DB_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
       - "5050:80"
