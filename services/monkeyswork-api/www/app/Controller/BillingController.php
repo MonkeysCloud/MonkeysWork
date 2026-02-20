@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\DisputePaymentService;
 use App\Service\FeeCalculator;
 use App\Service\StripeService;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
@@ -20,6 +21,7 @@ final class BillingController
 
     private ?StripeService  $stripe = null;
     private ?FeeCalculator  $fees   = null;
+    private ?DisputePaymentService $disputePayments = null;
 
     public function __construct(private ConnectionInterface $db) {}
 
@@ -31,6 +33,11 @@ final class BillingController
     private function fees(): FeeCalculator
     {
         return $this->fees ??= new FeeCalculator();
+    }
+
+    private function disputePayments(): DisputePaymentService
+    {
+        return $this->disputePayments ??= new DisputePaymentService($this->db->pdo());
     }
 
     /* ─── Summary for current user ─── */
@@ -117,6 +124,7 @@ final class BillingController
                 ),
                 'pending_payouts'     => $pendingPayoutAmount,
                 'active_contracts'    => (int) $contracts->fetchColumn(),
+                'disputed_amount'     => $this->getDisputedAmount($userId, $pdo),
             ]]);
         } catch (\Throwable $ex) {
             error_log('[BillingController] summary ERROR: ' . $ex->getMessage() . ' in ' . $ex->getFile() . ':' . $ex->getLine());
@@ -218,6 +226,13 @@ final class BillingController
                 // Get client's default payment method
                 $pm = $this->getDefaultPaymentMethod($ts['client_id'], $pdo);
                 if (!$pm) {
+                    $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+                    $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'fund_failed',
+                        $ts['total_amount'], 'failed', null, $now,
+                        ['error' => 'No payment method on file']);
+                    $this->notifyChargeFailed($pdo,
+                        $ts['client_id'], $ts['contract_id'], $ts['contract_title'],
+                        'No payment method on file', $now);
                     $results[] = ['timesheet' => $ts['timesheet_id'], 'error' => 'No payment method'];
                     continue;
                 }
@@ -228,6 +243,13 @@ final class BillingController
                 $customerId = $customerStmt->fetchColumn();
 
                 if (!$customerId) {
+                    $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+                    $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'fund_failed',
+                        $ts['total_amount'], 'failed', null, $now,
+                        ['error' => 'No Stripe customer']);
+                    $this->notifyChargeFailed($pdo,
+                        $ts['client_id'], $ts['contract_id'], $ts['contract_title'],
+                        'No Stripe customer configured', $now);
                     $results[] = ['timesheet' => $ts['timesheet_id'], 'error' => 'No Stripe customer'];
                     continue;
                 }
@@ -269,6 +291,13 @@ final class BillingController
                     'stripe_pi' => $pi->id,
                 ];
             } catch (\Throwable $e) {
+                $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+                $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'fund_failed',
+                    $ts['total_amount'], 'failed', null, $now,
+                    ['error' => $e->getMessage()]);
+                $this->notifyChargeFailed($pdo,
+                    $ts['client_id'], $ts['contract_id'], $ts['contract_title'],
+                    $e->getMessage(), $now);
                 $results[] = ['timesheet' => $ts['timesheet_id'], 'error' => $e->getMessage()];
                 error_log('[BillingController] chargeWeekly ERROR: ' . $e->getMessage());
             }
@@ -335,6 +364,87 @@ final class BillingController
 
                     if ($available < 1.00) {
                         continue; // Skip if less than $1
+                    }
+
+                    // ── Check for unbilled timesheets (client payment failed) ──
+                    $unbilledStmt = $pdo->prepare(
+                        'SELECT wt.id, c.title AS contract_title, wt.total_amount
+                         FROM "weeklytimesheet" wt
+                         JOIN "contract" c ON c.id = wt.contract_id
+                         WHERE c.freelancer_id = :uid
+                           AND wt.status = \'approved\'
+                           AND wt.billed = false'
+                    );
+                    $unbilledStmt->execute(['uid' => $fl['id']]);
+                    $unbilled = $unbilledStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+                    if (!empty($unbilled)) {
+                        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+                        $contracts = array_unique(array_column($unbilled, 'contract_title'));
+                        $contractList = implode(', ', $contracts);
+                        $unpaidTotal = array_sum(array_column($unbilled, 'total_amount'));
+
+                        // Record delayed payout
+                        $payoutId = $this->uuid();
+                        $pdo->prepare(
+                            'INSERT INTO "payout"
+                                (id, freelancer_id, amount, currency, fee, net_amount, status,
+                                 failure_reason, created_at)
+                             VALUES (:id, :uid, :amt, \'USD\', \'0.00\', :net, \'delayed\', :reason, :now)'
+                        )->execute([
+                            'id'     => $payoutId,
+                            'uid'    => $fl['id'],
+                            'amt'    => number_format($available, 2, '.', ''),
+                            'net'    => number_format($available, 2, '.', ''),
+                            'reason' => "Client payment pending for: {$contractList} (unpaid: \${$unpaidTotal})",
+                            'now'    => $now,
+                        ]);
+
+                        // Notify freelancer about delayed payout
+                        $this->notifyPayoutDelayed($pdo, $fl['id'], $contractList, $available, $now);
+
+                        $results[] = [
+                            'freelancer' => $fl['id'],
+                            'name'       => $fl['display_name'],
+                            'status'     => 'delayed',
+                            'reason'     => "Unpaid timesheets on: {$contractList}",
+                        ];
+                        continue;
+                    }
+
+                    // ── Check for active disputes blocking payout ──
+                    $activeDisputes = $this->disputePayments()->getActiveDisputesForFreelancer($fl['id']);
+                    if ($activeDisputes !== null) {
+                        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+                        $disputeContracts = array_unique(array_column($activeDisputes, 'contract_title'));
+                        $contractList = implode(', ', $disputeContracts);
+
+                        // Record delayed payout due to dispute
+                        $payoutId = $this->uuid();
+                        $pdo->prepare(
+                            'INSERT INTO "payout"
+                                (id, freelancer_id, amount, currency, fee, net_amount, status,
+                                 failure_reason, created_at)
+                             VALUES (:id, :uid, :amt, \'USD\', \'0.00\', :net, \'delayed\', :reason, :now)'
+                        )->execute([
+                            'id'     => $payoutId,
+                            'uid'    => $fl['id'],
+                            'amt'    => number_format($available, 2, '.', ''),
+                            'net'    => number_format($available, 2, '.', ''),
+                            'reason' => "Active dispute(s) on: {$contractList}",
+                            'now'    => $now,
+                        ]);
+
+                        // Notify freelancer
+                        $this->disputePayments()->notifyDisputeHold($fl['id'], $contractList, $now);
+
+                        $results[] = [
+                            'freelancer' => $fl['id'],
+                            'name'       => $fl['display_name'],
+                            'status'     => 'delayed',
+                            'reason'     => "Active dispute(s) on: {$contractList}",
+                        ];
+                        continue;
                     }
 
                     // Determine preferred payout method for this freelancer
@@ -450,14 +560,15 @@ final class BillingController
     private function insertEscrowTransaction(
         \PDO $pdo, string $contractId, ?string $milestoneId,
         string $type, string $amount, string $status,
-        ?string $gatewayRef, string $now
+        ?string $gatewayRef, string $now,
+        ?array $gatewayMetadata = null
     ): string {
         $id = $this->uuid();
         $pdo->prepare(
             'INSERT INTO "escrowtransaction"
                 (id, contract_id, milestone_id, type, amount, currency, status,
-                 gateway_reference, created_at)
-             VALUES (:id, :cid, :mid, :type, :amt, \'USD\', :status, :ref, :now)'
+                 gateway_reference, gateway_metadata, created_at)
+             VALUES (:id, :cid, :mid, :type, :amt, \'USD\', :status, :ref, :meta, :now)'
         )->execute([
             'id'     => $id,
             'cid'    => $contractId,
@@ -466,6 +577,7 @@ final class BillingController
             'amt'    => $amount,
             'status' => $status,
             'ref'    => $gatewayRef,
+            'meta'   => $gatewayMetadata ? json_encode($gatewayMetadata) : null,
             'now'    => $now,
         ]);
         return $id;
@@ -507,5 +619,202 @@ final class BillingController
             mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
             mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
         );
+    }
+
+    /* ─── Notify client about a failed charge ─── */
+
+    private function notifyChargeFailed(
+        \PDO $pdo, string $clientId, string $contractId,
+        string $contractTitle, string $errorMsg, string $now
+    ): void {
+        $notifId = $this->uuid();
+        try {
+            $pdo->prepare(
+                'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
+                 VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
+            )->execute([
+                'id'    => $notifId,
+                'uid'   => $clientId,
+                'type'  => 'billing.charge_failed',
+                'title' => '⚠️ Payment Failed',
+                'body'  => "Your payment for \"{$contractTitle}\" could not be processed. Please update your payment method to avoid delays.",
+                'data'  => json_encode([
+                    'contract_id' => $contractId,
+                    'error'       => $errorMsg,
+                    'link'        => '/dashboard/billing/payment-methods',
+                ]),
+                'prio'  => 'warning',
+                'chan'   => 'in_app',
+                'now'   => $now,
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[BillingController] notifyChargeFailed insert: ' . $e->getMessage());
+        }
+
+        // Real-time push via Redis/Socket.IO
+        $this->pushSocketNotification($clientId, $notifId, 'billing.charge_failed',
+            '⚠️ Payment Failed',
+            "Your payment for \"{$contractTitle}\" could not be processed.",
+            ['contract_id' => $contractId, 'link' => '/dashboard/billing/payment-methods'],
+            'warning', $now);
+    }
+
+    /* ─── Notify freelancer about a delayed payout ─── */
+
+    private function notifyPayoutDelayed(
+        \PDO $pdo, string $freelancerId, string $contractList,
+        float $amount, string $now
+    ): void {
+        $notifId = $this->uuid();
+        $formattedAmount = number_format($amount, 2);
+        try {
+            $pdo->prepare(
+                'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
+                 VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
+            )->execute([
+                'id'    => $notifId,
+                'uid'   => $freelancerId,
+                'type'  => 'billing.payout_delayed',
+                'title' => '⏳ Payout Delayed',
+                'body'  => "Your weekly payout of \${$formattedAmount} has been delayed. We're waiting for client payment on: {$contractList}. Your payout will be processed as soon as the payment clears.",
+                'data'  => json_encode([
+                    'contracts' => $contractList,
+                    'amount'    => $formattedAmount,
+                    'link'      => '/dashboard/billing',
+                ]),
+                'prio'  => 'warning',
+                'chan'   => 'in_app',
+                'now'   => $now,
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[BillingController] notifyPayoutDelayed insert: ' . $e->getMessage());
+        }
+
+        $this->pushSocketNotification($freelancerId, $notifId, 'billing.payout_delayed',
+            '⏳ Payout Delayed',
+            "Your weekly payout of \${$formattedAmount} has been delayed.",
+            ['contracts' => $contractList, 'link' => '/dashboard/billing'],
+            'warning', $now);
+    }
+
+    /* ─── Push real-time notification via Redis/Socket.IO ─── */
+
+    private function pushSocketNotification(
+        string $userId, string $notifId, string $type, string $title,
+        string $body, array $data, string $priority, string $now
+    ): void {
+        try {
+            $redisHost = getenv('REDIS_HOST') ?: 'redis';
+            $redisPort = (int) (getenv('REDIS_PORT') ?: 6379);
+            $redis = new \Redis();
+            $redis->connect($redisHost, $redisPort, 2.0);
+
+            $socket = new \App\Service\SocketEvent($redis);
+            $socket->toUser($userId, 'notification:new', [
+                'id'         => $notifId,
+                'type'       => $type,
+                'title'      => $title,
+                'body'       => $body,
+                'data'       => $data,
+                'priority'   => $priority,
+                'created_at' => $now,
+            ]);
+
+            $redis->close();
+        } catch (\Throwable $e) {
+            error_log("[BillingController] socket push: " . $e->getMessage());
+        }
+    }
+
+    /* ─── Admin: Retry a failed charge for a timesheet ─── */
+
+    #[Route('POST', '/retry-charge/{timesheetId}', name: 'billing.retryCharge', summary: 'Retry failed charge', tags: ['Billing'])]
+    public function retryCharge(ServerRequestInterface $request, string $timesheetId): JsonResponse
+    {
+        try {
+            $pdo = $this->db->pdo();
+
+            // Get the unbilled timesheet
+            $stmt = $pdo->prepare(
+                'SELECT wt.id, wt.contract_id, wt.total_amount,
+                        c.client_id, c.title AS contract_title
+                 FROM "weeklytimesheet" wt
+                 JOIN "contract" c ON c.id = wt.contract_id
+                 WHERE wt.id = :id AND wt.billed = false AND wt.status = \'approved\''
+            );
+            $stmt->execute(['id' => $timesheetId]);
+            $ts = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$ts) {
+                return $this->error('Timesheet not found or already billed', 404);
+            }
+
+            $clientFee   = $this->fees()->calculateClientFee($ts['total_amount']);
+            $totalCharge = $this->fees()->totalClientCharge($ts['total_amount']);
+            $amountCents = $this->fees()->toCents($totalCharge);
+
+            $pm = $this->getDefaultPaymentMethod($ts['client_id'], $pdo);
+            if (!$pm) {
+                return $this->error('Client has no payment method on file');
+            }
+
+            $customerStmt = $pdo->prepare('SELECT stripe_customer_id FROM "user" WHERE id = :uid');
+            $customerStmt->execute(['uid' => $ts['client_id']]);
+            $customerId = $customerStmt->fetchColumn();
+
+            if (!$customerId) {
+                return $this->error('Client has no Stripe customer');
+            }
+
+            $pi = $this->stripe()->createPaymentIntent(
+                $amountCents, 'usd', $customerId, $pm['stripe_payment_method_id'],
+                ['mw_type' => 'retry_charge', 'mw_timesheet' => $timesheetId, 'mw_contract' => $ts['contract_id']]
+            );
+
+            $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+            $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'fund',
+                $ts['total_amount'], 'completed', $pi->id, $now);
+            $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'client_fee',
+                $clientFee, 'completed', $pi->id, $now);
+            $this->autoGenerateInvoice($pdo, $ts['contract_id'], $ts['total_amount'],
+                $clientFee, $ts['contract_title'] . ' — Retry charge', $now);
+
+            $pdo->prepare('UPDATE "weeklytimesheet" SET billed = true, updated_at = :now WHERE id = :id')
+                ->execute(['now' => $now, 'id' => $timesheetId]);
+
+            // Clear any delayed payouts for the freelancer (they'll be picked up next Friday)
+            $pdo->prepare(
+                'UPDATE "payout" SET status = \'pending\', failure_reason = NULL
+                 WHERE freelancer_id = (SELECT freelancer_id FROM "contract" WHERE id = :cid LIMIT 1)
+                   AND status = \'delayed\''
+            )->execute(['cid' => $ts['contract_id']]);
+
+            return $this->json([
+                'message'   => 'Charge retried successfully',
+                'stripe_pi' => $pi->id,
+                'charged'   => $totalCharge,
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[BillingController] retryCharge ERROR: ' . $e->getMessage());
+            return $this->error('Retry failed: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get the total amount held in dispute for contracts involving this user.
+     */
+    private function getDisputedAmount(string $userId, \PDO $pdo): string
+    {
+        $stmt = $pdo->prepare(
+            'SELECT COALESCE(SUM(et.amount), 0) AS total
+             FROM "escrowtransaction" et
+             JOIN "contract" c ON c.id = et.contract_id
+             WHERE et.type = \'dispute_hold\' AND et.status = \'completed\'
+               AND (c.client_id = :uid OR c.freelancer_id = :uid2)'
+        );
+        $stmt->execute(['uid' => $userId, 'uid2' => $userId]);
+
+        return $stmt->fetchColumn() ?: '0.00';
     }
 }

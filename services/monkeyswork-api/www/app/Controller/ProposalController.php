@@ -334,7 +334,7 @@ final class ProposalController
         $stmt = $this->db->pdo()->prepare(
             'SELECT p.id, p.job_id, p.freelancer_id, p.bid_amount, p.bid_type,
                     p.milestones_proposed, p.cover_letter,
-                    j.client_id, j.title AS job_title
+                    j.client_id, j.title AS job_title, j.weekly_hours_limit
              FROM "proposal" p JOIN "job" j ON j.id = p.job_id WHERE p.id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -363,12 +363,12 @@ final class ProposalController
             'INSERT INTO "contract"
                 (id, job_id, proposal_id, client_id, freelancer_id,
                  title, description, contract_type, total_amount,
-                 hourly_rate, currency, status, platform_fee_percent,
+                 hourly_rate, weekly_hour_limit, currency, status, platform_fee_percent,
                  started_at, created_at, updated_at)
              VALUES
                 (:id, :job_id, :proposal_id, :client_id, :freelancer_id,
                  :title, :description, :contract_type, :total_amount,
-                 :hourly_rate, :currency, :status, :platform_fee,
+                 :hourly_rate, :whl, :currency, :status, :platform_fee,
                  :started_at, :created_at, :updated_at)'
         )->execute([
             'id'              => $contractId,
@@ -381,6 +381,7 @@ final class ProposalController
             'contract_type'   => $info['bid_type'],
             'total_amount'    => $info['bid_amount'],
             'hourly_rate'     => $isHourly ? $info['bid_amount'] : null,
+            'whl'             => $isHourly ? ($info['weekly_hours_limit'] ?? null) : null,
             'currency'        => 'USD',
             'status'          => 'active',
             'platform_fee'    => '10.00',

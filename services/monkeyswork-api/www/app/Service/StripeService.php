@@ -48,11 +48,11 @@ final class StripeService
 
     /* ─── Setup Intents (for saving cards) ─── */
 
-    public function createSetupIntent(string $customerId): \Stripe\SetupIntent
+    public function createSetupIntent(string $customerId, array $paymentMethodTypes = ['card']): \Stripe\SetupIntent
     {
         return $this->client()->setupIntents->create([
             'customer'               => $customerId,
-            'payment_method_types'   => ['card'],
+            'payment_method_types'   => $paymentMethodTypes,
             'usage'                  => 'off_session',
         ]);
     }

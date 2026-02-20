@@ -209,12 +209,12 @@ export default function MessagesPage() {
                     body: formData,
                 });
                 const uploadJson = await uploadRes.json();
-                console.log("[convo attach] upload response:", uploadJson);
+
                 // Use relative file_url paths — rendering already prepends the API base
                 attachmentUrls = (uploadJson.data ?? []).map((a: { file_url?: string; url?: string }) =>
                     a.file_url ?? a.url ?? ""
                 ).filter(Boolean);
-                console.log("[convo attach] attachment URLs:", attachmentUrls);
+
             }
 
             // Step 2: Send message with optional attachments
@@ -1674,7 +1674,7 @@ export default function MessagesPage() {
                                             {attList.length > 0 && (
                                                 <div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
                                                     {attList.map((a, i) => {
-                                                        const fullUrl = `${API.replace("/api/v1", "")}${a.url}`;
+                                                        const fullUrl = a.url.startsWith("http") ? a.url : `${API.replace("/api/v1", "")}${a.url}`;
                                                         const ext = a.url.split(".").pop()?.toLowerCase() ?? "";
                                                         const isImage = ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
                                                         const fileName = a.url.split("/").pop() ?? `Attachment ${i + 1}`;
@@ -1804,15 +1804,17 @@ export default function MessagesPage() {
                                     <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end" }}>
                                         {/* Hidden file input */}
                                         <input
+                                            key="convo-file-input"
                                             ref={convoFileInputRef}
                                             type="file"
                                             multiple
                                             style={{ display: "none" }}
                                             onChange={(e) => {
-                                                if (e.target.files) {
-                                                    setConvoFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+                                                const files = e.target.files;
+                                                if (files && files.length > 0) {
+                                                    setConvoFiles((prev) => [...prev, ...Array.from(files)]);
                                                 }
-                                                e.target.value = "";
+                                                setTimeout(() => { e.target.value = ""; }, 0);
                                             }}
                                         />
                                         {/* Attach button */}

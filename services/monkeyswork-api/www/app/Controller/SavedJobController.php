@@ -31,7 +31,7 @@ final class SavedJobController
 
         try {
             $stmt = $this->db->pdo()->prepare(
-                'SELECT sj.id, sj.job_id, sj.created_at,
+                'SELECT sj.job_id, sj.created_at,
                         j.title, j.slug, j.status, j.budget_type, j.budget_min, j.budget_max,
                         j.currency, j.experience_level, j.created_at AS job_created_at,
                         j.published_at, j.location_type, j.location_regions, j.location_countries,
@@ -65,7 +65,7 @@ final class SavedJobController
 
         try {
             $stmt = $this->db->pdo()->prepare(
-                'SELECT id FROM saved_job WHERE user_id = :uid AND job_id = :jid'
+                'SELECT 1 FROM saved_job WHERE user_id = :uid AND job_id = :jid'
             );
             $stmt->execute(['uid' => $userId, 'jid' => $jobId]);
             $row = $stmt->fetch(\PDO::FETCH_ASSOC);

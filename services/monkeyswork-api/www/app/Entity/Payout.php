@@ -39,7 +39,7 @@ class Payout
     #[Field(type: 'decimal', precision: 12, scale: 2)]
     public string $net_amount;
 
-    #[Field(type: 'enum', enumValues: ['pending', 'processing', 'completed', 'failed'], default: 'pending')]
+    #[Field(type: 'enum', enumValues: ['pending', 'processing', 'completed', 'failed', 'delayed'], default: 'pending')]
     public string $status = 'pending';
 
     #[Field(type: 'string', length: 255, nullable: true)]
@@ -102,6 +102,13 @@ class Payout
     public function markFailed(string $reason): self
     {
         $this->status = 'failed';
+        $this->failure_reason = $reason;
+        return $this;
+    }
+
+    public function markDelayed(string $reason): self
+    {
+        $this->status = 'delayed';
         $this->failure_reason = $reason;
         return $this;
     }

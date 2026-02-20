@@ -22,56 +22,113 @@ final class FreelancerController
     ) {}
 
     #[Route('GET', '', name: 'freelancers.index', summary: 'Search/list freelancers', tags: ['Freelancers'])]
-    public function index(ServerRequestInterface $request): JsonResponse
-    {
-        $query = $request->getQueryParams();
-        $p     = $this->pagination($request);
+public function index(ServerRequestInterface $request): JsonResponse
+{
+    $query = $request->getQueryParams();
+    $p     = $this->pagination($request);
 
-        $where  = ['1=1'];
-        $params = [];
+    $where  = ['1=1'];
+    $params = [];
 
-        if (!empty($query['skill'])) {
-            $where[]          = 'EXISTS (SELECT 1 FROM "freelancer_skills" fs JOIN "skill" s ON s.id = fs.skill_id WHERE fs.freelancer_id = fp.user_id AND s.slug = :skill)';
-            $params['skill']  = $query['skill'];
-        }
-        if (!empty($query['min_rate'])) {
-            $where[]             = 'fp.hourly_rate >= :min_rate';
-            $params['min_rate']  = $query['min_rate'];
-        }
-        if (!empty($query['max_rate'])) {
-            $where[]             = 'fp.hourly_rate <= :max_rate';
-            $params['max_rate']  = $query['max_rate'];
-        }
-        if (!empty($query['availability'])) {
-            $where[]                 = 'fp.availability_status = :avail';
-            $params['avail']         = $query['availability'];
-        }
-
-        $whereSql = implode(' AND ', $where);
-
-        $countStmt = $this->db->pdo()->prepare("SELECT COUNT(*) FROM \"freelancerprofile\" fp WHERE {$whereSql}");
-        $countStmt->execute($params);
-        $total = (int) $countStmt->fetchColumn();
-
-        $stmt = $this->db->pdo()->prepare(
-            "SELECT fp.*, u.display_name, u.avatar_url, u.country,
-                    fp.verification_level
-             FROM \"freelancerprofile\" fp
-             JOIN \"user\" u ON u.id = fp.user_id
-             WHERE {$whereSql}
-             ORDER BY fp.avg_rating DESC, fp.total_jobs_completed DESC
-             LIMIT :limit OFFSET :offset"
-        );
-        foreach ($params as $k => $v) {
-            $stmt->bindValue($k, $v);
-        }
-        $stmt->bindValue('limit', $p['perPage'], \PDO::PARAM_INT);
-        $stmt->bindValue('offset', $p['offset'], \PDO::PARAM_INT);
-        $stmt->execute();
-
-        return $this->paginated($stmt->fetchAll(\PDO::FETCH_ASSOC), $total, $p['page'], $p['perPage']);
+    /* ── Text search (name or email) ── */
+    if (!empty($query['search'])) {
+        $where[]           = '(u.display_name ILIKE :search OR u.email ILIKE :search)';
+        $params['search']  = '%' . $query['search'] . '%';
     }
 
+    /* ── Country / Region filter (supports comma-separated codes) ── */
+    if (!empty($query['country'])) {
+        $countries = array_filter(array_map('trim', explode(',', $query['country'])));
+        if (count($countries) === 1) {
+            $where[]             = 'u.country = :country';
+            $params['country']   = $countries[0];
+        } else {
+            $cph = [];
+            foreach ($countries as $ci => $cc) {
+                $k = "country_{$ci}";
+                $cph[] = ":{$k}";
+                $params[$k] = $cc;
+            }
+            $where[] = 'u.country IN (' . implode(',', $cph) . ')';
+        }
+    }
+
+    /* ── Single skill (backward compat) ── */
+    if (!empty($query['skill'])) {
+        $where[]          = 'EXISTS (SELECT 1 FROM "freelancer_skills" fs JOIN "skill" s ON s.id = fs.skill_id WHERE fs.freelancer_id = fp.user_id AND s.slug = :skill)';
+        $params['skill']  = $query['skill'];
+    }
+
+    /* ── Multi-skill: skills=react,node,figma (AND match) ── */
+    if (!empty($query['skills'])) {
+        $slugs = array_filter(array_map('trim', explode(',', $query['skills'])));
+        foreach ($slugs as $i => $slug) {
+            $key = "skill_{$i}";
+            $where[] = "EXISTS (SELECT 1 FROM \"freelancer_skills\" fs JOIN \"skill\" s ON s.id = fs.skill_id WHERE fs.freelancer_id = fp.user_id AND s.slug = :{$key})";
+            $params[$key] = $slug;
+        }
+    }
+
+    if (!empty($query['min_rate'])) {
+        $where[]             = 'fp.hourly_rate >= :min_rate';
+        $params['min_rate']  = $query['min_rate'];
+    }
+    if (!empty($query['max_rate'])) {
+        $where[]             = 'fp.hourly_rate <= :max_rate';
+        $params['max_rate']  = $query['max_rate'];
+    }
+    if (!empty($query['availability'])) {
+        $where[]                 = 'fp.availability_status = :avail';
+        $params['avail']         = $query['availability'];
+    }
+
+    $whereSql = implode(' AND ', $where);
+    $fromSql  = '"freelancerprofile" fp JOIN "user" u ON u.id = fp.user_id';
+
+    $countStmt = $this->db->pdo()->prepare("SELECT COUNT(*) FROM {$fromSql} WHERE {$whereSql}");
+    $countStmt->execute($params);
+    $total = (int) $countStmt->fetchColumn();
+
+    /* ── Also fetch skills per freelancer ── */
+    $stmt = $this->db->pdo()->prepare(
+        "SELECT fp.*, u.display_name, u.avatar_url, u.email, u.country,
+                fp.verification_level
+         FROM {$fromSql}
+         WHERE {$whereSql}
+         ORDER BY fp.avg_rating DESC, fp.total_jobs_completed DESC
+         LIMIT :limit OFFSET :offset"
+    );
+    foreach ($params as $k => $v) {
+        $stmt->bindValue($k, $v);
+    }
+    $stmt->bindValue('limit', $p['perPage'], \PDO::PARAM_INT);
+    $stmt->bindValue('offset', $p['offset'], \PDO::PARAM_INT);
+    $stmt->execute();
+
+    $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+    /* Attach skills list to each freelancer */
+    if ($rows) {
+        $ids = array_column($rows, 'user_id');
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $skillStmt = $this->db->pdo()->prepare(
+            "SELECT fs.freelancer_id, s.name, s.slug
+             FROM \"freelancer_skills\" fs
+             JOIN \"skill\" s ON s.id = fs.skill_id
+             WHERE fs.freelancer_id IN ({$ph})"
+        );
+        $skillStmt->execute($ids);
+        $skillMap = [];
+        foreach ($skillStmt->fetchAll(\PDO::FETCH_ASSOC) as $sk) {
+            $skillMap[$sk['freelancer_id']][] = ['name' => $sk['name'], 'slug' => $sk['slug']];
+        }
+        foreach ($rows as &$row) {
+            $row['skills'] = $skillMap[$row['user_id']] ?? [];
+        }
+    }
+
+    return $this->paginated($rows, $total, $p['page'], $p['perPage']);
+}
     /* ------------------------------------------------------------------ */
     /*  GET /me – Current user's freelancer profile (never 404s)          */
     /* ------------------------------------------------------------------ */

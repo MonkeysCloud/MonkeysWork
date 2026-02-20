@@ -52,7 +52,7 @@ final class PaymentMethodController
         }
     }
 
-    /* ─── Create Stripe SetupIntent (for secure card collection) ─── */
+    /* ─── Create Stripe SetupIntent (for card or bank account) ─── */
 
     #[Route('POST', '/setup-intent', name: 'pm.setup', summary: 'Create SetupIntent', tags: ['Payment Methods'])]
     public function setupIntent(ServerRequestInterface $request): JsonResponse
@@ -60,15 +60,22 @@ final class PaymentMethodController
         try {
             $userId = $this->userId($request);
             $pdo    = $this->db->pdo();
+            $body   = $this->body($request);
+
+            error_log('[PaymentMethodController] setupIntent: userId=' . $userId);
 
             // Get user info for Stripe customer
             $userStmt = $pdo->prepare('SELECT email, first_name, last_name, stripe_customer_id FROM "user" WHERE id = :uid');
             $userStmt->execute(['uid' => $userId]);
             $user = $userStmt->fetch(\PDO::FETCH_ASSOC);
 
+            error_log('[PaymentMethodController] setupIntent: user=' . json_encode($user));
+
             if (!$user) {
                 return $this->error('User not found', 404);
             }
+
+            error_log('[PaymentMethodController] setupIntent: calling getOrCreateCustomer...');
 
             $customerId = $this->stripe->getOrCreateCustomer(
                 $userId,
@@ -77,7 +84,18 @@ final class PaymentMethodController
                 $pdo
             );
 
-            $si = $this->stripe->createSetupIntent($customerId);
+            error_log('[PaymentMethodController] setupIntent: customerId=' . $customerId);
+
+            $pmTypes = ['card'];
+            if (($body['type'] ?? '') === 'us_bank_account') {
+                $pmTypes = ['us_bank_account'];
+            }
+
+            error_log('[PaymentMethodController] setupIntent: creating SetupIntent with types=' . json_encode($pmTypes));
+
+            $si = $this->stripe->createSetupIntent($customerId, $pmTypes);
+
+            error_log('[PaymentMethodController] setupIntent: SUCCESS client_secret=' . substr($si->client_secret, 0, 20) . '...');
 
             return $this->json([
                 'data' => [
@@ -87,11 +105,12 @@ final class PaymentMethodController
             ]);
         } catch (\Throwable $e) {
             error_log('[PaymentMethodController] setupIntent ERROR: ' . $e->getMessage());
+            error_log('[PaymentMethodController] setupIntent TRACE: ' . $e->getTraceAsString());
             return $this->error('Failed to create setup intent: ' . $e->getMessage(), 500);
         }
     }
 
-    /* ─── Save card after successful SetupIntent confirmation ─── */
+    /* ─── Save payment method (card, bank account, or PayPal) ─── */
 
     #[Route('POST', '', name: 'pm.create', summary: 'Add payment method', tags: ['Payment Methods'])]
     public function create(ServerRequestInterface $request): JsonResponse
@@ -100,26 +119,12 @@ final class PaymentMethodController
             $userId = $this->userId($request);
             $data   = $this->body($request);
             $pdo    = $this->db->pdo();
-
-            $stripePmId = $data['payment_method_id'] ?? null;
-            if (empty($stripePmId)) {
-                return $this->error('payment_method_id is required');
-            }
-
-            // Retrieve PM details from Stripe
-            $pm = $this->stripe->retrievePaymentMethod($stripePmId);
+            $type   = $data['type'] ?? 'card';
 
             $id  = $this->uuid();
             $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-            // If setting as default, clear other defaults first
-            if (!empty($data['is_default'])) {
-                $pdo->prepare(
-                    'UPDATE "paymentmethod" SET is_default = false WHERE user_id = :uid'
-                )->execute(['uid' => $userId]);
-            }
-
-            // Check if this is the user's first card — auto-set as default
+            // Auto-set as default if first payment method
             $countStmt = $pdo->prepare(
                 'SELECT COUNT(*) FROM "paymentmethod" WHERE user_id = :uid AND is_active = true'
             );
@@ -132,6 +137,70 @@ final class PaymentMethodController
                     ->execute(['uid' => $userId]);
             }
 
+            // ── PayPal: just save email, no Stripe involved ──
+            if ($type === 'paypal') {
+                $paypalEmail = $data['paypal_email'] ?? null;
+                if (empty($paypalEmail)) {
+                    return $this->error('paypal_email is required for PayPal');
+                }
+
+                $pdo->prepare(
+                    'INSERT INTO "paymentmethod" (id, user_id, type, provider, last_four,
+                                                  token, stripe_payment_method_id, metadata,
+                                                  is_default, is_active, expiry,
+                                                  created_at, updated_at)
+                     VALUES (:id, :uid, :type, :prov, :last4, :tok, :spm, :meta, :def, true, null, :now, :now)'
+                )->execute([
+                    'id'   => $id,
+                    'uid'  => $userId,
+                    'type' => 'paypal',
+                    'prov' => 'paypal',
+                    'last4' => substr($paypalEmail, 0, 4),
+                    'tok'  => null,
+                    'spm'  => null,
+                    'meta' => json_encode(['paypal_email' => $paypalEmail]),
+                    'def'  => $setDefault ? 'true' : 'false',
+                    'now'  => $now,
+                ]);
+
+                return $this->created(['data' => [
+                    'id' => $id, 'type' => 'paypal', 'provider' => 'paypal',
+                    'last_four' => substr($paypalEmail, 0, 4), 'is_default' => $setDefault,
+                ]]);
+            }
+
+            // ── Stripe card or bank account ──
+            $stripePmId = $data['payment_method_id'] ?? null;
+            if (empty($stripePmId)) {
+                return $this->error('payment_method_id is required');
+            }
+
+            $pm = $this->stripe->retrievePaymentMethod($stripePmId);
+
+            // Determine type-specific fields
+            if ($type === 'us_bank_account' || ($pm->type ?? '') === 'us_bank_account') {
+                $bank     = $pm->us_bank_account ?? null;
+                $pmType   = 'us_bank_account';
+                $provider = $bank->bank_name ?? 'Bank';
+                $last4    = $bank->last4 ?? '••••';
+                $expiry   = null;
+                $meta     = json_encode([
+                    'bank_name'      => $bank->bank_name ?? null,
+                    'account_type'   => $bank->account_type ?? null,
+                    'routing_number' => $bank->routing_number ?? null,
+                ]);
+            } else {
+                $pmType   = $pm->type ?? 'card';
+                $provider = $pm->card->brand ?? 'unknown';
+                $last4    = $pm->card->last4 ?? '••••';
+                $expiry   = $pm->card ? sprintf('%02d/%04d', $pm->card->exp_month, $pm->card->exp_year) : null;
+                $meta     = json_encode([
+                    'funding'   => $pm->card->funding ?? null,
+                    'exp_month' => $pm->card->exp_month ?? null,
+                    'exp_year'  => $pm->card->exp_year ?? null,
+                ]);
+            }
+
             $pdo->prepare(
                 'INSERT INTO "paymentmethod" (id, user_id, type, provider, last_four,
                                               token, stripe_payment_method_id, metadata,
@@ -141,26 +210,22 @@ final class PaymentMethodController
             )->execute([
                 'id'    => $id,
                 'uid'   => $userId,
-                'type'  => $pm->type ?? 'card',
-                'prov'  => $pm->card->brand ?? 'unknown',
-                'last4' => $pm->card->last4 ?? '••••',
+                'type'  => $pmType,
+                'prov'  => $provider,
+                'last4' => $last4,
                 'tok'   => null,
                 'spm'   => $stripePmId,
-                'meta'  => json_encode([
-                    'funding'   => $pm->card->funding ?? null,
-                    'exp_month' => $pm->card->exp_month ?? null,
-                    'exp_year'  => $pm->card->exp_year ?? null,
-                ]),
+                'meta'  => $meta,
                 'def'   => $setDefault ? 'true' : 'false',
-                'exp'   => $pm->card ? sprintf('%02d/%04d', $pm->card->exp_month, $pm->card->exp_year) : null,
+                'exp'   => $expiry,
                 'now'   => $now,
             ]);
 
             return $this->created(['data' => [
                 'id'        => $id,
-                'type'      => $pm->type ?? 'card',
-                'brand'     => $pm->card->brand ?? 'unknown',
-                'last_four' => $pm->card->last4 ?? '••••',
+                'type'      => $pmType,
+                'provider'  => $provider,
+                'last_four' => $last4,
                 'is_default' => $setDefault,
             ]]);
         } catch (\Throwable $e) {

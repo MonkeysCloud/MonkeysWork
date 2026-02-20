@@ -53,6 +53,9 @@ class Job
     #[Field(type: 'decimal', precision: 12, scale: 2, nullable: true)]
     public ?string $budget_max = null;
 
+    #[Field(type: 'integer', nullable: true, comment: 'Max hours per week for hourly contracts')]
+    public ?int $weekly_hours_limit = null;
+
     #[Field(type: 'char', length: 3, default: 'USD')]
     public string $currency = 'USD';
 
@@ -176,6 +179,7 @@ class Job
     public function getBudgetTypeValue(): string { return $this->budget_type; }
     public function getBudgetMin(): ?string { return $this->budget_min; }
     public function getBudgetMax(): ?string { return $this->budget_max; }
+    public function getWeeklyHoursLimit(): ?int { return $this->weekly_hours_limit; }
     public function getCurrency(): string { return $this->currency; }
     public function getStatus(): string { return $this->status; }
     public function getVisibility(): string { return $this->visibility; }
@@ -223,6 +227,7 @@ class Job
     public function setBudgetTypeValue(string $v): self { $this->budget_type = $v; return $this; }
     public function setBudgetMin(?string $v): self { $this->budget_min = $v; return $this; }
     public function setBudgetMax(?string $v): self { $this->budget_max = $v; return $this; }
+    public function setWeeklyHoursLimit(?int $v): self { $this->weekly_hours_limit = $v; return $this; }
     public function setCurrency(string $v): self { $this->currency = $v; return $this; }
     public function setStatusValue(string $v): self { $this->status = $v; return $this; }
     public function setVisibility(string $v): self { $this->visibility = $v; return $this; }

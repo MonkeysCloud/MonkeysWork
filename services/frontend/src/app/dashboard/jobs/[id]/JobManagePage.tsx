@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import ALL_COUNTRIES from "@/data/countries";
 
@@ -157,6 +158,7 @@ export default function JobManagePage() {
     const [error, setError] = useState<string | null>(null);
     const [toast, setToast] = useState<string | null>(null);
     const [previewAtt, setPreviewAtt] = useState<Attachment | null>(null);
+    const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(null);
 
     const isOwner = !!(job && user && job.client_id === user.id);
     const [isSaved, setIsSaved] = useState(false);
@@ -220,6 +222,20 @@ export default function JobManagePage() {
             })
             .catch(() => { });
     }, [job, isOwner, id, token]);
+
+    /* check if client has a payment method */
+    useEffect(() => {
+        if (!token || !isOwner) return;
+        fetch(`${API_BASE}/payment-methods`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then((r) => r.json())
+            .then((body) => {
+                const methods = body.data ?? [];
+                setHasPaymentMethod(methods.length > 0);
+            })
+            .catch(() => setHasPaymentMethod(false));
+    }, [token, isOwner]);
 
     async function toggleSaveJob() {
         if (!token) return;
@@ -463,7 +479,28 @@ export default function JobManagePage() {
                             >
                                 📋 View Proposals
                             </button>
-                            {(job.status === "draft" || job.status === "revision_requested" || job.status === "rejected") && (
+                            {(job.status === "draft" || job.status === "revision_requested" || job.status === "rejected") && hasPaymentMethod === false && (
+                                <div className="w-full px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                                    <div className="flex items-start gap-3">
+                                        <span className="text-lg mt-0.5">💳</span>
+                                        <div>
+                                            <p className="text-sm font-semibold text-amber-800 mb-1">
+                                                Payment method required to publish
+                                            </p>
+                                            <p className="text-xs text-amber-700 mb-2">
+                                                Add a payment method before publishing your job.
+                                            </p>
+                                            <Link
+                                                href="/dashboard/billing/payment-methods"
+                                                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
+                                            >
+                                                💳 Add Payment Method
+                                            </Link>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            {(job.status === "draft" || job.status === "revision_requested" || job.status === "rejected") && hasPaymentMethod !== false && (
                                 <button
                                     onClick={() =>
                                         requestAction(

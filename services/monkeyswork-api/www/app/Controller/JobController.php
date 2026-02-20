@@ -122,12 +122,12 @@ final class JobController
 
         $this->db->pdo()->prepare(
             'INSERT INTO "job" (id, client_id, title, slug, description, category_id, budget_type,
-                                budget_min, budget_max, currency, estimated_duration,
+                                budget_min, budget_max, weekly_hours_limit, currency, estimated_duration,
                                 experience_level, status, visibility, ai_scope,
                                 location_type, location_regions, location_countries,
                                 milestones_suggested,
                                 created_at, updated_at)
-             VALUES (:id, :client_id, :title, :slug, :desc, :cat, :bt, :bmin, :bmax, :cur,
+             VALUES (:id, :client_id, :title, :slug, :desc, :cat, :bt, :bmin, :bmax, :whl, :cur,
                      :dur, :exp, \'draft\', :vis, :ai,
                      :loc_type, :loc_regions, :loc_countries,
                      :milestones,
@@ -142,6 +142,7 @@ final class JobController
             'bt'             => $data['budget_type'],
             'bmin'           => $data['budget_min'] ?? null,
             'bmax'           => $data['budget_max'] ?? null,
+            'whl'            => ($data['budget_type'] === 'hourly' && isset($data['weekly_hours_limit'])) ? (int) $data['weekly_hours_limit'] : null,
             'cur'            => $data['currency'] ?? 'USD',
             'dur'            => $data['estimated_duration'] ?? $data['duration_weeks'] ?? null,
             'exp'            => $data['experience_level'] ?? 'intermediate',
@@ -250,7 +251,7 @@ final class JobController
         }
 
         $allowed = ['title', 'description', 'category_id', 'budget_type', 'budget_min',
-                     'budget_max', 'currency', 'estimated_duration', 'experience_level', 'visibility',
+                     'budget_max', 'weekly_hours_limit', 'currency', 'estimated_duration', 'experience_level', 'visibility',
                      'location_type', 'location_regions', 'location_countries', 'milestones_suggested'];
 
         $jsonFields = ['location_regions', 'location_countries', 'milestones_suggested'];

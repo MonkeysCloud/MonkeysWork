@@ -103,8 +103,9 @@ const CLIENT_MENU: MenuConfig = {
             label: "Notifications",
             href: "/dashboard/notifications",
         },
-        { icon: "🔍", label: "Find Talent", href: "/freelancers" },
+        { icon: "🔍", label: "Find Talent", href: "/dashboard/freelancers" },
         { icon: "⭐", label: "Reviews Given", href: "/dashboard/reviews" },
+        { icon: "📈", label: "Stats", href: "/dashboard/stats" },
         {
             icon: "⚙️",
             label: "Settings",

@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Controller\ApiController;
 use App\Event\DisputeResolved;
+use App\Service\DisputePaymentService;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -19,10 +20,17 @@ final class AdminDisputeController
 {
     use ApiController;
 
+    private ?DisputePaymentService $disputePayments = null;
+
     public function __construct(
         private ConnectionInterface $db,
         private ?EventDispatcherInterface $events = null,
     ) {}
+
+    private function disputePayments(): DisputePaymentService
+    {
+        return $this->disputePayments ??= new DisputePaymentService($this->db->pdo());
+    }
 
     /* ── List all disputes ────────────────────────────── */
 
@@ -210,6 +218,14 @@ final class AdminDisputeController
             'now2'   => $now,
             'id'     => $id,
         ]);
+
+        // Process financial effects of the resolution
+        $this->disputePayments()->resolvePayment(
+            $id,
+            $dispute['contract_id'],
+            $status,
+            $data['resolution_amount'] ?? null,
+        );
 
         // Dispatch event
         $this->events?->dispatch(new DisputeResolved(

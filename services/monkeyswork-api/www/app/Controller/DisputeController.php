@@ -5,6 +5,7 @@ namespace App\Controller;
 
 use App\Event\DisputeOpened;
 use App\Event\DisputeResolved;
+use App\Service\DisputePaymentService;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -21,10 +22,17 @@ final class DisputeController
 
     private const RESPONSE_DAYS = 3;
 
+    private ?DisputePaymentService $disputePayments = null;
+
     public function __construct(
         private ConnectionInterface $db,
         private ?EventDispatcherInterface $events = null,
     ) {}
+
+    private function disputePayments(): DisputePaymentService
+    {
+        return $this->disputePayments ??= new DisputePaymentService($this->db->pdo());
+    }
 
     /* ── List current user's disputes ─────────────────── */
 
@@ -126,6 +134,26 @@ final class DisputeController
         $this->db->pdo()->prepare(
             'UPDATE "contract" SET status = \'disputed\', updated_at = :now WHERE id = :cid'
         )->execute(['now' => $now->format('Y-m-d H:i:s'), 'cid' => $data['contract_id']]);
+
+        // Hold freelancer payout for the disputed amount
+        $this->disputePayments()->holdPayoutForDispute(
+            $data['contract_id'],
+            $id,
+            $data['dispute_amount'] ?? null,
+        );
+
+        // Notify freelancer about the hold
+        $freelancerId = $contract['client_id'] === $userId
+            ? $contract['freelancer_id']
+            : ($contract['client_id'] === $userId ? $contract['freelancer_id'] : null);
+        if ($freelancerId && $freelancerId !== $userId) {
+            $cTitle = $this->db->pdo()->prepare('SELECT title FROM "contract" WHERE id = :cid');
+            $cTitle->execute(['cid' => $data['contract_id']]);
+            $contractTitle = $cTitle->fetchColumn() ?: 'Contract';
+            $this->disputePayments()->notifyDisputeHold(
+                $freelancerId, $contractTitle, $now->format('Y-m-d H:i:s')
+            );
+        }
 
         // Dispatch event
         $this->events?->dispatch(new DisputeOpened($id, $data['contract_id'], $userId, $data['reason']));
@@ -324,25 +352,36 @@ final class DisputeController
             return $this->notFound('Dispute');
         }
 
+        $resolveStatus = $data['status'] ?? 'resolved_split';
+        $resolutionAmount = $data['resolution_amount'] ?? null;
+
         $this->db->pdo()->prepare(
             'UPDATE "dispute" SET status = :status, resolution_notes = :notes, resolution_amount = :amount,
                     resolved_by = :uid, resolved_at = :now, response_deadline = NULL,
                     awaiting_response_from = NULL, updated_at = :now2 WHERE id = :id'
         )->execute([
-            'status' => $data['status'] ?? 'resolved_split',
+            'status' => $resolveStatus,
             'notes'  => $data['resolution_notes'] ?? null,
-            'amount' => $data['resolution_amount'] ?? null,
+            'amount' => $resolutionAmount,
             'uid'    => $userId,
             'now'    => $now,
             'now2'   => $now,
             'id'     => $id,
         ]);
 
+        // Process financial effects of the resolution
+        $this->disputePayments()->resolvePayment(
+            $id,
+            $dispute['contract_id'],
+            $resolveStatus,
+            $resolutionAmount,
+        );
+
         // Dispatch event
         $this->events?->dispatch(new DisputeResolved(
             $id,
             $dispute['contract_id'],
-            $data['status'] ?? 'resolved_split',
+            $resolveStatus,
             $userId
         ));
 

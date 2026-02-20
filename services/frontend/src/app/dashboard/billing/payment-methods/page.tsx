@@ -17,12 +17,21 @@ const getStripe = () => {
 interface PM {
     id: string; type: string; provider: string; last_four: string;
     expiry: string | null; is_default: boolean; stripe_payment_method_id: string;
+    [key: string]: unknown;
 }
+
+type AddMode = "card" | "bank" | "paypal" | null;
+
+const METHOD_TABS: { key: AddMode & string; label: string; icon: string; desc: string }[] = [
+    { key: "card", label: "Credit / Debit Card", icon: "💳", desc: "Visa, Mastercard, Amex" },
+    { key: "bank", label: "US Bank Account", icon: "🏦", desc: "ACH Direct Debit" },
+    { key: "paypal", label: "PayPal", icon: "💸", desc: "Pay with your PayPal account" },
+];
 
 export default function PaymentMethodsPage() {
     const { token } = useAuth();
     const [methods, setMethods] = useState<PM[]>([]);
-    const [showAdd, setShowAdd] = useState(false);
+    const [addMode, setAddMode] = useState<AddMode>(null);
     const [loading, setLoading] = useState(true);
 
     const load = useCallback(async () => {
@@ -52,41 +61,85 @@ export default function PaymentMethodsPage() {
         load();
     };
 
-    const brandIcon = (brand: string) => {
-        const b = brand.toLowerCase();
-        if (b.includes("visa")) return "💳";
-        if (b.includes("master")) return "💳";
-        if (b.includes("amex")) return "💳";
-        return "🏦";
+    const methodIcon = (pm: PM) => {
+        const p = pm.provider?.toLowerCase() || pm.type?.toLowerCase() || "";
+        if (p.includes("paypal")) return "💸";
+        if (p.includes("bank") || p.includes("ach") || pm.type === "us_bank_account") return "🏦";
+        return "💳";
     };
+
+    const methodLabel = (pm: PM) => {
+        const p = pm.provider?.toLowerCase() || pm.type?.toLowerCase() || "";
+        if (p.includes("paypal")) return "PayPal";
+        if (p.includes("bank") || p.includes("ach") || pm.type === "us_bank_account") return "Bank Account";
+        return pm.provider || "Card";
+    };
+
+    const onSuccess = () => { setAddMode(null); load(); };
 
     return (
         <div style={{ maxWidth: 800, margin: "0 auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
                 <div>
                     <h1 style={{ fontSize: 28, fontWeight: 700, color: "#111827" }}>Payment Methods</h1>
-                    <p style={{ color: "#6b7280", marginTop: 4 }}>Manage your saved cards for billing</p>
+                    <p style={{ color: "#6b7280", marginTop: 4 }}>Manage your cards, bank accounts, and PayPal</p>
                 </div>
                 <button
-                    onClick={() => setShowAdd(!showAdd)}
+                    onClick={() => setAddMode(addMode ? null : "card")}
                     style={{
                         padding: "10px 24px", borderRadius: 10, border: "none",
-                        background: "linear-gradient(135deg, #f97316, #ea580c)", color: "#fff",
-                        fontWeight: 600, cursor: "pointer", fontSize: 14,
+                        background: addMode ? "#6b7280" : "linear-gradient(135deg, #f97316, #ea580c)",
+                        color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 14,
                     }}
                 >
-                    {showAdd ? "Cancel" : "+ Add Card"}
+                    {addMode ? "Cancel" : "+ Add Method"}
                 </button>
             </div>
 
-            {/* ── Add Card Form ── */}
-            {showAdd && (
-                <Elements stripe={getStripe()}>
-                    <AddCardForm token={token!} onSuccess={() => { setShowAdd(false); load(); }} />
-                </Elements>
+            {/* ── Add Method Panel ── */}
+            {addMode && (
+                <div style={{
+                    background: "#fff", borderRadius: 16, border: "1px solid #e5e7eb",
+                    padding: 24, marginBottom: 24,
+                }}>
+                    {/* Tabs */}
+                    <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+                        {METHOD_TABS.map((t) => (
+                            <button
+                                key={t.key}
+                                onClick={() => setAddMode(t.key as AddMode)}
+                                style={{
+                                    flex: 1, padding: "12px 8px", borderRadius: 10,
+                                    border: addMode === t.key ? "2px solid #f97316" : "1px solid #e5e7eb",
+                                    background: addMode === t.key ? "#fff7ed" : "#fff",
+                                    cursor: "pointer", textAlign: "center", transition: "all 0.15s",
+                                }}
+                            >
+                                <div style={{ fontSize: 24 }}>{t.icon}</div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", marginTop: 4 }}>{t.label}</div>
+                                <div style={{ fontSize: 11, color: "#9ca3af" }}>{t.desc}</div>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Form based on selected tab */}
+                    {addMode === "card" && (
+                        <Elements stripe={getStripe()}>
+                            <AddCardForm token={token!} onSuccess={onSuccess} />
+                        </Elements>
+                    )}
+                    {addMode === "bank" && (
+                        <Elements stripe={getStripe()}>
+                            <AddBankForm token={token!} onSuccess={onSuccess} />
+                        </Elements>
+                    )}
+                    {addMode === "paypal" && (
+                        <AddPayPalForm token={token!} onSuccess={onSuccess} />
+                    )}
+                </div>
             )}
 
-            {/* ── Cards List ── */}
+            {/* ── Methods List ── */}
             {loading ? (
                 <div style={{ textAlign: "center", padding: 40 }}>
                     <div style={{ width: 36, height: 36, border: "4px solid #e5e7eb", borderTop: "4px solid #f97316", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto" }} />
@@ -98,7 +151,7 @@ export default function PaymentMethodsPage() {
                     padding: "48px 24px", textAlign: "center",
                 }}>
                     <p style={{ fontSize: 48 }}>💳</p>
-                    <p style={{ color: "#6b7280", marginTop: 8 }}>No payment methods yet. Add a card to get started.</p>
+                    <p style={{ color: "#6b7280", marginTop: 8 }}>No payment methods yet. Add a card, bank account, or PayPal to get started.</p>
                 </div>
             ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -109,13 +162,13 @@ export default function PaymentMethodsPage() {
                             display: "flex", alignItems: "center", justifyContent: "space-between",
                         }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                                <span style={{ fontSize: 32 }}>{brandIcon(pm.provider)}</span>
+                                <span style={{ fontSize: 32 }}>{methodIcon(pm)}</span>
                                 <div>
                                     <div style={{ fontWeight: 600, fontSize: 16, textTransform: "capitalize" }}>
-                                        {pm.provider} •••• {pm.last_four}
+                                        {methodLabel(pm)} {pm.last_four ? `•••• ${pm.last_four}` : ""}
                                     </div>
                                     <div style={{ fontSize: 13, color: "#6b7280" }}>
-                                        {pm.expiry || "No expiry"}
+                                        {pm.expiry || (pm.type === "us_bank_account" ? "ACH Direct Debit" : pm.type === "paypal" ? "PayPal Account" : "No expiry")}
                                         {pm.is_default && <span style={{ marginLeft: 8, color: "#f97316", fontWeight: 600 }}>★ Default</span>}
                                     </div>
                                 </div>
@@ -150,6 +203,8 @@ export default function PaymentMethodsPage() {
     );
 }
 
+/* ─────────────── Add Card Form ─────────────── */
+
 function AddCardForm({ token, onSuccess }: { token: string; onSuccess: () => void }) {
     const stripe = useStripe();
     const elements = useElements();
@@ -159,12 +214,10 @@ function AddCardForm({ token, onSuccess }: { token: string; onSuccess: () => voi
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!stripe || !elements) return;
-
         setSaving(true);
         setError("");
 
         try {
-            // Step 1: Create SetupIntent on backend
             const siRes = await fetch(`${API}/payment-methods/setup-intent`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -172,26 +225,18 @@ function AddCardForm({ token, onSuccess }: { token: string; onSuccess: () => voi
             if (!siRes.ok) throw new Error("Failed to create setup intent");
             const { data: si } = await siRes.json();
 
-            // Step 2: Confirm SetupIntent with Stripe Elements
             const { error: stripeError, setupIntent } = await stripe.confirmCardSetup(si.client_secret, {
                 payment_method: { card: elements.getElement(CardElement)! },
             });
 
-            if (stripeError) {
-                setError(stripeError.message || "Card verification failed");
-                setSaving(false);
-                return;
-            }
+            if (stripeError) { setError(stripeError.message || "Card verification failed"); setSaving(false); return; }
 
-            // Step 3: Save payment method to backend
             const saveRes = await fetch(`${API}/payment-methods`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
                 body: JSON.stringify({ payment_method_id: setupIntent?.payment_method }),
             });
-
             if (!saveRes.ok) throw new Error("Failed to save payment method");
-
             onSuccess();
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Something went wrong");
@@ -200,46 +245,206 @@ function AddCardForm({ token, onSuccess }: { token: string; onSuccess: () => voi
     };
 
     return (
-        <form onSubmit={handleSubmit} style={{
-            background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb",
-            padding: 24, marginBottom: 24,
-        }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#111827" }}>Add a new card</h3>
-
-            <div style={{
-                padding: 14, borderRadius: 8, border: "1px solid #e5e7eb", marginBottom: 16,
-                background: "#f9fafb",
-            }}>
-                <CardElement options={{
-                    style: {
-                        base: {
-                            fontSize: "16px", color: "#111827",
-                            "::placeholder": { color: "#9ca3af" },
-                        },
-                    },
-                }} />
+        <form onSubmit={handleSubmit}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#111827" }}>💳 Add Credit / Debit Card</h3>
+            <div style={{ padding: 14, borderRadius: 8, border: "1px solid #e5e7eb", marginBottom: 16, background: "#f9fafb" }}>
+                <CardElement options={{ style: { base: { fontSize: "16px", color: "#111827", "::placeholder": { color: "#9ca3af" } } } }} />
             </div>
-
-            {error && (
-                <div style={{
-                    padding: "10px 14px", borderRadius: 8, background: "#fef2f2",
-                    color: "#dc2626", fontSize: 14, marginBottom: 16,
-                }}>
-                    {error}
-                </div>
-            )}
-
-            <button type="submit" disabled={!stripe || saving} style={{
-                width: "100%", padding: "12px 24px", borderRadius: 10, border: "none",
-                background: saving ? "#d1d5db" : "linear-gradient(135deg, #f97316, #ea580c)",
-                color: "#fff", fontWeight: 600, cursor: saving ? "not-allowed" : "pointer", fontSize: 15,
-            }}>
-                {saving ? "Saving..." : "Save Card"}
-            </button>
-
-            <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 12, textAlign: "center" }}>
-                🔒 Your card info is securely processed by Stripe. We never store your full card details.
-            </p>
+            {error && <div style={{ padding: "10px 14px", borderRadius: 8, background: "#fef2f2", color: "#dc2626", fontSize: 14, marginBottom: 16 }}>{error}</div>}
+            <SubmitBtn saving={saving} disabled={!stripe || saving} label="Save Card" />
+            <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 12, textAlign: "center" }}>🔒 Securely processed by Stripe</p>
         </form>
+    );
+}
+
+/* ─────────────── Add US Bank Account Form ─────────────── */
+
+function AddBankForm({ token, onSuccess }: { token: string; onSuccess: () => void }) {
+    const stripe = useStripe();
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+    const [accountHolder, setAccountHolder] = useState("");
+    const [routingNumber, setRoutingNumber] = useState("");
+    const [accountNumber, setAccountNumber] = useState("");
+    const [accountType, setAccountType] = useState<"checking" | "savings">("checking");
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!stripe) return;
+        setSaving(true);
+        setError("");
+
+        try {
+            // Create setup intent for us_bank_account
+            const siRes = await fetch(`${API}/payment-methods/setup-intent`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ type: "us_bank_account" }),
+            });
+            if (!siRes.ok) throw new Error("Failed to create setup intent");
+            const { data: si } = await siRes.json();
+
+            // Confirm with bank details
+            const { error: stripeError, setupIntent } = await stripe.confirmUsBankAccountSetup(si.client_secret, {
+                payment_method: {
+                    us_bank_account: {
+                        routing_number: routingNumber,
+                        account_number: accountNumber,
+                        account_holder_type: "individual",
+                        account_type: accountType,
+                    },
+                    billing_details: {
+                        name: accountHolder,
+                    },
+                },
+            });
+
+            if (stripeError) { setError(stripeError.message || "Bank verification failed"); setSaving(false); return; }
+
+            // Save to backend
+            const saveRes = await fetch(`${API}/payment-methods`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    payment_method_id: setupIntent?.payment_method,
+                    type: "us_bank_account",
+                }),
+            });
+            if (!saveRes.ok) throw new Error("Failed to save bank account");
+            onSuccess();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Something went wrong");
+        }
+        setSaving(false);
+    };
+
+    const inputStyle = {
+        width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #e5e7eb",
+        fontSize: 15, background: "#f9fafb", outline: "none", boxSizing: "border-box" as const,
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#111827" }}>🏦 Add US Bank Account</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+                <div>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 4, display: "block" }}>Account Holder Name</label>
+                    <input
+                        required value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)}
+                        placeholder="Full legal name" style={inputStyle}
+                    />
+                </div>
+                <div style={{ display: "flex", gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 4, display: "block" }}>Routing Number</label>
+                        <input
+                            required value={routingNumber} onChange={(e) => setRoutingNumber(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                            placeholder="9 digits" maxLength={9} style={inputStyle}
+                        />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 4, display: "block" }}>Account Number</label>
+                        <input
+                            required value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
+                            placeholder="Account number" style={inputStyle}
+                        />
+                    </div>
+                </div>
+                <div>
+                    <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 4, display: "block" }}>Account Type</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                        {(["checking", "savings"] as const).map((t) => (
+                            <button
+                                key={t} type="button" onClick={() => setAccountType(t)}
+                                style={{
+                                    flex: 1, padding: "10px", borderRadius: 8, cursor: "pointer",
+                                    border: accountType === t ? "2px solid #f97316" : "1px solid #e5e7eb",
+                                    background: accountType === t ? "#fff7ed" : "#fff",
+                                    fontWeight: 600, fontSize: 14, color: accountType === t ? "#ea580c" : "#6b7280",
+                                    textTransform: "capitalize",
+                                }}
+                            >
+                                {t}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+            {error && <div style={{ padding: "10px 14px", borderRadius: 8, background: "#fef2f2", color: "#dc2626", fontSize: 14, marginBottom: 16 }}>{error}</div>}
+            <SubmitBtn saving={saving} disabled={!stripe || saving || !accountHolder || !routingNumber || !accountNumber} label="Save Bank Account" />
+            <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 12, textAlign: "center" }}>🔒 Bank verification via Stripe ACH. Microdeposits may be required.</p>
+        </form>
+    );
+}
+
+/* ─────────────── Add PayPal Form ─────────────── */
+
+function AddPayPalForm({ token, onSuccess }: { token: string; onSuccess: () => void }) {
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+    const [email, setEmail] = useState("");
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaving(true);
+        setError("");
+
+        try {
+            const res = await fetch(`${API}/payment-methods`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    type: "paypal",
+                    paypal_email: email,
+                }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.message || "Failed to save PayPal");
+            }
+            onSuccess();
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Something went wrong");
+        }
+        setSaving(false);
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#111827" }}>💸 Add PayPal Account</h3>
+            <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 4, display: "block" }}>PayPal Email Address</label>
+                <input
+                    type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@paypal-email.com"
+                    style={{
+                        width: "100%", padding: "12px 14px", borderRadius: 8, border: "1px solid #e5e7eb",
+                        fontSize: 15, background: "#f9fafb", outline: "none", boxSizing: "border-box",
+                    }}
+                />
+            </div>
+            <div style={{
+                padding: "10px 14px", borderRadius: 8, background: "#eff6ff",
+                color: "#1d4ed8", fontSize: 13, marginBottom: 16,
+            }}>
+                ℹ️ We&apos;ll use this email to process payments through PayPal. Make sure it matches your active PayPal account.
+            </div>
+            {error && <div style={{ padding: "10px 14px", borderRadius: 8, background: "#fef2f2", color: "#dc2626", fontSize: 14, marginBottom: 16 }}>{error}</div>}
+            <SubmitBtn saving={saving} disabled={saving || !email} label="Save PayPal" />
+        </form>
+    );
+}
+
+/* ─────────────── Shared Submit Button ─────────────── */
+
+function SubmitBtn({ saving, disabled, label }: { saving: boolean; disabled: boolean; label: string }) {
+    return (
+        <button type="submit" disabled={disabled} style={{
+            width: "100%", padding: "12px 24px", borderRadius: 10, border: "none",
+            background: disabled ? "#d1d5db" : "linear-gradient(135deg, #f97316, #ea580c)",
+            color: "#fff", fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", fontSize: 15,
+        }}>
+            {saving ? "Saving..." : label}
+        </button>
     );
 }

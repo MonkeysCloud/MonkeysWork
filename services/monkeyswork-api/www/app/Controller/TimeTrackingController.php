@@ -62,6 +62,38 @@ final class TimeTrackingController
             return $this->error('You already have a running timer. Stop it first.');
         }
 
+        // ── Weekly hour limit enforcement ──
+        $weeklyLimit = isset($contract['weekly_hour_limit']) ? (int) $contract['weekly_hour_limit'] : null;
+        if ($weeklyLimit && $weeklyLimit > 0) {
+            // Monday 00:00 of the current ISO week
+            $weekStart = (new \DateTimeImmutable('monday this week'))->format('Y-m-d 00:00:00');
+            $weekEnd   = (new \DateTimeImmutable('monday next week'))->format('Y-m-d 00:00:00');
+
+            $hwStmt = $this->db->pdo()->prepare(
+                'SELECT COALESCE(SUM(duration_minutes), 0) AS mins
+                 FROM "timeentry"
+                 WHERE contract_id = :cid AND freelancer_id = :uid
+                   AND started_at >= :ws AND started_at < :we
+                   AND status IN (\'stopped\', \'running\')'
+            );
+            $hwStmt->execute([
+                'cid' => $contractId, 'uid' => $userId,
+                'ws'  => $weekStart,  'we'  => $weekEnd,
+            ]);
+            $minutesThisWeek = (int) $hwStmt->fetchColumn();
+            $hoursThisWeek   = round($minutesThisWeek / 60, 2);
+            $remaining       = round($weeklyLimit - $hoursThisWeek, 2);
+
+            if ($minutesThisWeek >= ($weeklyLimit * 60)) {
+                return $this->json([
+                    'error'            => 'Weekly hour limit reached for this contract',
+                    'weekly_limit'     => $weeklyLimit,
+                    'hours_this_week'  => $hoursThisWeek,
+                    'remaining_hours'  => max(0, $remaining),
+                ], 409);
+            }
+        }
+
         $id  = $this->uuid();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
@@ -435,23 +467,49 @@ final class TimeTrackingController
             return $this->error('Entry is not running');
         }
 
+        $now    = new \DateTimeImmutable();
+        $nowStr = $now->format('Y-m-d H:i:s');
+
+        // Update entry timestamp + activity score
         $sets   = ['"updated_at" = :now'];
-        $params = ['id' => $entryId, 'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s')];
+        $params = ['id' => $entryId, 'now' => $nowStr];
 
         if (isset($data['activity_score'])) {
-            $sets[]                    = '"activity_score" = :score';
-            $params['score']           = $data['activity_score'];
+            $sets[]          = '"activity_score" = :score';
+            $params['score'] = $data['activity_score'];
         }
 
+        // Also append to legacy JSONB array for backwards compat
         if (isset($data['screenshot_url'])) {
-            // Append to JSONB array
-            $sets[] = '"screenshot_urls" = "screenshot_urls" || :ss::jsonb';
-            $params['ss'] = json_encode([$data['screenshot_url']]);
+            $sets[]        = '"screenshot_urls" = "screenshot_urls" || :ss::jsonb';
+            $params['ss']  = json_encode([$data['screenshot_url']]);
         }
 
         $this->db->pdo()->prepare(
             'UPDATE "timeentry" SET ' . implode(', ', $sets) . ' WHERE id = :id'
         )->execute($params);
+
+        // Insert into screenshot table if we have a screenshot
+        if (isset($data['screenshot_url'])) {
+            $clicks = (int) ($data['click_count'] ?? 0);
+            $keys   = (int) ($data['key_count'] ?? 0);
+            $total  = $clicks + $keys;
+            $pct    = number_format(min(100.0, ($total / max(1, 100)) * 100), 2, '.', '');
+
+            $this->db->pdo()->prepare(
+                'INSERT INTO "screenshot"
+                    (id, time_entry_id, file_url, click_count, key_count, activity_percent, captured_at, created_at)
+                 VALUES (:id, :entry, :url, :clicks, :keys, :pct, :cap, :cap)'
+            )->execute([
+                'id'     => $this->uuid(),
+                'entry'  => $entryId,
+                'url'    => $data['screenshot_url'],
+                'clicks' => $clicks,
+                'keys'   => $keys,
+                'pct'    => $pct,
+                'cap'    => $nowStr,
+            ]);
+        }
 
         return $this->json(['message' => 'Heartbeat received']);
     }
@@ -719,6 +777,250 @@ final class TimeTrackingController
         $stats['hourly_rate']           = $contract['hourly_rate'] ?? null;
 
         return $this->json(['data' => $stats]);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  SCREENSHOTS
+    // ═══════════════════════════════════════════════════════════════
+
+    #[Route('GET', '/entries/{id}/screenshots', name: 'time.screenshots', summary: 'List screenshots for entry', tags: ['Time Tracking'])]
+    public function screenshots(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $entry  = $this->findEntry($id, $userId);
+        if ($entry instanceof JsonResponse) return $entry;
+
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT * FROM "screenshot"
+             WHERE time_entry_id = :eid AND deleted_at IS NULL
+             ORDER BY captured_at ASC'
+        );
+        $stmt->execute(['eid' => $id]);
+
+        return $this->json(['data' => $stmt->fetchAll(\PDO::FETCH_ASSOC)]);
+    }
+
+    #[Route('DELETE', '/screenshots/{id}', name: 'time.screenshot.delete', summary: 'Delete a screenshot and deduct time', tags: ['Time Tracking'])]
+    public function deleteScreenshot(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+
+        // Find the screenshot
+        $stmt = $this->db->pdo()->prepare('SELECT * FROM "screenshot" WHERE id = :id AND deleted_at IS NULL');
+        $stmt->execute(['id' => $id]);
+        $ss = $stmt->fetch(\PDO::FETCH_ASSOC);
+        if (!$ss) return $this->notFound('Screenshot');
+
+        // Auth check via entry
+        $entry = $this->findEntry($ss['time_entry_id'], $userId);
+        if ($entry instanceof JsonResponse) return $entry;
+        if ($entry['freelancer_id'] !== $userId) {
+            return $this->forbidden('Only the freelancer can delete screenshots');
+        }
+
+        return $this->softDeleteScreenshotAndDeduct($ss, $entry);
+    }
+
+    #[Route('POST', '/screenshots/batch-delete', name: 'time.screenshot.batchDelete', summary: 'Batch delete screenshots', tags: ['Time Tracking'])]
+    public function batchDeleteScreenshots(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $data   = $this->body($request);
+        $ids    = $data['ids'] ?? [];
+
+        if (empty($ids) || !is_array($ids)) {
+            return $this->error('ids array is required');
+        }
+
+        $deleted = 0;
+        foreach ($ids as $ssId) {
+            $stmt = $this->db->pdo()->prepare('SELECT * FROM "screenshot" WHERE id = :id AND deleted_at IS NULL');
+            $stmt->execute(['id' => $ssId]);
+            $ss = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$ss) continue;
+
+            $entry = $this->findEntry($ss['time_entry_id'], $userId);
+            if ($entry instanceof JsonResponse) continue;
+            if ($entry['freelancer_id'] !== $userId) continue;
+
+            $this->softDeleteScreenshotAndDeduct($ss, $entry);
+            $deleted++;
+        }
+
+        return $this->json(['message' => "Deleted {$deleted} screenshot(s)", 'deleted' => $deleted]);
+    }
+
+    private function softDeleteScreenshotAndDeduct(array $ss, array $entry): JsonResponse
+    {
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        // Soft-delete the screenshot
+        $this->db->pdo()->prepare(
+            'UPDATE "screenshot" SET deleted_at = :now WHERE id = :id'
+        )->execute(['now' => $now, 'id' => $ss['id']]);
+
+        // Count remaining screenshots for this entry
+        $totalStmt = $this->db->pdo()->prepare(
+            'SELECT COUNT(*) FROM "screenshot"
+             WHERE time_entry_id = :eid AND deleted_at IS NULL'
+        );
+        $totalStmt->execute(['eid' => $entry['id']]);
+        $remaining = (int) $totalStmt->fetchColumn();
+
+        // Count original total (including soft-deleted)
+        $origStmt = $this->db->pdo()->prepare(
+            'SELECT COUNT(*) FROM "screenshot" WHERE time_entry_id = :eid'
+        );
+        $origStmt->execute(['eid' => $entry['id']]);
+        $original = (int) $origStmt->fetchColumn();
+
+        // Proportional deduction: new_duration = original_duration * (remaining / original)
+        if ($original > 0 && $entry['duration_minutes'] > 0) {
+            $newMins = (int) round($entry['duration_minutes'] * ($remaining / $original));
+            $rate    = (float) $entry['hourly_rate'];
+            $newAmt  = number_format(($newMins / 60) * $rate, 2, '.', '');
+
+            $this->db->pdo()->prepare(
+                'UPDATE "timeentry" SET duration_minutes = :dur, amount = :amt, updated_at = :now WHERE id = :id'
+            )->execute([
+                'dur' => $newMins,
+                'amt' => $newAmt,
+                'now' => $now,
+                'id'  => $entry['id'],
+            ]);
+        }
+
+        return $this->json([
+            'message'        => 'Screenshot deleted',
+            'remaining'      => $remaining,
+            'duration_minutes' => $newMins ?? $entry['duration_minutes'],
+        ]);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  CLAIMS
+    // ═══════════════════════════════════════════════════════════════
+
+    #[Route('POST', '/entries/{id}/claims', name: 'time.claim.create', summary: 'Client creates a claim', tags: ['Time Tracking'])]
+    public function createClaim(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $entry  = $this->findEntry($id, $userId);
+        if ($entry instanceof JsonResponse) return $entry;
+
+        if ($entry['client_id'] !== $userId) {
+            return $this->forbidden('Only the client can file a claim');
+        }
+
+        $data = $this->body($request);
+        $msg  = trim($data['message'] ?? '');
+        $type = $data['type'] ?? 'detail_request';
+
+        if (!$msg) return $this->error('message is required');
+        if (!in_array($type, ['detail_request', 'dispute'])) {
+            return $this->error('type must be detail_request or dispute');
+        }
+
+        $claimId = $this->uuid();
+        $now     = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        $this->db->pdo()->prepare(
+            'INSERT INTO "time_entry_claim"
+                (id, time_entry_id, client_id, type, message, status, created_at)
+             VALUES (:id, :eid, :cid, :type, :msg, \'open\', :now)'
+        )->execute([
+            'id'   => $claimId,
+            'eid'  => $id,
+            'cid'  => $userId,
+            'type' => $type,
+            'msg'  => $msg,
+            'now'  => $now,
+        ]);
+
+        return $this->json([
+            'message' => 'Claim created',
+            'data'    => ['id' => $claimId, 'status' => 'open'],
+        ], 201);
+    }
+
+    #[Route('GET', '/entries/{id}/claims', name: 'time.claims', summary: 'List claims for entry', tags: ['Time Tracking'])]
+    public function listClaims(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $entry  = $this->findEntry($id, $userId);
+        if ($entry instanceof JsonResponse) return $entry;
+
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT * FROM "time_entry_claim"
+             WHERE time_entry_id = :eid
+             ORDER BY created_at DESC'
+        );
+        $stmt->execute(['eid' => $id]);
+
+        return $this->json(['data' => $stmt->fetchAll(\PDO::FETCH_ASSOC)]);
+    }
+
+    #[Route('PUT', '/claims/{id}/respond', name: 'time.claim.respond', summary: 'Freelancer responds to a claim', tags: ['Time Tracking'])]
+    public function respondClaim(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $data   = $this->body($request);
+        $resp   = trim($data['response'] ?? '');
+
+        if (!$resp) return $this->error('response is required');
+
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT c.*, te.freelancer_id
+             FROM "time_entry_claim" c
+             JOIN "timeentry" te ON te.id = c.time_entry_id
+             WHERE c.id = :id'
+        );
+        $stmt->execute(['id' => $id]);
+        $claim = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$claim) return $this->notFound('Claim');
+        if ($claim['freelancer_id'] !== $userId) {
+            return $this->forbidden('Only the freelancer can respond');
+        }
+        if ($claim['status'] === 'resolved') {
+            return $this->error('Claim is already resolved');
+        }
+
+        $this->db->pdo()->prepare(
+            'UPDATE "time_entry_claim" SET response = :resp, status = \'responded\' WHERE id = :id'
+        )->execute(['resp' => $resp, 'id' => $id]);
+
+        return $this->json(['message' => 'Response submitted']);
+    }
+
+    #[Route('PUT', '/claims/{id}/resolve', name: 'time.claim.resolve', summary: 'Client resolves a claim', tags: ['Time Tracking'])]
+    public function resolveClaim(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT c.*, te.contract_id
+             FROM "time_entry_claim" c
+             JOIN "timeentry" te ON te.id = c.time_entry_id
+             WHERE c.id = :id'
+        );
+        $stmt->execute(['id' => $id]);
+        $claim = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$claim) return $this->notFound('Claim');
+        if ($claim['client_id'] !== $userId) {
+            return $this->forbidden('Only the client can resolve a claim');
+        }
+        if ($claim['status'] === 'resolved') {
+            return $this->error('Claim is already resolved');
+        }
+
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $this->db->pdo()->prepare(
+            'UPDATE "time_entry_claim" SET status = \'resolved\', resolved_at = :now WHERE id = :id'
+        )->execute(['now' => $now, 'id' => $id]);
+
+        return $this->json(['message' => 'Claim resolved']);
     }
 
     // ═══════════════════════════════════════════════════════════════

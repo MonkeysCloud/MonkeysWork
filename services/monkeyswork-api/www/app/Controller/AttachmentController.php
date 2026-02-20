@@ -103,7 +103,7 @@ final class AttachmentController
 
         $saved = [];
         $stmt  = $this->db->pdo()->prepare(
-            'INSERT INTO "attachment" (id, entity_type, entity_id, uploaded_by,
+            'INSERT INTO "attachment" (id, entity_type, entity_id, uploaded_by_id,
                                        file_name, file_path, file_url, file_size,
                                        mime_type, sort_order)
              VALUES (:id, :etype, :eid, :uid, :fname, :fpath, :furl, :fsize, :mime, :sort)'
@@ -216,7 +216,7 @@ final class AttachmentController
 
         // Fetch the record
         $stmt = $this->db->pdo()->prepare(
-            'SELECT id, file_path, uploaded_by FROM "attachment" WHERE id = :id'
+            'SELECT id, file_path, uploaded_by_id FROM "attachment" WHERE id = :id'
         );
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -226,7 +226,7 @@ final class AttachmentController
         }
 
         // Only the uploader can delete
-        if ($row['uploaded_by'] !== $userId) {
+        if ($row['uploaded_by_id'] !== $userId) {
             return $this->error('Forbidden', 403);
         }
 

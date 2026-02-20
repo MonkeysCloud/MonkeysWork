@@ -1,6 +1,8 @@
 "use client";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -124,6 +126,7 @@ export default function CreateJobForm() {
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [categories, setCategories] = useState<Category[]>([]);
     const [successId, setSuccessId] = useState<string | null>(null);
+    const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(null);
 
     /* skill search state */
     const [selectedSkills, setSelectedSkills] = useState<Skill[]>([]);
@@ -164,6 +167,7 @@ export default function CreateJobForm() {
         location_regions: [] as string[],
         location_countries: [] as string[],
         skills: [] as string[],
+        weekly_hours_limit: "",
     });
 
     const [countrySearch, setCountrySearch] = useState("");
@@ -177,6 +181,20 @@ export default function CreateJobForm() {
             .then((r) => r.json())
             .then((body) => setCategories(body.data ?? []))
             .catch((err) => console.warn("Failed to fetch categories:", err));
+    }, [token]);
+
+    /* check if client has a payment method */
+    useEffect(() => {
+        if (!token) return;
+        fetch(`${API_BASE}/payment-methods`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then((r) => r.json())
+            .then((body) => {
+                const methods = body.data ?? [];
+                setHasPaymentMethod(methods.length > 0);
+            })
+            .catch(() => setHasPaymentMethod(false));
     }, [token]);
 
     /* skill search with debounce */
@@ -377,6 +395,9 @@ export default function CreateJobForm() {
                 payload.duration_weeks = Number(form.duration_weeks);
             if (selectedSkills.length > 0)
                 payload.skill_ids = selectedSkills.map((s) => s.id);
+            if (form.budget_type === "hourly" && form.weekly_hours_limit) {
+                payload.weekly_hours_limit = Number(form.weekly_hours_limit);
+            }
             if (form.budget_type === "fixed" && milestones.length > 0) {
                 payload.milestones_suggested = milestones
                     .filter((m) => m.title.trim())
@@ -477,14 +498,40 @@ export default function CreateJobForm() {
                     . Publish it now to make it visible to freelancers, or
                     review it first.
                 </p>
+
+                {/* Payment method required banner */}
+                {hasPaymentMethod === false && (
+                    <div className="mb-6 px-5 py-4 bg-amber-50 border border-amber-200 rounded-xl text-left">
+                        <div className="flex items-start gap-3">
+                            <span className="text-xl mt-0.5">💳</span>
+                            <div>
+                                <p className="text-sm font-semibold text-amber-800 mb-1">
+                                    Payment method required to publish
+                                </p>
+                                <p className="text-xs text-amber-700 mb-3">
+                                    You need to add a payment method before you can publish jobs. Your job has been saved as a draft.
+                                </p>
+                                <Link
+                                    href="/dashboard/billing/payment-methods"
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors"
+                                >
+                                    💳 Add Payment Method
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <button
-                        onClick={handlePublish}
-                        disabled={loading}
-                        className="px-6 py-3 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
-                    >
-                        {loading ? "Publishing…" : "🚀 Publish Now"}
-                    </button>
+                    {hasPaymentMethod !== false && (
+                        <button
+                            onClick={handlePublish}
+                            disabled={loading}
+                            className="px-6 py-3 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+                        >
+                            {loading ? "Publishing…" : "🚀 Publish Now"}
+                        </button>
+                    )}
                     <button
                         onClick={() => router.push("/dashboard/jobs")}
                         className="px-6 py-3 text-sm font-semibold text-brand-dark border border-brand-border/60 rounded-xl hover:border-brand-dark/30 hover:shadow-sm transition-all"
@@ -870,6 +917,37 @@ export default function CreateJobForm() {
                             )}
                         </div>
                     </div>
+
+                    {/* weekly hours limit (hourly only) */}
+                    {form.budget_type === "hourly" && (
+                        <div>
+                            <label htmlFor="weekly_hours_limit" className={labelCls}>
+                                Max Hours per Week{" "}
+                                <span className="text-brand-muted font-normal">
+                                    — optional
+                                </span>
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-brand-muted">
+                                    ⏱️
+                                </span>
+                                <input
+                                    id="weekly_hours_limit"
+                                    type="number"
+                                    min="1"
+                                    max="168"
+                                    value={form.weekly_hours_limit}
+                                    onChange={set("weekly_hours_limit")}
+                                    placeholder="e.g. 40"
+                                    className={`${inputCls()} pl-9`}
+                                />
+                            </div>
+                            <p className="text-xs text-brand-muted/60 mt-1">
+                                Freelancers won&apos;t be able to log more hours than this per week.
+                                You can change it anytime from the contract page.
+                            </p>
+                        </div>
+                    )}
 
                     {/* duration */}
                     <div>

@@ -9,6 +9,7 @@ import {
     DeliverablesList,
     DisputesPanel,
     ContractChat,
+    TimeEntriesPanel,
     Contract,
     Milestone,
     formatDate,
@@ -17,12 +18,13 @@ import {
     API,
 } from "@/components/contracts";
 
-type TabKey = "overview" | "milestones" | "deliverables" | "disputes" | "chat";
+type TabKey = "overview" | "milestones" | "deliverables" | "time_entries" | "disputes" | "chat";
 
 const TAB_ITEMS: { key: TabKey; label: string; icon: string }[] = [
     { key: "overview", label: "Overview", icon: "📋" },
     { key: "milestones", label: "Milestones", icon: "🎯" },
     { key: "deliverables", label: "Deliverables", icon: "📁" },
+    { key: "time_entries", label: "Time Entries", icon: "⏱" },
     { key: "disputes", label: "Disputes", icon: "⚠️" },
     { key: "chat", label: "Chat", icon: "💬" },
 ];
@@ -217,6 +219,10 @@ export default function ContractDetailPage() {
 
             {tab === "deliverables" && (
                 <DeliverablesList milestones={milestones} token={token ?? ""} />
+            )}
+
+            {tab === "time_entries" && (
+                <TimeEntriesPanel contractId={id} isClient={isClient ?? false} token={token ?? ""} />
             )}
 
             {tab === "disputes" && (

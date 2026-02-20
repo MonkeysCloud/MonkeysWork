@@ -28,7 +28,7 @@ class EscrowTransaction
     #[ManyToOne(targetEntity: Milestone::class)]
     public ?string $milestone_id = null;
 
-    #[Field(type: 'enum', enumValues: ['fund', 'release', 'refund', 'dispute_hold', 'platform_fee'])]
+    #[Field(type: 'enum', enumValues: ['fund', 'fund_failed', 'release', 'refund', 'dispute_hold', 'dispute_refund', 'platform_fee', 'client_fee'])]
     public string $type;
 
     #[Field(type: 'decimal', precision: 12, scale: 2)]

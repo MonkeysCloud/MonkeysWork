@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import { ContractCard, type Contract, API } from "@/components/contracts";
 
 /* ── Stat card ──────────────────────────────────────── */
 function StatCard({
@@ -75,33 +77,31 @@ function QuickAction({
     );
 }
 
-/* ── Activity item ──────────────────────────────────── */
-function ActivityItem({
-    icon,
-    text,
-    time,
-}: {
-    icon: string;
-    text: string;
-    time: string;
-}) {
-    return (
-        <div className="flex items-start gap-3 py-3 border-b border-brand-border/40 last:border-0">
-            <span className="text-lg mt-0.5">{icon}</span>
-            <div className="flex-1 min-w-0">
-                <div className="text-sm text-brand-dark">{text}</div>
-                <div className="text-xs text-brand-muted mt-0.5">{time}</div>
-            </div>
-        </div>
-    );
-}
-
 /* ── Page ───────────────────────────────────────────── */
 export default function DashboardOverview() {
-    const { user } = useAuth();
-    if (!user) return null;
+    const { user, token } = useAuth();
+    const [contracts, setContracts] = useState<Contract[]>([]);
+    const [loadingContracts, setLoadingContracts] = useState(true);
 
-    const isClient = user.role === "client";
+    const isClient = user?.role === "client";
+
+    /* Fetch active contracts */
+    useEffect(() => {
+        if (!token) return;
+        setLoadingContracts(true);
+        fetch(`${API}/contracts?status=active`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(async (r) => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                const json = await r.json();
+                setContracts(json.data ?? []);
+            })
+            .catch(() => setContracts([]))
+            .finally(() => setLoadingContracts(false));
+    }, [token]);
+
+    if (!user) return null;
 
     return (
         <div>
@@ -134,7 +134,7 @@ export default function DashboardOverview() {
                         <StatCard
                             icon="📄"
                             label="Active Contracts"
-                            value="0"
+                            value={loadingContracts ? "…" : String(contracts.length)}
                         />
                         <StatCard
                             icon="💰"
@@ -157,7 +157,7 @@ export default function DashboardOverview() {
                         <StatCard
                             icon="📄"
                             label="Active Contracts"
-                            value="0"
+                            value={loadingContracts ? "…" : String(contracts.length)}
                         />
                         <StatCard
                             icon="💰"
@@ -188,7 +188,7 @@ export default function DashboardOverview() {
                                     icon="🔍"
                                     label="Browse Talent"
                                     desc="Find the right freelancer"
-                                    href="/freelancers"
+                                    href="/dashboard/freelancers"
                                 />
                                 <QuickAction
                                     icon="📝"
@@ -223,34 +223,62 @@ export default function DashboardOverview() {
                     </div>
                 </div>
 
-                {/* recent activity */}
+                {/* active contracts */}
                 <div className="lg:col-span-2">
-                    <h2 className="text-lg font-bold text-brand-dark mb-4">
-                        Recent Activity
-                    </h2>
-                    <div className="bg-white rounded-xl border border-brand-border/60 p-5">
-                        <div className="text-center py-8">
-                            <span className="text-4xl mb-3 block">📭</span>
-                            <p className="text-sm text-brand-muted">
-                                No recent activity yet.
-                                {isClient
-                                    ? " Post your first job to get started!"
-                                    : " Browse available jobs to get started!"}
-                            </p>
-                            <Link
-                                href={
-                                    isClient
-                                        ? "/dashboard/jobs/create"
-                                        : "/jobs"
-                                }
-                                className="inline-block mt-4 px-5 py-2 text-sm font-semibold text-brand-orange border border-brand-orange/30 rounded-lg hover:bg-brand-orange-light transition-colors"
-                            >
-                                {isClient
-                                    ? "Post a Job"
-                                    : "Browse Jobs"}
-                            </Link>
-                        </div>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-bold text-brand-dark">
+                            Active Contracts
+                        </h2>
+                        <Link
+                            href="/dashboard/contracts"
+                            className="text-xs font-semibold text-brand-orange hover:underline"
+                        >
+                            View All →
+                        </Link>
                     </div>
+
+                    {loadingContracts && (
+                        <div className="bg-white rounded-xl border border-brand-border/60 p-5">
+                            <div className="text-center py-8">
+                                <span className="text-3xl mb-2 block animate-pulse">⏳</span>
+                                <p className="text-sm text-brand-muted">Loading contracts…</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {!loadingContracts && contracts.length === 0 && (
+                        <div className="bg-white rounded-xl border border-brand-border/60 p-5">
+                            <div className="text-center py-8">
+                                <span className="text-4xl mb-3 block">📄</span>
+                                <p className="text-sm text-brand-muted">
+                                    No active contracts yet.
+                                    {isClient
+                                        ? " Accept a proposal to create your first contract!"
+                                        : " When a client accepts your proposal, a contract will appear here."}
+                                </p>
+                                <Link
+                                    href={
+                                        isClient
+                                            ? "/dashboard/jobs/create"
+                                            : "/jobs"
+                                    }
+                                    className="inline-block mt-4 px-5 py-2 text-sm font-semibold text-brand-orange border border-brand-orange/30 rounded-lg hover:bg-brand-orange-light transition-colors"
+                                >
+                                    {isClient
+                                        ? "Post a Job"
+                                        : "Browse Jobs"}
+                                </Link>
+                            </div>
+                        </div>
+                    )}
+
+                    {!loadingContracts && contracts.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                            {contracts.map((c) => (
+                                <ContractCard key={c.id} contract={c} isClient={isClient ?? false} />
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

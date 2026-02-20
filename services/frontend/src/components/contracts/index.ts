@@ -4,4 +4,8 @@ export { default as MilestoneList } from "./MilestoneList";
 export { default as DeliverablesList } from "./DeliverablesList";
 export { default as DisputesPanel } from "./DisputesPanel";
 export { default as ContractChat } from "./ContractChat";
+export { default as TimeEntriesPanel } from "./TimeEntriesPanel";
+export { default as TimeEntryScreenshots } from "./TimeEntryScreenshots";
+export { default as ActivityBars } from "./ActivityBars";
+export { default as TimeEntryClaims } from "./TimeEntryClaims";
 export * from "./types";

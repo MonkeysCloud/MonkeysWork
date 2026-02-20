@@ -92,6 +92,59 @@ final class ContractController
         return $this->json(['data' => $contract]);
     }
 
+    #[Route('PATCH', '/{id}', name: 'contracts.update', summary: 'Update contract (client only)', tags: ['Contracts'])]
+    public function update(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $data   = $this->body($request);
+
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT client_id, freelancer_id, contract_type FROM "contract" WHERE id = :id'
+        );
+        $stmt->execute(['id' => $id]);
+        $c = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$c) {
+            return $this->notFound('Contract');
+        }
+        if ($c['client_id'] !== $userId) {
+            return $this->forbidden('Only the client can update contract settings');
+        }
+
+        $sets   = [];
+        $params = ['id' => $id];
+
+        // weekly_hour_limit — only for hourly contracts
+        if (array_key_exists('weekly_hour_limit', $data)) {
+            if ($c['contract_type'] !== 'hourly') {
+                return $this->error('Weekly hour limit only applies to hourly contracts');
+            }
+            $val = $data['weekly_hour_limit'];
+            if ($val !== null && (int) $val < 1) {
+                return $this->error('weekly_hour_limit must be at least 1 or null to remove');
+            }
+            $sets[]                     = '"weekly_hour_limit" = :whl';
+            $params['whl']              = $val !== null ? (int) $val : null;
+        }
+
+        if (empty($sets)) {
+            return $this->error('No valid fields to update');
+        }
+
+        $sets[]        = '"updated_at" = :now';
+        $params['now'] = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        $this->db->pdo()->prepare(
+            'UPDATE "contract" SET ' . implode(', ', $sets) . ' WHERE id = :id'
+        )->execute($params);
+
+        // Return updated contract
+        $updated = $this->db->pdo()->prepare('SELECT * FROM "contract" WHERE id = :id');
+        $updated->execute(['id' => $id]);
+
+        return $this->json(['data' => $updated->fetch(\PDO::FETCH_ASSOC)]);
+    }
+
     #[Route('POST', '/{id}/complete', name: 'contracts.complete', summary: 'Mark complete', tags: ['Contracts'])]
     public function complete(ServerRequestInterface $request, string $id): JsonResponse
     {

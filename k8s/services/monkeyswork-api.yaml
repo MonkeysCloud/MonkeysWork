@@ -65,6 +65,38 @@ spec:
               value: "http://ai-match-v1.monkeyswork-ai.svc.cluster.local/api/v1/match/rank"
             - name: AI_SCOPE_URL
               value: "http://ai-scope-assistant.monkeyswork-ai.svc.cluster.local/api/v1/scope/analyze"
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-credentials
+                  key: secret-key
+            - name: STRIPE_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-credentials
+                  key: publishable-key
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: stripe-credentials
+                  key: webhook-secret
+            - name: PAYPAL_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: paypal-credentials
+                  key: client-id
+            - name: PAYPAL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: paypal-credentials
+                  key: secret
+            - name: PAYPAL_MODE
+              value: "live"
+            - name: PAYPAL_WEBHOOK_ID
+              valueFrom:
+                secretKeyRef:
+                  name: paypal-credentials
+                  key: webhook-id
           resources:
             requests:
               cpu: 250m
