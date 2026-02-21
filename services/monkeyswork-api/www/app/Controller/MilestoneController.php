@@ -41,6 +41,91 @@ final class MilestoneController
         return $this->fees ??= new FeeCalculator();
     }
 
+    #[Route('GET', '/me', name: 'milestones.mine', summary: 'All my milestones across contracts', tags: ['Milestones'])]
+    public function mine(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $p      = $this->pagination($request);
+        $qs     = $request->getQueryParams();
+        $status = $qs['status'] ?? null;
+
+        $where  = '(c.client_id = :uid OR c.freelancer_id = :uid)';
+        $params = ['uid' => $userId];
+
+        if ($status) {
+            $where .= ' AND m.status = :status';
+            $params['status'] = $status;
+        }
+
+        // Count
+        $cnt = $this->db->pdo()->prepare("SELECT COUNT(*) FROM \"milestone\" m JOIN \"contract\" c ON c.id = m.contract_id WHERE {$where}");
+        $cnt->execute($params);
+        $total = (int) $cnt->fetchColumn();
+
+        // List
+        $stmt = $this->db->pdo()->prepare(
+            "SELECT m.*,
+                    c.title AS contract_title,
+                    c.status AS contract_status,
+                    c.client_id,
+                    c.freelancer_id,
+                    u_client.display_name AS client_name,
+                    u_free.display_name   AS freelancer_name
+             FROM \"milestone\" m
+             JOIN \"contract\" c ON c.id = m.contract_id
+             JOIN \"user\" u_client ON u_client.id = c.client_id
+             JOIN \"user\" u_free   ON u_free.id   = c.freelancer_id
+             WHERE {$where}
+             ORDER BY
+                CASE m.status
+                    WHEN 'submitted' THEN 0
+                    WHEN 'revision_requested' THEN 1
+                    WHEN 'in_progress' THEN 2
+                    WHEN 'pending' THEN 3
+                    WHEN 'accepted' THEN 4
+                END,
+                m.sort_order ASC, m.created_at DESC
+             LIMIT :lim OFFSET :off"
+        );
+        $stmt->bindValue('uid', $userId);
+        if ($status) $stmt->bindValue('status', $status);
+        $stmt->bindValue('lim', $p['perPage'], \PDO::PARAM_INT);
+        $stmt->bindValue('off', $p['offset'], \PDO::PARAM_INT);
+        $stmt->execute();
+
+        $milestones = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        // Summary stats
+        $statsStmt = $this->db->pdo()->prepare(
+            "SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE m.status = 'pending') AS pending,
+                COUNT(*) FILTER (WHERE m.status = 'in_progress') AS in_progress,
+                COUNT(*) FILTER (WHERE m.status = 'submitted') AS submitted,
+                COUNT(*) FILTER (WHERE m.status = 'accepted') AS accepted,
+                COUNT(*) FILTER (WHERE m.status = 'revision_requested') AS revision_requested,
+                COALESCE(SUM(m.amount), 0) AS total_amount,
+                COALESCE(SUM(m.amount) FILTER (WHERE m.escrow_funded = true), 0) AS funded_amount,
+                COALESCE(SUM(m.amount) FILTER (WHERE m.escrow_released = true), 0) AS released_amount
+             FROM \"milestone\" m
+             JOIN \"contract\" c ON c.id = m.contract_id
+             WHERE c.client_id = :uid OR c.freelancer_id = :uid"
+        );
+        $statsStmt->execute(['uid' => $userId]);
+        $stats = $statsStmt->fetch(\PDO::FETCH_ASSOC);
+
+        return $this->json([
+            'data' => $milestones,
+            'meta' => [
+                'current_page' => $p['page'],
+                'per_page'     => $p['perPage'],
+                'total'        => $total,
+                'last_page'    => (int) ceil($total / max($p['perPage'], 1)),
+            ],
+            'summary' => $stats,
+        ]);
+    }
+
     #[Route('GET', '/{id}', name: 'milestones.show', summary: 'Milestone detail', tags: ['Milestones'])]
     public function show(ServerRequestInterface $request, string $id): JsonResponse
     {
