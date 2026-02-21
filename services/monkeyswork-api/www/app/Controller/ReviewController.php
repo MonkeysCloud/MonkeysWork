@@ -23,6 +23,94 @@ final class ReviewController
         private ?EventDispatcherInterface $events = null,
     ) {}
 
+    #[Route('GET', '/reviews/me', name: 'reviews.mine', summary: 'My reviews (given + received)', tags: ['Reviews'])]
+    public function mine(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $p      = $this->pagination($request);
+        $qs     = $request->getQueryParams();
+        $tab    = $qs['tab'] ?? 'all'; // received | given | all
+
+        // Build WHERE
+        if ($tab === 'received') {
+            $where = 'r.reviewee_id = :uid';
+        } elseif ($tab === 'given') {
+            $where = 'r.reviewer_id = :uid';
+        } else {
+            $where = '(r.reviewer_id = :uid OR r.reviewee_id = :uid)';
+        }
+
+        $cnt = $this->db->pdo()->prepare("SELECT COUNT(*) FROM \"review\" r WHERE {$where}");
+        $cnt->execute(['uid' => $userId]);
+        $total = (int) $cnt->fetchColumn();
+
+        $stmt = $this->db->pdo()->prepare(
+            "SELECT r.*,
+                    reviewer.display_name AS reviewer_name,
+                    reviewer.avatar_url   AS reviewer_avatar,
+                    reviewee.display_name AS reviewee_name,
+                    reviewee.avatar_url   AS reviewee_avatar,
+                    c.title               AS contract_title
+             FROM \"review\" r
+             JOIN \"user\" reviewer ON reviewer.id = r.reviewer_id
+             JOIN \"user\" reviewee ON reviewee.id = r.reviewee_id
+             LEFT JOIN \"contract\" c ON c.id = r.contract_id
+             WHERE {$where}
+             ORDER BY r.created_at DESC LIMIT :lim OFFSET :off"
+        );
+        $stmt->bindValue('uid', $userId);
+        $stmt->bindValue('lim', $p['perPage'], \PDO::PARAM_INT);
+        $stmt->bindValue('off', $p['offset'], \PDO::PARAM_INT);
+        $stmt->execute();
+
+        // Summary stats
+        $statsStmt = $this->db->pdo()->prepare(
+            "SELECT
+                COUNT(*) FILTER (WHERE r.reviewee_id = :uid) AS received_count,
+                COUNT(*) FILTER (WHERE r.reviewer_id = :uid) AS given_count,
+                COALESCE(AVG(r.overall_rating) FILTER (WHERE r.reviewee_id = :uid), 0) AS avg_received_rating
+             FROM \"review\" r
+             WHERE r.reviewer_id = :uid OR r.reviewee_id = :uid"
+        );
+        $statsStmt->execute(['uid' => $userId]);
+        $stats = $statsStmt->fetch(\PDO::FETCH_ASSOC);
+
+        $result = $this->paginated($stmt->fetchAll(\PDO::FETCH_ASSOC), $total, $p['page'], $p['perPage']);
+        $body = json_decode($result->getBody(), true);
+        $body['summary'] = [
+            'received_count'     => (int) ($stats['received_count'] ?? 0),
+            'given_count'        => (int) ($stats['given_count'] ?? 0),
+            'avg_received_rating'=> round((float) ($stats['avg_received_rating'] ?? 0), 1),
+        ];
+
+        return $this->json($body);
+    }
+
+    #[Route('GET', '/contracts/reviewable', name: 'contracts.reviewable', summary: 'Contracts eligible for review', tags: ['Reviews'])]
+    public function reviewable(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+
+        $stmt = $this->db->pdo()->prepare(
+            "SELECT c.id, c.title, c.status, c.freelancer_id, c.client_id,
+                    u_client.display_name AS client_name,
+                    u_free.display_name   AS freelancer_name,
+                    c.completed_at,
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM \"review\" r WHERE r.contract_id = c.id AND r.reviewer_id = :uid
+                    ) THEN true ELSE false END AS already_reviewed
+             FROM \"contract\" c
+             JOIN \"user\" u_client ON u_client.id = c.client_id
+             JOIN \"user\" u_free   ON u_free.id   = c.freelancer_id
+             WHERE (c.client_id = :uid OR c.freelancer_id = :uid)
+               AND c.status IN ('completed', 'active')
+             ORDER BY c.updated_at DESC"
+        );
+        $stmt->execute(['uid' => $userId]);
+
+        return $this->json(['data' => $stmt->fetchAll(\PDO::FETCH_ASSOC)]);
+    }
+
     #[Route('POST', '/reviews', name: 'reviews.create', summary: 'Leave review', tags: ['Reviews'])]
     public function create(ServerRequestInterface $request): JsonResponse
     {
