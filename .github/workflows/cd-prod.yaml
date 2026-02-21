@@ -81,7 +81,7 @@ jobs:
           IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/mw-${{ env.ENV }}-services/${{ matrix.service }}:${{ github.sha }}"
 
           # Apply manifest with updated image
-          sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" k8s/services/${{ matrix.service }}.yaml | kubectl apply -f -
+          sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" k8s/services/${{ matrix.service }}.yaml | kubectl apply --server-side --force-conflicts -f -
 
           # Determine namespace
           NAMESPACE="monkeyswork"
