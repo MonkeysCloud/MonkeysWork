@@ -63,6 +63,8 @@ final class ReviewController
         $stmt->bindValue('off', $p['offset'], \PDO::PARAM_INT);
         $stmt->execute();
 
+        $reviews = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
         // Summary stats
         $statsStmt = $this->db->pdo()->prepare(
             "SELECT
@@ -75,15 +77,20 @@ final class ReviewController
         $statsStmt->execute(['uid' => $userId]);
         $stats = $statsStmt->fetch(\PDO::FETCH_ASSOC);
 
-        $result = $this->paginated($stmt->fetchAll(\PDO::FETCH_ASSOC), $total, $p['page'], $p['perPage']);
-        $body = json_decode($result->getBody(), true);
-        $body['summary'] = [
-            'received_count'     => (int) ($stats['received_count'] ?? 0),
-            'given_count'        => (int) ($stats['given_count'] ?? 0),
-            'avg_received_rating'=> round((float) ($stats['avg_received_rating'] ?? 0), 1),
-        ];
-
-        return $this->json($body);
+        return $this->json([
+            'data' => $reviews,
+            'meta' => [
+                'current_page' => $p['page'],
+                'per_page'     => $p['perPage'],
+                'total'        => $total,
+                'last_page'    => (int) ceil($total / max($p['perPage'], 1)),
+            ],
+            'summary' => [
+                'received_count'      => (int) ($stats['received_count'] ?? 0),
+                'given_count'         => (int) ($stats['given_count'] ?? 0),
+                'avg_received_rating' => round((float) ($stats['avg_received_rating'] ?? 0), 1),
+            ],
+        ]);
     }
 
     #[Route('GET', '/contracts/reviewable', name: 'contracts.reviewable', summary: 'Contracts eligible for review', tags: ['Reviews'])]
