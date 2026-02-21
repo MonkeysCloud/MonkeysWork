@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,6 +25,14 @@ function OAuthButton({
 }
 
 export default function LoginForm() {
+    return (
+        <Suspense>
+            <LoginFormInner />
+        </Suspense>
+    );
+}
+
+function LoginFormInner() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { login } = useAuth();

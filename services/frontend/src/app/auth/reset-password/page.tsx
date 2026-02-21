@@ -1,11 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
 
 export default function ResetPasswordPage() {
+    return (
+        <Suspense fallback={<div className="min-h-[80vh] flex items-center justify-center"><span className="animate-pulse text-4xl">🔐</span></div>}>
+            <ResetPasswordInner />
+        </Suspense>
+    );
+}
+
+function ResetPasswordInner() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const token = searchParams.get("token");
