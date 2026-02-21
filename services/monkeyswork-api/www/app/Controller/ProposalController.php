@@ -5,6 +5,7 @@ namespace App\Controller;
 
 use App\Event\ProposalAccepted;
 use App\Event\ProposalSubmitted;
+use App\Service\EmailNotificationService;
 use App\Service\FeatureFlagService;
 use App\Service\PubSubPublisher;
 use App\Validator\ProposalValidator;
@@ -28,7 +29,10 @@ final class ProposalController
         private ?EventDispatcherInterface $events = null,
         private ?FeatureFlagService $flags = null,
         private ?PubSubPublisher $pubsub = null,
-    ) {}
+        private ?EmailNotificationService $emailNotifier = null,
+    ) {
+        $this->emailNotifier ??= new EmailNotificationService($db);
+    }
 
     #[Route('POST', '', name: 'proposals.create', summary: 'Submit proposal', tags: ['Proposals'])]
     public function create(ServerRequestInterface $request): JsonResponse
@@ -120,6 +124,34 @@ final class ProposalController
 
         // Dispatch domain event
         $this->events?->dispatch(new ProposalSubmitted($id, $data['job_id'], $userId));
+
+        // ── Email: notify client about new proposal ──
+        try {
+            $jobStmt = $this->db->pdo()->prepare('SELECT client_id, title FROM "job" WHERE id = :jid');
+            $jobStmt->execute(['jid' => $data['job_id']]);
+            $jobInfo = $jobStmt->fetch(\PDO::FETCH_ASSOC);
+            if ($jobInfo) {
+                $freelancerStmt = $this->db->pdo()->prepare('SELECT display_name FROM "user" WHERE id = :id');
+                $freelancerStmt->execute(['id' => $userId]);
+                $freelancer = $freelancerStmt->fetch(\PDO::FETCH_ASSOC);
+                $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
+                $this->emailNotifier->notify(
+                    $jobInfo['client_id'],
+                    'proposal_emails',
+                    'New Proposal Received — ' . ($jobInfo['title'] ?? 'Your Job'),
+                    'proposal-received',
+                    [
+                        'jobTitle' => $jobInfo['title'] ?? '',
+                        'freelancerName' => $freelancer['display_name'] ?? 'A freelancer',
+                        'coverLetter' => $data['cover_letter'] ?? '',
+                        'proposalUrl' => "{$frontendUrl}/dashboard/proposals",
+                    ],
+                    ['proposals', 'new-proposal'],
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('[Email] Failed to send proposal-received: ' . $e->getMessage());
+        }
 
         // Publish to Pub/Sub (async AI services pick this up)
         $pubsub = $this->pubsub ?? new PubSubPublisher();

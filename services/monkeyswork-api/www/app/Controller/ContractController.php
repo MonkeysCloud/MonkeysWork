@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Event\ContractCompleted;
+use App\Service\EmailNotificationService;
 use App\Validator\MilestoneValidator;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
@@ -23,7 +24,10 @@ final class ContractController
         private ConnectionInterface $db,
         private MilestoneValidator $milestoneValidator = new MilestoneValidator(),
         private ?EventDispatcherInterface $events = null,
-    ) {}
+        private ?EmailNotificationService $emailNotifier = null,
+    ) {
+        $this->emailNotifier ??= new EmailNotificationService($db);
+    }
 
     #[Route('GET', '', name: 'contracts.index', summary: 'My contracts', tags: ['Contracts'])]
     public function index(ServerRequestInterface $request): JsonResponse
@@ -162,6 +166,41 @@ final class ContractController
         // Dispatch event after successful completion
         if ($c && in_array($c['status'], ['active'], true)) {
             $this->events?->dispatch(new ContractCompleted($id, $c['client_id'], $c['freelancer_id']));
+
+            // ── Email: notify both parties about completion ──
+            try {
+                $titleStmt = $this->db->pdo()->prepare('SELECT title FROM "contract" WHERE id = :id');
+                $titleStmt->execute(['id' => $id]);
+                $contractTitle = ($titleStmt->fetch(\PDO::FETCH_ASSOC))['title'] ?? '';
+
+                $clientStmt = $this->db->pdo()->prepare('SELECT display_name FROM "user" WHERE id = :id');
+                $clientStmt->execute(['id' => $c['client_id']]);
+                $clientName = ($clientStmt->fetch(\PDO::FETCH_ASSOC))['display_name'] ?? '';
+
+                $freelancerStmt = $this->db->pdo()->prepare('SELECT display_name FROM "user" WHERE id = :id');
+                $freelancerStmt->execute(['id' => $c['freelancer_id']]);
+                $freelancerName = ($freelancerStmt->fetch(\PDO::FETCH_ASSOC))['display_name'] ?? '';
+
+                $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
+                $contractUrl = "{$frontendUrl}/dashboard/reviews";
+
+                $this->emailNotifier->notify(
+                    $c['client_id'], 'contract_emails',
+                    'Contract Completed — ' . $contractTitle,
+                    'contract-completed',
+                    ['contractTitle' => $contractTitle, 'otherPartyName' => $freelancerName, 'contractUrl' => $contractUrl],
+                    ['contracts', 'completed'],
+                );
+                $this->emailNotifier->notify(
+                    $c['freelancer_id'], 'contract_emails',
+                    'Contract Completed — ' . $contractTitle,
+                    'contract-completed',
+                    ['contractTitle' => $contractTitle, 'otherPartyName' => $clientName, 'contractUrl' => $contractUrl],
+                    ['contracts', 'completed'],
+                );
+            } catch (\Throwable $e) {
+                error_log('[Email] Failed to send contract-completed: ' . $e->getMessage());
+            }
         }
 
         return $result;

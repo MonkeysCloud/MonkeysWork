@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
 /* ── OAuth button ───────────────────────────────────── */
@@ -26,6 +26,7 @@ function OAuthButton({
 
 export default function LoginForm() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { login } = useAuth();
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -66,7 +67,8 @@ export default function LoginForm() {
         setLoading(true);
         try {
             await login(form.email.trim(), form.password);
-            router.push("/dashboard");
+            const redirect = searchParams.get("redirect") || "/dashboard";
+            router.push(redirect);
         } catch (err: unknown) {
             setError(
                 err instanceof Error
@@ -261,7 +263,7 @@ export default function LoginForm() {
                                     Password
                                 </label>
                                 <Link
-                                    href="/forgot-password"
+                                    href="/auth/forgot-password"
                                     className="text-xs font-medium text-brand-orange hover:text-brand-orange-hover transition-colors"
                                 >
                                     Forgot password?

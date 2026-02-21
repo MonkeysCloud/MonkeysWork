@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Event\ReviewCreated;
+use App\Service\EmailNotificationService;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -21,7 +22,10 @@ final class ReviewController
     public function __construct(
         private ConnectionInterface $db,
         private ?EventDispatcherInterface $events = null,
-    ) {}
+        private ?EmailNotificationService $emailNotifier = null,
+    ) {
+        $this->emailNotifier ??= new EmailNotificationService($db);
+    }
 
     #[Route('GET', '/reviews/me', name: 'reviews.mine', summary: 'My reviews (given + received)', tags: ['Reviews'])]
     public function mine(ServerRequestInterface $request): JsonResponse
@@ -174,6 +178,35 @@ final class ReviewController
 
         // Dispatch event
         $this->events?->dispatch(new ReviewCreated($id, $data['contract_id'], $userId, $revieweeId, $rating));
+
+        // ── Email: notify reviewee about new review ──
+        try {
+            $reviewerStmt = $this->db->pdo()->prepare('SELECT display_name FROM "user" WHERE id = :id');
+            $reviewerStmt->execute(['id' => $userId]);
+            $reviewerName = ($reviewerStmt->fetch(\PDO::FETCH_ASSOC))['display_name'] ?? '';
+
+            $contractStmt = $this->db->pdo()->prepare('SELECT title FROM "contract" WHERE id = :id');
+            $contractStmt->execute(['id' => $data['contract_id']]);
+            $contractTitle = ($contractStmt->fetch(\PDO::FETCH_ASSOC))['title'] ?? '';
+
+            $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
+            $this->emailNotifier->notify(
+                $revieweeId,
+                'review_emails',
+                'You Received a Review — ' . $contractTitle,
+                'review-received',
+                [
+                    'reviewerName'  => $reviewerName,
+                    'contractTitle' => $contractTitle,
+                    'rating'        => $rating,
+                    'comment'       => $data['comment'] ?? '',
+                    'reviewsUrl'    => "{$frontendUrl}/dashboard/reviews",
+                ],
+                ['reviews', 'new-review'],
+            );
+        } catch (\Throwable $e) {
+            error_log('[Email] Failed to send review-received: ' . $e->getMessage());
+        }
 
         return $this->created(['data' => ['id' => $id]]);
     }

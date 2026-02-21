@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Event\UserRegistered;
+use App\Service\MonkeysMailService;
 use App\Service\PubSubPublisher;
 use App\Validator\RegistrationValidator;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
@@ -23,7 +24,10 @@ final class AuthController
         private RegistrationValidator $registrationValidator = new RegistrationValidator(),
         private ?EventDispatcherInterface $events = null,
         private ?PubSubPublisher $pubsub = null,
-    ) {}
+        private ?MonkeysMailService $mail = null,
+    ) {
+        $this->mail ??= new MonkeysMailService();
+    }
 
     /* ------------------------------------------------------------------ */
     /*  POST /auth/register                                                */
@@ -88,6 +92,28 @@ final class AuthController
             )->execute(['uid' => $id, 'now' => $now]);
         }
 
+        // ── Generate email-verification token ──
+        $verifyToken = bin2hex(random_bytes(32));
+        $this->db->pdo()->prepare(
+            'UPDATE "user" SET metadata = jsonb_set(COALESCE(metadata, \'{}\'::jsonb), \'{email_verify_token}\', to_jsonb(:token::text)),
+                               updated_at = :now WHERE id = :id'
+        )->execute(['token' => $verifyToken, 'now' => $now, 'id' => $id]);
+
+        // Send verification email
+        $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
+        $verifyUrl = "{$frontendUrl}/auth/verify-email?token={$verifyToken}";
+        try {
+            $this->mail->sendTemplate(
+                $email,
+                'Verify your email — MonkeysWork',
+                'verify-email',
+                ['userName' => $data['display_name'], 'verifyUrl' => $verifyUrl],
+                ['auth', 'verify-email'],
+            );
+        } catch (\Throwable $e) {
+            error_log('[Auth] Failed to send verify email: ' . $e->getMessage());
+        }
+
         // Dispatch domain event
         $this->events?->dispatch(new UserRegistered($id, $email, $data['role']));
 
@@ -99,7 +125,7 @@ final class AuthController
             // Non-critical: don't fail registration if Pub/Sub is down
         }
 
-        return $this->created(['data' => ['id' => $id, 'email' => $email]]);
+        return $this->created(['data' => ['id' => $id, 'email' => $email, 'verification_sent' => true]]);
     }
 
     /* ------------------------------------------------------------------ */
@@ -216,8 +242,47 @@ final class AuthController
             return $this->error('Email is required');
         }
 
-        // Always return success to prevent email enumeration
-        // TODO: queue reset email
+        $email = strtolower(trim($data['email']));
+
+        // Look up user (always return success to prevent email enumeration)
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT id, display_name FROM "user" WHERE email = :email AND deleted_at IS NULL'
+        );
+        $stmt->execute(['email' => $email]);
+        $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if ($user) {
+            // Generate reset token with 1-hour expiry
+            $resetToken = bin2hex(random_bytes(32));
+            $expiresAt  = (new \DateTimeImmutable('+1 hour'))->format('Y-m-d H:i:s');
+            $now        = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+            $this->db->pdo()->prepare(
+                'UPDATE "user" SET
+                    metadata = jsonb_set(
+                        jsonb_set(COALESCE(metadata, \'{}\'::jsonb), \'{reset_token}\', to_jsonb(:token::text)),
+                        \'{reset_token_expires}\', to_jsonb(:expires::text)
+                    ),
+                    updated_at = :now
+                 WHERE id = :id'
+            )->execute(['token' => $resetToken, 'expires' => $expiresAt, 'now' => $now, 'id' => $user['id']]);
+
+            // Send reset email
+            $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
+            $resetUrl = "{$frontendUrl}/auth/reset-password?token={$resetToken}";
+            try {
+                $this->mail->sendTemplate(
+                    $email,
+                    'Reset your password — MonkeysWork',
+                    'forgot-password',
+                    ['userName' => $user['display_name'], 'resetUrl' => $resetUrl],
+                    ['auth', 'forgot-password'],
+                );
+            } catch (\Throwable $e) {
+                error_log('[Auth] Failed to send reset email: ' . $e->getMessage());
+            }
+        }
+
         return $this->json(['message' => 'If the email exists, a reset link has been sent']);
     }
 
@@ -233,8 +298,44 @@ final class AuthController
             return $this->error('Token and new password are required');
         }
 
-        // TODO: validate token, update password, invalidate sessions
-        return $this->json(['message' => 'Password has been reset']);
+        if (strlen($data['password']) < 8) {
+            return $this->error('Password must be at least 8 characters');
+        }
+
+        // Find user by reset token
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT id, metadata FROM "user" WHERE metadata->>>\'reset_token\' = :token AND deleted_at IS NULL'
+        );
+        $stmt->execute(['token' => $data['token']]);
+        $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            return $this->error('Invalid or expired reset token', 400);
+        }
+
+        // Check expiry
+        $meta = json_decode($user['metadata'] ?? '{}', true);
+        $expires = $meta['reset_token_expires'] ?? null;
+        if ($expires && new \DateTimeImmutable($expires) < new \DateTimeImmutable()) {
+            return $this->error('Reset token has expired. Please request a new one.', 400);
+        }
+
+        // Update password, clear token, bump token_version to invalidate sessions
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $this->db->pdo()->prepare(
+            'UPDATE "user" SET
+                password_hash = :hash,
+                token_version = token_version + 1,
+                metadata = metadata - \'reset_token\' - \'reset_token_expires\',
+                updated_at = :now
+             WHERE id = :id'
+        )->execute([
+            'hash' => password_hash($data['password'], PASSWORD_BCRYPT),
+            'now'  => $now,
+            'id'   => $user['id'],
+        ]);
+
+        return $this->json(['message' => 'Password has been reset successfully']);
     }
 
     /* ------------------------------------------------------------------ */
@@ -249,8 +350,42 @@ final class AuthController
             return $this->error('Verification token is required');
         }
 
-        // TODO: validate token, set email_verified_at, update status to active
-        return $this->json(['message' => 'Email verified']);
+        // Find user by verification token
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT id, email, display_name, role FROM "user" WHERE metadata->>>\'email_verify_token\' = :token AND deleted_at IS NULL'
+        );
+        $stmt->execute(['token' => $data['token']]);
+        $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            return $this->error('Invalid verification token', 400);
+        }
+
+        // Activate account
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $this->db->pdo()->prepare(
+            'UPDATE "user" SET
+                status = \'active\',
+                email_verified_at = :now,
+                metadata = metadata - \'email_verify_token\',
+                updated_at = :now
+             WHERE id = :id'
+        )->execute(['now' => $now, 'id' => $user['id']]);
+
+        // Send welcome email
+        try {
+            $this->mail->sendTemplate(
+                $user['email'],
+                'Welcome to MonkeysWork!',
+                'welcome',
+                ['userName' => $user['display_name'], 'role' => $user['role']],
+                ['auth', 'welcome'],
+            );
+        } catch (\Throwable $e) {
+            error_log('[Auth] Failed to send welcome email: ' . $e->getMessage());
+        }
+
+        return $this->json(['message' => 'Email verified successfully']);
     }
 
     /* ------------------------------------------------------------------ */
