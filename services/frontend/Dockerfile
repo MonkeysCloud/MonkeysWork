@@ -1,5 +1,11 @@
 FROM node:20-alpine AS builder
 
+ARG NEXT_PUBLIC_API_URL=https://api.monkeysworks.com/api/v1
+ARG NEXT_PUBLIC_SITE_URL=https://monkeysworks.com
+
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
