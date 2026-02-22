@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import BlogIndexClient from "./BlogIndexClient";
 
@@ -21,5 +22,13 @@ export const metadata: Metadata = {
 };
 
 export default function BlogPage() {
-    return <BlogIndexClient />;
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-brand-surface flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-brand-orange border-t-transparent" />
+            </div>
+        }>
+            <BlogIndexClient />
+        </Suspense>
+    );
 }

@@ -8,6 +8,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://monkeysworks.com"),
   title: "MonkeysWork — AI-Powered Freelance Marketplace",
   description:
     "Connect with exceptional freelance talent or find your next project on MonkeysWork, the AI-powered marketplace by MonkeysCloud.",
