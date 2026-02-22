@@ -8,5 +8,5 @@ gke_machine_type    = "e2-standard-4"
 gke_ai_machine_type = "n1-standard-8"
 db_tier             = "db-custom-4-16384"
 db_password         = "CHANGE_ME"
-domain              = "monkeyswork.com"
+domain              = "monkeysworks.com"
 enable_vertex_ai    = true

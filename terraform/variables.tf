@@ -69,7 +69,7 @@ variable "authorized_networks" {
 variable "domain" {
   description = "Primary domain for the application"
   type        = string
-  default     = "monkeyswork.com"
+  default     = "monkeysworks.com"
 }
 
 variable "enable_vertex_ai" {

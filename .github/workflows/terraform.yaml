@@ -15,6 +15,8 @@ env:
   TF_VAR_project_id: monkeyswork
   TF_VAR_environment: prod
   TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+  TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+  TF_VAR_internal_api_token: ${{ secrets.INTERNAL_API_TOKEN }}
 
 jobs:
   plan:
@@ -38,7 +40,7 @@ jobs:
         working-directory: terraform/
         run: |
           terraform init
-          terraform plan -no-color -out=tfplan
+          terraform plan -no-color -var-file=environments/prod/terraform.tfvars -out=tfplan
 
   apply:
     runs-on: ubuntu-latest
@@ -61,4 +63,5 @@ jobs:
         working-directory: terraform/
         run: |
           terraform init
-          terraform apply -auto-approve
+          terraform apply -auto-approve -var-file=environments/prod/terraform.tfvars
+

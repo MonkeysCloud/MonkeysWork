@@ -10,8 +10,8 @@ metadata:
     kubernetes.io/ingress.allow-http: "false"
 spec:
   rules:
-    # Frontend — monkeyswork.com
-    - host: monkeyswork.com
+    # Frontend — monkeysworks.com
+    - host: monkeysworks.com
       http:
         paths:
           - path: /
@@ -21,8 +21,8 @@ spec:
                 name: frontend
                 port:
                   number: 80
-    # Frontend — www.monkeyswork.com
-    - host: www.monkeyswork.com
+    # Frontend — www.monkeysworks.com
+    - host: www.monkeysworks.com
       http:
         paths:
           - path: /
@@ -32,8 +32,8 @@ spec:
                 name: frontend
                 port:
                   number: 80
-    # API — api.monkeyswork.com
-    - host: api.monkeyswork.com
+    # API — api.monkeysworks.com
+    - host: api.monkeysworks.com
       http:
         paths:
           - path: /
@@ -43,8 +43,8 @@ spec:
                 name: monkeyswork-api
                 port:
                   number: 80
-    # WebSocket — ws.monkeyswork.com
-    - host: ws.monkeyswork.com
+    # WebSocket — ws.monkeysworks.com
+    - host: ws.monkeysworks.com
       http:
         paths:
           - path: /
@@ -62,7 +62,7 @@ metadata:
   namespace: monkeyswork
 spec:
   domains:
-    - monkeyswork.com
-    - www.monkeyswork.com
-    - api.monkeyswork.com
-    - ws.monkeyswork.com
+    - monkeysworks.com
+    - www.monkeysworks.com
+    - api.monkeysworks.com
+    - ws.monkeysworks.com

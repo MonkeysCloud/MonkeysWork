@@ -15,7 +15,7 @@ use Psr\Http\Message\ServerRequestInterface;
  * No auth middleware – verification uses PayPal webhook ID + signature.
  *
  * Configure in PayPal Developer Dashboard → Webhooks:
- * URL:    https://api.monkeyswork.com/api/v1/webhooks/paypal
+ * URL:    https://api.monkeysworks.com/api/v1/webhooks/paypal
  * Events: PAYMENT.PAYOUTS-ITEM.SUCCEEDED,
  *         PAYMENT.PAYOUTS-ITEM.FAILED,
  *         PAYMENT.PAYOUTS-ITEM.BLOCKED,
@@ -29,7 +29,9 @@ final class PayPalWebhookController
 {
     use ApiController;
 
-    public function __construct(private ConnectionInterface $db) {}
+    public function __construct(private ConnectionInterface $db)
+    {
+    }
 
     #[Route('POST', '/paypal', name: 'webhooks.paypal', summary: 'PayPal webhook', tags: ['Webhooks'])]
     public function handle(ServerRequestInterface $request): JsonResponse
@@ -49,7 +51,7 @@ final class PayPalWebhookController
         }
 
         $eventType = $body['event_type'] ?? '';
-        $resource  = $body['resource'] ?? [];
+        $resource = $body['resource'] ?? [];
 
         $pdo = $this->db->pdo();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
@@ -92,10 +94,11 @@ final class PayPalWebhookController
     private function handlePayoutSucceeded(\PDO $pdo, array $resource, string $now): void
     {
         $batchId = $resource['payout_batch_id'] ?? null;
-        $itemId  = $resource['payout_item_id'] ?? null;
-        $ref     = $batchId ?? $itemId;
+        $itemId = $resource['payout_item_id'] ?? null;
+        $ref = $batchId ?? $itemId;
 
-        if (!$ref) return;
+        if (!$ref)
+            return;
 
         // Mark payout as completed
         $stmt = $pdo->prepare(
@@ -120,11 +123,12 @@ final class PayPalWebhookController
     private function handlePayoutFailed(\PDO $pdo, array $resource, string $eventType, string $now): void
     {
         $batchId = $resource['payout_batch_id'] ?? null;
-        $itemId  = $resource['payout_item_id'] ?? null;
-        $ref     = $batchId ?? $itemId;
-        $error   = $resource['errors']['message'] ?? $resource['transaction_status'] ?? $eventType;
+        $itemId = $resource['payout_item_id'] ?? null;
+        $ref = $batchId ?? $itemId;
+        $error = $resource['errors']['message'] ?? $resource['transaction_status'] ?? $eventType;
 
-        if (!$ref) return;
+        if (!$ref)
+            return;
 
         // Mark payout as failed
         $stmt = $pdo->prepare(
@@ -149,17 +153,19 @@ final class PayPalWebhookController
         // Notify the freelancer
         if ($payout && $payout['freelancer_id']) {
             $amount = number_format((float) $payout['amount'], 2);
-            $this->notifyUser($pdo,
+            $this->notifyUser(
+                $pdo,
                 $payout['freelancer_id'],
                 'billing.payout_failed',
                 '❌ PayPal Payout Failed',
                 "Your PayPal payout of \${$amount} could not be completed: {$error}. Our team is looking into this.",
                 [
                     'gateway_ref' => $ref,
-                    'error'       => $error,
-                    'link'        => '/dashboard/billing',
+                    'error' => $error,
+                    'link' => '/dashboard/billing',
                 ],
-                'warning', $now
+                'warning',
+                $now
             );
         }
 
@@ -171,7 +177,8 @@ final class PayPalWebhookController
     private function handlePayoutUnclaimed(\PDO $pdo, array $resource, string $now): void
     {
         $ref = $resource['payout_batch_id'] ?? $resource['payout_item_id'] ?? null;
-        if (!$ref) return;
+        if (!$ref)
+            return;
 
         // Find the freelancer
         $stmt = $pdo->prepare(
@@ -183,16 +190,18 @@ final class PayPalWebhookController
 
         if ($payout && $payout['freelancer_id']) {
             $amount = number_format((float) $payout['amount'], 2);
-            $this->notifyUser($pdo,
+            $this->notifyUser(
+                $pdo,
                 $payout['freelancer_id'],
                 'billing.payout_unclaimed',
                 '📬 PayPal Payout Awaiting',
                 "Your PayPal payout of \${$amount} is waiting to be claimed. Please check your PayPal email and accept the payment.",
                 [
                     'gateway_ref' => $ref,
-                    'link'        => '/dashboard/billing',
+                    'link' => '/dashboard/billing',
                 ],
-                'info', $now
+                'info',
+                $now
             );
         }
 
@@ -204,7 +213,8 @@ final class PayPalWebhookController
     private function handlePayoutRefunded(\PDO $pdo, array $resource, string $now): void
     {
         $ref = $resource['payout_batch_id'] ?? $resource['payout_item_id'] ?? null;
-        if (!$ref) return;
+        if (!$ref)
+            return;
 
         $pdo->prepare(
             'UPDATE "payout" SET status = \'failed\', failure_reason = \'PayPal payout refunded\', processed_at = :now
@@ -228,11 +238,11 @@ final class PayPalWebhookController
             return true;
         }
 
-        $transmissionId   = $this->getHeader($headers, 'paypal-transmission-id');
+        $transmissionId = $this->getHeader($headers, 'paypal-transmission-id');
         $transmissionTime = $this->getHeader($headers, 'paypal-transmission-time');
-        $certUrl          = $this->getHeader($headers, 'paypal-cert-url');
-        $authAlgo         = $this->getHeader($headers, 'paypal-auth-algo');
-        $transmissionSig  = $this->getHeader($headers, 'paypal-transmission-sig');
+        $certUrl = $this->getHeader($headers, 'paypal-cert-url');
+        $authAlgo = $this->getHeader($headers, 'paypal-auth-algo');
+        $transmissionSig = $this->getHeader($headers, 'paypal-transmission-sig');
 
         if (!$transmissionId || !$transmissionTime || !$transmissionSig) {
             return false;
@@ -240,9 +250,9 @@ final class PayPalWebhookController
 
         // Call PayPal verify-webhook-signature API
         $clientId = $_ENV['PAYPAL_CLIENT_ID'] ?? getenv('PAYPAL_CLIENT_ID') ?: '';
-        $secret   = $_ENV['PAYPAL_CLIENT_SECRET'] ?? getenv('PAYPAL_SECRET') ?: '';
-        $mode     = $_ENV['PAYPAL_MODE'] ?? getenv('PAYPAL_MODE') ?: 'sandbox';
-        $baseUrl  = ($mode === 'sandbox')
+        $secret = $_ENV['PAYPAL_CLIENT_SECRET'] ?? getenv('PAYPAL_SECRET') ?: '';
+        $mode = $_ENV['PAYPAL_MODE'] ?? getenv('PAYPAL_MODE') ?: 'sandbox';
+        $baseUrl = ($mode === 'sandbox')
             ? 'https://api-m.sandbox.paypal.com'
             : 'https://api-m.paypal.com';
 
@@ -250,39 +260,40 @@ final class PayPalWebhookController
             // Get access token
             $tokenCh = curl_init("{$baseUrl}/v1/oauth2/token");
             curl_setopt_array($tokenCh, [
-                CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => 'grant_type=client_credentials',
-                CURLOPT_USERPWD        => "{$clientId}:{$secret}",
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => 'grant_type=client_credentials',
+                CURLOPT_USERPWD => "{$clientId}:{$secret}",
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_TIMEOUT => 10,
             ]);
             $tokenResp = curl_exec($tokenCh);
             curl_close($tokenCh);
 
             $token = json_decode($tokenResp, true)['access_token'] ?? null;
-            if (!$token) return false;
+            if (!$token)
+                return false;
 
             // Verify signature
             $verifyBody = json_encode([
-                'auth_algo'         => $authAlgo,
-                'cert_url'          => $certUrl,
-                'transmission_id'   => $transmissionId,
-                'transmission_sig'  => $transmissionSig,
+                'auth_algo' => $authAlgo,
+                'cert_url' => $certUrl,
+                'transmission_id' => $transmissionId,
+                'transmission_sig' => $transmissionSig,
                 'transmission_time' => $transmissionTime,
-                'webhook_id'        => $webhookId,
-                'webhook_event'     => json_decode($payload, true),
+                'webhook_id' => $webhookId,
+                'webhook_event' => json_decode($payload, true),
             ]);
 
             $verifyCh = curl_init("{$baseUrl}/v1/notifications/verify-webhook-signature");
             curl_setopt_array($verifyCh, [
-                CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => $verifyBody,
-                CURLOPT_HTTPHEADER     => [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => $verifyBody,
+                CURLOPT_HTTPHEADER => [
                     'Content-Type: application/json',
                     "Authorization: Bearer {$token}",
                 ],
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 10,
+                CURLOPT_TIMEOUT => 10,
             ]);
             $verifyResp = curl_exec($verifyCh);
             curl_close($verifyCh);
@@ -309,8 +320,14 @@ final class PayPalWebhookController
     /* ─── Shared: insert notification + push via socket ─── */
 
     private function notifyUser(
-        \PDO $pdo, string $userId, string $type, string $title,
-        string $body, array $data, string $priority, string $now
+        \PDO $pdo,
+        string $userId,
+        string $type,
+        string $title,
+        string $body,
+        array $data,
+        string $priority,
+        string $now
     ): void {
         $notifId = $this->uuid();
 
@@ -319,16 +336,16 @@ final class PayPalWebhookController
                 'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
                  VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
             )->execute([
-                'id'    => $notifId,
-                'uid'   => $userId,
-                'type'  => $type,
-                'title' => $title,
-                'body'  => $body,
-                'data'  => json_encode($data),
-                'prio'  => $priority,
-                'chan'   => 'in_app',
-                'now'   => $now,
-            ]);
+                        'id' => $notifId,
+                        'uid' => $userId,
+                        'type' => $type,
+                        'title' => $title,
+                        'body' => $body,
+                        'data' => json_encode($data),
+                        'prio' => $priority,
+                        'chan' => 'in_app',
+                        'now' => $now,
+                    ]);
         } catch (\Throwable $e) {
             error_log("[PayPalWebhook] notification insert: " . $e->getMessage());
         }
@@ -341,12 +358,12 @@ final class PayPalWebhookController
 
             $socket = new SocketEvent($redis);
             $socket->toUser($userId, 'notification:new', [
-                'id'         => $notifId,
-                'type'       => $type,
-                'title'      => $title,
-                'body'       => $body,
-                'data'       => $data,
-                'priority'   => $priority,
+                'id' => $notifId,
+                'type' => $type,
+                'title' => $title,
+                'body' => $body,
+                'data' => $data,
+                'priority' => $priority,
                 'created_at' => $now,
             ]);
 
@@ -360,9 +377,14 @@ final class PayPalWebhookController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 }

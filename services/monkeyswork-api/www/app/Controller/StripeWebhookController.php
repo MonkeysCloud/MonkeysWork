@@ -16,7 +16,7 @@ use Psr\Http\Message\ServerRequestInterface;
  * No auth middleware – verification uses Stripe signature.
  *
  * Configure in Stripe Dashboard → Webhooks:
- * URL:    https://api.monkeyswork.com/api/v1/webhooks/stripe
+ * URL:    https://api.monkeysworks.com/api/v1/webhooks/stripe
  * Events: payment_intent.succeeded, payment_intent.payment_failed,
  *         transfer.reversed, charge.refunded
  */
@@ -35,7 +35,7 @@ final class StripeWebhookController
     #[Route('POST', '/stripe', name: 'webhooks.stripe', summary: 'Stripe webhook', tags: ['Webhooks'])]
     public function handle(ServerRequestInterface $request): JsonResponse
     {
-        $payload   = (string) $request->getBody();
+        $payload = (string) $request->getBody();
         $sigHeader = $request->getHeaderLine('Stripe-Signature');
 
         try {
@@ -80,7 +80,7 @@ final class StripeWebhookController
                  * ──────────────────────────────────────────── */
                 case 'charge.refunded':
                     $charge = $event->data->object;
-                    $piId   = $charge->payment_intent;
+                    $piId = $charge->payment_intent;
                     if ($piId) {
                         $this->handleRefund($pdo, $piId, $charge->amount_refunded, $now);
                     }
@@ -129,10 +129,10 @@ final class StripeWebhookController
                     gateway_metadata = :meta
              WHERE gateway_reference = :ref AND status = \'pending\''
         )->execute([
-            'ref'  => $pi->id,
-            'now'  => $now,
-            'meta' => json_encode(['error' => $failureMsg]),
-        ]);
+                    'ref' => $pi->id,
+                    'now' => $now,
+                    'meta' => json_encode(['error' => $failureMsg]),
+                ]);
 
         // Also insert a fund_failed record if the PI had metadata but no escrow pending
         $contractId = $pi->metadata->mw_contract ?? null;
@@ -154,13 +154,13 @@ final class StripeWebhookController
                          gateway_reference, gateway_metadata, created_at)
                      VALUES (:id, :cid, \'fund_failed\', :amt, \'USD\', \'failed\', :ref, :meta, :now)'
                 )->execute([
-                    'id'   => $id,
-                    'cid'  => $contractId,
-                    'amt'  => $amount,
-                    'ref'  => $pi->id,
-                    'meta' => json_encode(['error' => $failureMsg]),
-                    'now'  => $now,
-                ]);
+                            'id' => $id,
+                            'cid' => $contractId,
+                            'amt' => $amount,
+                            'ref' => $pi->id,
+                            'meta' => json_encode(['error' => $failureMsg]),
+                            'now' => $now,
+                        ]);
             }
 
             // Notify the client
@@ -171,17 +171,19 @@ final class StripeWebhookController
             $contract = $clientStmt->fetch(\PDO::FETCH_ASSOC);
 
             if ($contract) {
-                $this->notifyUser($pdo,
+                $this->notifyUser(
+                    $pdo,
                     $contract['client_id'],
                     'billing.charge_failed',
                     '⚠️ Payment Failed',
                     "Your payment for \"{$contract['title']}\" was declined: {$failureMsg}. Please update your payment method.",
                     [
                         'contract_id' => $contractId,
-                        'error'       => $failureMsg,
-                        'link'        => '/dashboard/billing/payment-methods',
+                        'error' => $failureMsg,
+                        'link' => '/dashboard/billing/payment-methods',
                     ],
-                    'warning', $now
+                    'warning',
+                    $now
                 );
             }
         }
@@ -198,23 +200,25 @@ final class StripeWebhookController
             'UPDATE "payout" SET status = \'failed\', failure_reason = :reason, processed_at = :now
              WHERE gateway_reference = :ref AND status IN (\'pending\', \'processing\')'
         )->execute([
-            'ref'    => $transfer->id,
-            'reason' => 'Stripe transfer failed',
-            'now'    => $now,
-        ]);
+                    'ref' => $transfer->id,
+                    'reason' => 'Stripe transfer failed',
+                    'now' => $now,
+                ]);
 
         // Notify the freelancer
         if ($freelancerId) {
-            $this->notifyUser($pdo,
+            $this->notifyUser(
+                $pdo,
                 $freelancerId,
                 'billing.payout_failed',
                 '❌ Payout Failed',
                 'Your weekly payout could not be processed. Our team is reviewing the issue and will retry your payment.',
                 [
                     'transfer_id' => $transfer->id,
-                    'link'        => '/dashboard/billing',
+                    'link' => '/dashboard/billing',
                 ],
-                'warning', $now
+                'warning',
+                $now
             );
         }
     }
@@ -230,7 +234,8 @@ final class StripeWebhookController
         $stmt->execute(['ref' => $gatewayRef]);
         $orig = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-        if (!$orig) return;
+        if (!$orig)
+            return;
 
         $refundAmount = number_format($refundedCents / 100, 2, '.', '');
 
@@ -241,20 +246,26 @@ final class StripeWebhookController
                  gateway_reference, processed_at, created_at)
              VALUES (:id, :cid, :mid, \'refund\', :amt, \'USD\', \'completed\', :ref, :now, :now)'
         )->execute([
-            'id'  => $id,
-            'cid' => $orig['contract_id'],
-            'mid' => $orig['milestone_id'],
-            'amt' => $refundAmount,
-            'ref' => $gatewayRef . '_refund',
-            'now' => $now,
-        ]);
+                    'id' => $id,
+                    'cid' => $orig['contract_id'],
+                    'mid' => $orig['milestone_id'],
+                    'amt' => $refundAmount,
+                    'ref' => $gatewayRef . '_refund',
+                    'now' => $now,
+                ]);
     }
 
     /* ─── Shared: insert notification + push via socket ─── */
 
     private function notifyUser(
-        \PDO $pdo, string $userId, string $type, string $title,
-        string $body, array $data, string $priority, string $now
+        \PDO $pdo,
+        string $userId,
+        string $type,
+        string $title,
+        string $body,
+        array $data,
+        string $priority,
+        string $now
     ): void {
         $notifId = $this->uuid();
 
@@ -263,16 +274,16 @@ final class StripeWebhookController
                 'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
                  VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
             )->execute([
-                'id'    => $notifId,
-                'uid'   => $userId,
-                'type'  => $type,
-                'title' => $title,
-                'body'  => $body,
-                'data'  => json_encode($data),
-                'prio'  => $priority,
-                'chan'   => 'in_app',
-                'now'   => $now,
-            ]);
+                        'id' => $notifId,
+                        'uid' => $userId,
+                        'type' => $type,
+                        'title' => $title,
+                        'body' => $body,
+                        'data' => json_encode($data),
+                        'prio' => $priority,
+                        'chan' => 'in_app',
+                        'now' => $now,
+                    ]);
         } catch (\Throwable $e) {
             error_log("[StripeWebhook] notification insert: " . $e->getMessage());
         }
@@ -285,12 +296,12 @@ final class StripeWebhookController
 
             $socket = new SocketEvent($redis);
             $socket->toUser($userId, 'notification:new', [
-                'id'         => $notifId,
-                'type'       => $type,
-                'title'      => $title,
-                'body'       => $body,
-                'data'       => $data,
-                'priority'   => $priority,
+                'id' => $notifId,
+                'type' => $type,
+                'title' => $title,
+                'body' => $body,
+                'data' => $data,
+                'priority' => $priority,
                 'created_at' => $now,
             ]);
 
@@ -304,9 +315,14 @@ final class StripeWebhookController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 }

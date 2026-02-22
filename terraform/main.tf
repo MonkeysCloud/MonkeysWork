@@ -871,7 +871,7 @@ resource "google_monitoring_notification_channel" "email" {
   type         = "email"
 
   labels = {
-    email_address = "alerts@monkeyswork.com"
+    email_address = "alerts@monkeysworks.com"
   }
 }
 

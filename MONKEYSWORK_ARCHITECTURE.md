@@ -11,7 +11,7 @@
 
 - GCP Project already exists; billing enabled.
 - GitHub org `monkeyswork` owns the repo.
-- Domain: `monkeyswork.com` (DNS managed externally, pointed to GCP LB).
+- Domain: `monkeysworks.com` (DNS managed externally, pointed to GCP LB).
 - Region: `us-central1` (can parameterize later).
 - Team size at kickoff: 2-3 engineers + founder.
 - MVP launch target: ~90 days from sprint start.
@@ -1432,7 +1432,7 @@ metadata:
     kubernetes.io/ingress.allow-http: "false"
 spec:
   rules:
-    - host: api.monkeyswork.com
+    - host: api.monkeysworks.com
       http:
         paths:
           - path: /
@@ -1450,7 +1450,7 @@ metadata:
   namespace: monkeyswork
 spec:
   domains:
-    - api.monkeyswork.com
+    - api.monkeysworks.com
 ```
 
 ## `infra/k8s/base/hpa.yaml`
@@ -2355,7 +2355,7 @@ Rules:
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://monkeyswork.com/schemas/events/job_created.v1.json",
+  "$id": "https://monkeysworks.com/schemas/events/job_created.v1.json",
   "title": "JobCreated",
   "description": "Emitted when a client publishes a new job posting",
   "type": "object",
@@ -2431,7 +2431,7 @@ Rules:
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://monkeyswork.com/schemas/events/proposal_submitted.v1.json",
+  "$id": "https://monkeysworks.com/schemas/events/proposal_submitted.v1.json",
   "title": "ProposalSubmitted",
   "type": "object",
   "required": ["event_id", "event_type", "event_version", "timestamp", "idempotency_key", "data"],
@@ -2477,7 +2477,7 @@ Rules:
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://monkeyswork.com/schemas/events/milestone_accepted.v1.json",
+  "$id": "https://monkeysworks.com/schemas/events/milestone_accepted.v1.json",
   "title": "MilestoneAccepted",
   "type": "object",
   "required": ["event_id", "event_type", "event_version", "timestamp", "idempotency_key", "data"],
@@ -2516,7 +2516,7 @@ Rules:
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://monkeyswork.com/schemas/events/dispute_opened.v1.json",
+  "$id": "https://monkeysworks.com/schemas/events/dispute_opened.v1.json",
   "title": "DisputeOpened",
   "type": "object",
   "required": ["event_id", "event_type", "event_version", "timestamp", "idempotency_key", "data"],
@@ -2558,7 +2558,7 @@ Rules:
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://monkeyswork.com/schemas/events/verification_status_changed.v1.json",
+  "$id": "https://monkeysworks.com/schemas/events/verification_status_changed.v1.json",
   "title": "VerificationStatusChanged",
   "type": "object",
   "required": ["event_id", "event_type", "event_version", "timestamp", "idempotency_key", "data"],
@@ -2686,7 +2686,7 @@ Rules:
 | Implement job CRUD + events | Backend Eng | monkeyswork-api deployed | job_created event published |
 | Implement proposal CRUD + events | Backend Eng | Jobs ready | proposal_submitted event published |
 | Implement user/auth module | Backend Eng | DB ready | JWT auth working |
-| Set up Ingress + TLS | Infra Engineer | GKE + domain DNS | HTTPS on api.monkeyswork.com |
+| Set up Ingress + TLS | Infra Engineer | GKE + domain DNS | HTTPS on api.monkeysworks.com |
 | Event schema validation in CI | Backend Eng | Schemas defined | PR fails on invalid schema |
 
 ### Week 4 — Verification v0 + Observability

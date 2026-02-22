@@ -170,7 +170,7 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@monkeyswork.com
+      PGADMIN_DEFAULT_EMAIL: admin@monkeysworks.com
       PGADMIN_DEFAULT_PASSWORD: ${DB_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:

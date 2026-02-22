@@ -11,6 +11,22 @@ export const metadata: Metadata = {
   title: "MonkeysWork — AI-Powered Freelance Marketplace",
   description:
     "Connect with exceptional freelance talent or find your next project on MonkeysWork, the AI-powered marketplace by MonkeysCloud.",
+  openGraph: {
+    siteName: "MonkeysWork",
+    type: "website",
+    locale: "en_US",
+    title: "MonkeysWork — AI-Powered Freelance Marketplace",
+    description:
+      "Connect with exceptional freelance talent or find your next project on MonkeysWork.",
+    images: [{ url: "/og-default.png", width: 1200, height: 630, alt: "MonkeysWork" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MonkeysWork — AI-Powered Freelance Marketplace",
+    description:
+      "Connect with exceptional freelance talent or find your next project.",
+    images: ["/og-default.png"],
+  },
   icons: {
     icon: [
       { url: "/favicon/favicon.ico", sizes: "any" },

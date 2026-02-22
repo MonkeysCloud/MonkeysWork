@@ -340,6 +340,16 @@ const ADMIN_MENU: MenuConfig = {
             label: "Conversations",
             href: "/dashboard/admin/conversations",
         },
+        {
+            icon: "📰",
+            label: "Blog",
+            href: "/dashboard/admin/blog",
+            children: [
+                { label: "All Posts", href: "/dashboard/admin/blog" },
+                { label: "Create New", href: "/dashboard/admin/blog/new" },
+                { label: "Tags", href: "/dashboard/admin/blog?view=tags" },
+            ],
+        },
     ],
     secondary: [
         {

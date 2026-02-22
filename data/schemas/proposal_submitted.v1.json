@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://monkeyswork.com/schemas/events/proposal_submitted.v1.json",
+  "$id": "https://monkeysworks.com/schemas/events/proposal_submitted.v1.json",
   "title": "ProposalSubmitted",
   "type": "object",
   "required": [
