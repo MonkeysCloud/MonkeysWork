@@ -18,15 +18,17 @@ final class StatsController
 
     /** Allowed period codes → PostgreSQL interval + bucket count */
     private const PERIODS = [
-        '7d'  => ['interval' => '7 days',   'bucket' => 'day',   'count' => 7,  'fmt' => 'YYYY-MM-DD'],
-        '30d' => ['interval' => '30 days',  'bucket' => 'day',   'count' => 30, 'fmt' => 'YYYY-MM-DD'],
-        '90d' => ['interval' => '90 days',  'bucket' => 'week',  'count' => 13, 'fmt' => 'IYYY-"W"IW'],
-        '6m'  => ['interval' => '6 months', 'bucket' => 'month', 'count' => 6,  'fmt' => 'YYYY-MM'],
-        '1y'  => ['interval' => '12 months','bucket' => 'month', 'count' => 12, 'fmt' => 'YYYY-MM'],
-        'all' => ['interval' => null,       'bucket' => 'month', 'count' => 24, 'fmt' => 'YYYY-MM'],
+        '7d' => ['interval' => '7 days', 'bucket' => 'day', 'count' => 7, 'fmt' => 'YYYY-MM-DD'],
+        '30d' => ['interval' => '30 days', 'bucket' => 'day', 'count' => 30, 'fmt' => 'YYYY-MM-DD'],
+        '90d' => ['interval' => '90 days', 'bucket' => 'week', 'count' => 13, 'fmt' => 'IYYY-"W"IW'],
+        '6m' => ['interval' => '6 months', 'bucket' => 'month', 'count' => 6, 'fmt' => 'YYYY-MM'],
+        '1y' => ['interval' => '12 months', 'bucket' => 'month', 'count' => 12, 'fmt' => 'YYYY-MM'],
+        'all' => ['interval' => null, 'bucket' => 'month', 'count' => 24, 'fmt' => 'YYYY-MM'],
     ];
 
-    public function __construct(private ConnectionInterface $db) {}
+    public function __construct(private ConnectionInterface $db)
+    {
+    }
 
     #[Route('GET', '', name: 'stats.index', summary: 'Role-based dashboard stats with period filter', tags: ['Stats'])]
     public function index(ServerRequestInterface $request): JsonResponse
@@ -36,7 +38,7 @@ final class StatsController
             return $this->error('Unauthorized', 401);
         }
 
-        $query  = $request->getQueryParams();
+        $query = $request->getQueryParams();
         $period = $query['period'] ?? '1y';
         if (!isset(self::PERIODS[$period])) {
             $period = '1y';
@@ -58,6 +60,10 @@ final class StatsController
             return $this->json(['data' => $this->clientStats($pdo, $userId, $period, $pc)]);
         }
 
+        if ($role === 'admin') {
+            return $this->json(['data' => $this->adminStats($pdo, $period, $pc)]);
+        }
+
         return $this->error('Unsupported role', 400);
     }
 
@@ -74,7 +80,7 @@ final class StatsController
     private function buildTimeline(array $rows, array $pc): array
     {
         $bucket = $pc['bucket'];
-        $count  = $pc['count'];
+        $count = $pc['count'];
         $byKey = [];
         foreach ($rows as $r) {
             $byKey[$r['bucket']] = (float) $r['amount'];
@@ -85,7 +91,7 @@ final class StatsController
             if ($bucket === 'day') {
                 $key = date('Y-m-d', strtotime("-{$i} days"));
             } elseif ($bucket === 'week') {
-                $dt  = new \DateTimeImmutable("-{$i} weeks");
+                $dt = new \DateTimeImmutable("-{$i} weeks");
                 $key = $dt->format('o') . '-W' . $dt->format('W');
             } else {
                 $key = date('Y-m', strtotime("-{$i} months"));
@@ -100,8 +106,8 @@ final class StatsController
      * ────────────────────────────────────────────── */
     private function freelancerStats(\PDO $pdo, string $uid, string $period, array $pc): array
     {
-        $dateCol   = 'created_at';
-        $dateFilt  = $this->dateFilter($pc['interval'], $dateCol);
+        $dateCol = 'created_at';
+        $dateFilt = $this->dateFilter($pc['interval'], $dateCol);
 
         // ── Profile overview (always lifetime) ──
         $profile = $pdo->prepare(
@@ -196,7 +202,7 @@ final class StatsController
         $time = $timeStats->fetch(\PDO::FETCH_ASSOC) ?: ['total_minutes' => 0, 'week_minutes' => 0];
 
         $totalHours = round((float) ($time['total_minutes'] ?? 0) / 60, 1);
-        $weekHours  = round((float) ($time['week_minutes'] ?? 0) / 60, 1);
+        $weekHours = round((float) ($time['week_minutes'] ?? 0) / 60, 1);
 
         // ── Period earnings (sum for the selected window) ──
         $periodEarnings = 0.0;
@@ -205,56 +211,56 @@ final class StatsController
         }
 
         return [
-            'role'   => 'freelancer',
+            'role' => 'freelancer',
             'period' => $period,
             'overview' => [
-                'total_earnings'      => (float) ($p['total_earnings'] ?? 0),
-                'period_earnings'     => $periodEarnings,
-                'active_contracts'    => $activeContracts,
-                'jobs_completed'      => (int) ($p['total_jobs_completed'] ?? 0),
-                'avg_rating'          => (float) ($p['avg_rating'] ?? 0),
-                'total_reviews'       => (int) ($p['total_reviews'] ?? 0),
-                'success_rate'        => (float) ($p['success_rate'] ?? 0),
-                'profile_completeness'=> (int) ($p['profile_completeness'] ?? 0),
-                'response_rate'       => (float) ($p['response_rate'] ?? 0),
-                'hourly_rate'         => (float) ($p['hourly_rate'] ?? 0),
-                'currency'            => $p['currency'] ?? 'USD',
-                'availability'        => $p['availability_status'] ?? 'unavailable',
+                'total_earnings' => (float) ($p['total_earnings'] ?? 0),
+                'period_earnings' => $periodEarnings,
+                'active_contracts' => $activeContracts,
+                'jobs_completed' => (int) ($p['total_jobs_completed'] ?? 0),
+                'avg_rating' => (float) ($p['avg_rating'] ?? 0),
+                'total_reviews' => (int) ($p['total_reviews'] ?? 0),
+                'success_rate' => (float) ($p['success_rate'] ?? 0),
+                'profile_completeness' => (int) ($p['profile_completeness'] ?? 0),
+                'response_rate' => (float) ($p['response_rate'] ?? 0),
+                'hourly_rate' => (float) ($p['hourly_rate'] ?? 0),
+                'currency' => $p['currency'] ?? 'USD',
+                'availability' => $p['availability_status'] ?? 'unavailable',
             ],
             'proposals' => [
-                'total'       => (int) ($proposals['total'] ?? 0),
-                'pending'     => (int) ($proposals['pending'] ?? 0),
-                'accepted'    => (int) ($proposals['accepted'] ?? 0),
-                'rejected'    => (int) ($proposals['rejected'] ?? 0),
-                'withdrawn'   => (int) ($proposals['withdrawn'] ?? 0),
+                'total' => (int) ($proposals['total'] ?? 0),
+                'pending' => (int) ($proposals['pending'] ?? 0),
+                'accepted' => (int) ($proposals['accepted'] ?? 0),
+                'rejected' => (int) ($proposals['rejected'] ?? 0),
+                'withdrawn' => (int) ($proposals['withdrawn'] ?? 0),
                 'shortlisted' => (int) ($proposals['shortlisted'] ?? 0),
-                'viewed'      => (int) ($proposals['viewed'] ?? 0),
+                'viewed' => (int) ($proposals['viewed'] ?? 0),
                 'acceptance_rate' => ($proposals['total'] ?? 0) > 0
                     ? round(((int) ($proposals['accepted'] ?? 0)) / ((int) $proposals['total']) * 100, 1)
                     : 0,
             ],
             'contracts' => [
-                'total'           => (int) ($contracts['total'] ?? 0),
-                'active'          => (int) ($contracts['active'] ?? 0),
-                'completed'       => (int) ($contracts['completed'] ?? 0),
-                'cancelled'       => (int) ($contracts['cancelled'] ?? 0),
-                'paused'          => (int) ($contracts['paused'] ?? 0),
-                'total_value'     => (float) ($contracts['total_value'] ?? 0),
+                'total' => (int) ($contracts['total'] ?? 0),
+                'active' => (int) ($contracts['active'] ?? 0),
+                'completed' => (int) ($contracts['completed'] ?? 0),
+                'cancelled' => (int) ($contracts['cancelled'] ?? 0),
+                'paused' => (int) ($contracts['paused'] ?? 0),
+                'total_value' => (float) ($contracts['total_value'] ?? 0),
                 'completed_value' => (float) ($contracts['completed_value'] ?? 0),
             ],
             'earnings_timeline' => $timeline,
             'invoices' => [
-                'total'       => (int) ($invoices['total'] ?? 0),
-                'paid'        => (int) ($invoices['paid'] ?? 0),
-                'pending'     => (int) ($invoices['pending'] ?? 0),
-                'overdue'     => (int) ($invoices['overdue'] ?? 0),
-                'total_amount'=> (float) ($invoices['total_amount'] ?? 0),
+                'total' => (int) ($invoices['total'] ?? 0),
+                'paid' => (int) ($invoices['paid'] ?? 0),
+                'pending' => (int) ($invoices['pending'] ?? 0),
+                'overdue' => (int) ($invoices['overdue'] ?? 0),
+                'total_amount' => (float) ($invoices['total_amount'] ?? 0),
                 'paid_amount' => (float) ($invoices['paid_amount'] ?? 0),
             ],
             'time_tracking' => [
-                'total_hours'       => $totalHours,
-                'hours_this_week'   => $weekHours,
-                'profile_hours'     => (float) ($p['total_hours_logged'] ?? 0),
+                'total_hours' => $totalHours,
+                'hours_this_week' => $weekHours,
+                'profile_hours' => (float) ($p['total_hours_logged'] ?? 0),
             ],
         ];
     }
@@ -385,58 +391,165 @@ final class StatsController
         $invoices = $invoiceStats->fetch(\PDO::FETCH_ASSOC) ?: [];
 
         return [
-            'role'   => 'client',
+            'role' => 'client',
             'period' => $period,
             'overview' => [
-                'total_spent'       => (float) ($p['total_spent'] ?? 0),
-                'period_spent'      => $periodSpending,
-                'active_contracts'  => $activeContracts,
-                'jobs_posted'       => (int) ($p['total_jobs_posted'] ?? 0),
-                'total_hires'       => $totalHires,
-                'avg_rating_given'  => (float) ($p['avg_rating_given'] ?? 0),
-                'payment_verified'  => (bool) ($p['payment_verified'] ?? false),
-                'verification_level'=> $p['verification_level'] ?? 'none',
+                'total_spent' => (float) ($p['total_spent'] ?? 0),
+                'period_spent' => $periodSpending,
+                'active_contracts' => $activeContracts,
+                'jobs_posted' => (int) ($p['total_jobs_posted'] ?? 0),
+                'total_hires' => $totalHires,
+                'avg_rating_given' => (float) ($p['avg_rating_given'] ?? 0),
+                'payment_verified' => (bool) ($p['payment_verified'] ?? false),
+                'verification_level' => $p['verification_level'] ?? 'none',
             ],
             'jobs' => [
-                'total'          => (int) ($jobs['total'] ?? 0),
-                'draft'          => (int) ($jobs['draft'] ?? 0),
-                'open'           => (int) ($jobs['open'] ?? 0),
-                'in_progress'    => (int) ($jobs['in_progress'] ?? 0),
-                'completed'      => (int) ($jobs['completed'] ?? 0),
-                'closed'         => (int) ($jobs['closed'] ?? 0),
-                'cancelled'      => (int) ($jobs['cancelled'] ?? 0),
+                'total' => (int) ($jobs['total'] ?? 0),
+                'draft' => (int) ($jobs['draft'] ?? 0),
+                'open' => (int) ($jobs['open'] ?? 0),
+                'in_progress' => (int) ($jobs['in_progress'] ?? 0),
+                'completed' => (int) ($jobs['completed'] ?? 0),
+                'closed' => (int) ($jobs['closed'] ?? 0),
+                'cancelled' => (int) ($jobs['cancelled'] ?? 0),
                 'total_proposals' => $totalProposals,
-                'total_views'    => (int) ($jobs['total_views'] ?? 0),
+                'total_views' => (int) ($jobs['total_views'] ?? 0),
                 'avg_proposals_per_job' => ((int) ($jobs['total'] ?? 0)) > 0
                     ? round($totalProposals / ((int) $jobs['total']), 1)
                     : 0,
             ],
             'contracts' => [
-                'total'           => (int) ($contracts['total'] ?? 0),
-                'active'          => (int) ($contracts['active'] ?? 0),
-                'completed'       => (int) ($contracts['completed'] ?? 0),
-                'cancelled'       => (int) ($contracts['cancelled'] ?? 0),
-                'paused'          => (int) ($contracts['paused'] ?? 0),
-                'total_value'     => (float) ($contracts['total_value'] ?? 0),
+                'total' => (int) ($contracts['total'] ?? 0),
+                'active' => (int) ($contracts['active'] ?? 0),
+                'completed' => (int) ($contracts['completed'] ?? 0),
+                'cancelled' => (int) ($contracts['cancelled'] ?? 0),
+                'paused' => (int) ($contracts['paused'] ?? 0),
+                'total_value' => (float) ($contracts['total_value'] ?? 0),
                 'completed_value' => (float) ($contracts['completed_value'] ?? 0),
             ],
             'spending_timeline' => $timeline,
             'proposals_received' => [
-                'total'       => (int) ($proposals['total'] ?? 0),
-                'pending'     => (int) ($proposals['pending'] ?? 0),
-                'accepted'    => (int) ($proposals['accepted'] ?? 0),
-                'rejected'    => (int) ($proposals['rejected'] ?? 0),
+                'total' => (int) ($proposals['total'] ?? 0),
+                'pending' => (int) ($proposals['pending'] ?? 0),
+                'accepted' => (int) ($proposals['accepted'] ?? 0),
+                'rejected' => (int) ($proposals['rejected'] ?? 0),
                 'shortlisted' => (int) ($proposals['shortlisted'] ?? 0),
-                'avg_bid'     => round((float) ($proposals['avg_bid'] ?? 0), 2),
+                'avg_bid' => round((float) ($proposals['avg_bid'] ?? 0), 2),
             ],
             'invoices' => [
-                'total'       => (int) ($invoices['total'] ?? 0),
-                'paid'        => (int) ($invoices['paid'] ?? 0),
-                'pending'     => (int) ($invoices['pending'] ?? 0),
-                'overdue'     => (int) ($invoices['overdue'] ?? 0),
-                'total_amount'=> (float) ($invoices['total_amount'] ?? 0),
+                'total' => (int) ($invoices['total'] ?? 0),
+                'paid' => (int) ($invoices['paid'] ?? 0),
+                'pending' => (int) ($invoices['pending'] ?? 0),
+                'overdue' => (int) ($invoices['overdue'] ?? 0),
+                'total_amount' => (float) ($invoices['total_amount'] ?? 0),
                 'paid_amount' => (float) ($invoices['paid_amount'] ?? 0),
             ],
+        ];
+    }
+
+    /* ──────────────────────────────────────────────
+     *  Admin stats – platform-wide overview
+     * ────────────────────────────────────────────── */
+    private function adminStats(\PDO $pdo, string $period, array $pc): array
+    {
+        $dateFilt = $this->dateFilter($pc['interval'], 'created_at');
+
+        // ── Users ──
+        $users = $pdo->query(
+            "SELECT COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE role = 'freelancer') AS freelancers,
+                    COUNT(*) FILTER (WHERE role = 'client')     AS clients,
+                    COUNT(*) FILTER (WHERE role = 'admin')      AS admins
+             FROM \"user\""
+        )->fetch(\PDO::FETCH_ASSOC);
+
+        // ── Jobs ──
+        $jobs = $pdo->prepare(
+            "SELECT COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status = 'open')        AS open,
+                    COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress,
+                    COUNT(*) FILTER (WHERE status = 'completed')   AS completed,
+                    COUNT(*) FILTER (WHERE status = 'closed')      AS closed
+             FROM \"job\" WHERE 1=1{$dateFilt}"
+        );
+        $jobs->execute();
+        $jobData = $jobs->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+        // ── Contracts ──
+        $contracts = $pdo->prepare(
+            "SELECT COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status = 'active')    AS active,
+                    COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+                    COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled,
+                    COALESCE(SUM(total_amount), 0)                AS total_value,
+                    COALESCE(SUM(total_amount) FILTER (WHERE status = 'completed'), 0) AS completed_value
+             FROM \"contract\" WHERE 1=1{$dateFilt}"
+        );
+        $contracts->execute();
+        $contractData = $contracts->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+        // ── Disputes ──
+        $disputes = $pdo->prepare(
+            "SELECT COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status = 'open')     AS open,
+                    COUNT(*) FILTER (WHERE status = 'resolved') AS resolved
+             FROM \"dispute\" WHERE 1=1{$dateFilt}"
+        );
+        $disputes->execute();
+        $disputeData = $disputes->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+        // ── Revenue timeline ──
+        $intervalClause = $pc['interval'] ? "AND completed_at >= NOW() - INTERVAL '{$pc['interval']}'" : '';
+        $revTimeline = $pdo->prepare(
+            "SELECT
+                TO_CHAR(DATE_TRUNC('{$pc['bucket']}', completed_at), '{$pc['fmt']}') AS bucket,
+                COALESCE(SUM(total_amount), 0) AS amount
+             FROM \"contract\"
+             WHERE status = 'completed'
+               {$intervalClause}
+             GROUP BY DATE_TRUNC('{$pc['bucket']}', completed_at)
+             ORDER BY bucket"
+        );
+        $revTimeline->execute();
+        $timeline = $this->buildTimeline($revTimeline->fetchAll(\PDO::FETCH_ASSOC), $pc);
+
+        $periodRevenue = 0.0;
+        foreach ($timeline as $t) {
+            $periodRevenue += $t['amount'];
+        }
+
+        return [
+            'role' => 'admin',
+            'period' => $period,
+            'overview' => [
+                'total_users' => (int) ($users['total'] ?? 0),
+                'freelancers' => (int) ($users['freelancers'] ?? 0),
+                'clients' => (int) ($users['clients'] ?? 0),
+                'total_revenue' => (float) ($contractData['completed_value'] ?? 0),
+                'period_revenue' => $periodRevenue,
+                'active_contracts' => (int) ($contractData['active'] ?? 0),
+                'open_disputes' => (int) ($disputeData['open'] ?? 0),
+            ],
+            'jobs' => [
+                'total' => (int) ($jobData['total'] ?? 0),
+                'open' => (int) ($jobData['open'] ?? 0),
+                'in_progress' => (int) ($jobData['in_progress'] ?? 0),
+                'completed' => (int) ($jobData['completed'] ?? 0),
+                'closed' => (int) ($jobData['closed'] ?? 0),
+            ],
+            'contracts' => [
+                'total' => (int) ($contractData['total'] ?? 0),
+                'active' => (int) ($contractData['active'] ?? 0),
+                'completed' => (int) ($contractData['completed'] ?? 0),
+                'cancelled' => (int) ($contractData['cancelled'] ?? 0),
+                'total_value' => (float) ($contractData['total_value'] ?? 0),
+                'completed_value' => (float) ($contractData['completed_value'] ?? 0),
+            ],
+            'disputes' => [
+                'total' => (int) ($disputeData['total'] ?? 0),
+                'open' => (int) ($disputeData['open'] ?? 0),
+                'resolved' => (int) ($disputeData['resolved'] ?? 0),
+            ],
+            'revenue_timeline' => $timeline,
         ];
     }
 }
