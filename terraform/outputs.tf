@@ -71,3 +71,13 @@ output "redis_port" {
   description = "Memorystore Redis port"
   value       = google_redis_instance.main.port
 }
+
+output "ingress_ip" {
+  description = "Static IP for the Ingress load balancer — use for DNS A records"
+  value       = google_compute_global_address.ingress.address
+}
+
+output "dns_nameservers" {
+  description = "Cloud DNS nameservers — set these at your domain registrar"
+  value       = google_dns_managed_zone.main.name_servers
+}

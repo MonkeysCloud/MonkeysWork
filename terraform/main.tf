@@ -18,6 +18,7 @@ locals {
     "servicenetworking.googleapis.com",
     "vpcaccess.googleapis.com",
     "redis.googleapis.com",
+    "dns.googleapis.com",
   ]
 }
 
@@ -772,7 +773,55 @@ resource "google_storage_bucket_iam_member" "vertex_ml_artifacts" {
 }
 
 # ─────────────────────────────────────────────────────
-# 9. SECRET MANAGER
+# 9. STATIC IP + CLOUD DNS
+# ─────────────────────────────────────────────────────
+resource "google_compute_global_address" "ingress" {
+  name    = "mw-${var.environment}-ingress-ip"
+  project = var.project_id
+}
+
+resource "google_dns_managed_zone" "main" {
+  name        = "mw-${var.environment}-zone"
+  dns_name    = "${var.domain}."
+  description = "MonkeysWork ${var.environment} DNS zone"
+  project     = var.project_id
+  depends_on  = [google_project_service.apis]
+}
+
+resource "google_dns_record_set" "root" {
+  managed_zone = google_dns_managed_zone.main.name
+  name         = "${var.domain}."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_global_address.ingress.address]
+}
+
+resource "google_dns_record_set" "www" {
+  managed_zone = google_dns_managed_zone.main.name
+  name         = "www.${var.domain}."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_global_address.ingress.address]
+}
+
+resource "google_dns_record_set" "api" {
+  managed_zone = google_dns_managed_zone.main.name
+  name         = "api.${var.domain}."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_global_address.ingress.address]
+}
+
+resource "google_dns_record_set" "ws" {
+  managed_zone = google_dns_managed_zone.main.name
+  name         = "ws.${var.domain}."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_global_address.ingress.address]
+}
+
+# ─────────────────────────────────────────────────────
+# 10. SECRET MANAGER
 # ─────────────────────────────────────────────────────
 resource "google_secret_manager_secret" "db_password" {
   secret_id = "mw-${var.environment}-db-password"
