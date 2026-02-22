@@ -1,0 +1,105 @@
+# Deploy Firebase Infrastructure via Terraform
+# Runs on changes to infra/terraform/firebase/
+name: Deploy Firebase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/terraform/firebase/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/terraform/firebase/**"
+
+defaults:
+  run:
+    working-directory: infra/terraform/firebase
+
+env:
+  TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+  TF_VAR_ios_bundle_id: ${{ secrets.IOS_BUNDLE_ID }}
+  TF_VAR_android_package_name: ${{ secrets.ANDROID_PACKAGE_NAME }}
+  GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+
+jobs:
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -no-color -out=tfplan
+        continue-on-error: false
+
+      - name: Upload Plan
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: infra/terraform/firebase/tfplan
+
+      - name: Comment Plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const plan = execSync('cd infra/terraform/firebase && terraform show -no-color tfplan').toString();
+            const truncated = plan.length > 60000 ? plan.substring(0, 60000) + '\n... (truncated)' : plan;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🔥 Firebase Terraform Plan\n\`\`\`\n${truncated}\n\`\`\``
+            });
+
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -no-color
+
+      - name: Export Firebase Config Files
+        run: |
+          # Extract generated config files for the mobile app
+          terraform output -raw ios_config_path > ../../../services/monkeyswork-mobile/ios/Runner/GoogleService-Info.plist 2>/dev/null || echo "iOS config not yet available"
+          terraform output -raw android_config_path > ../../../services/monkeyswork-mobile/android/app/google-services.json 2>/dev/null || echo "Android config not yet available"
+
+      - name: Upload Firebase Configs
+        uses: actions/upload-artifact@v4
+        with:
+          name: firebase-configs
+          path: |
+            services/monkeyswork-mobile/ios/Runner/GoogleService-Info.plist
+            services/monkeyswork-mobile/android/app/google-services.json
+          if-no-files-found: warn
