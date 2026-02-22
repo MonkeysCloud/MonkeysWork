@@ -1,0 +1,11 @@
+# ── Fill in your values ──────────────────────────────
+# Copy this file to terraform.tfvars and fill in values
+# DO NOT commit terraform.tfvars to version control
+
+project_id           = "monkeyswork-prod"      # Your GCP project ID
+region               = "us-central1"
+ios_bundle_id        = "com.monkeyswork.app"
+android_package_name = "com.monkeyswork.app"
+ios_app_store_id     = ""                       # Set after first App Store submission
+firestore_location   = "nam5"
+storage_location     = "US"
