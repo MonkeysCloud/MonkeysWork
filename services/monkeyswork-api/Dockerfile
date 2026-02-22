@@ -8,9 +8,11 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /build
 
-# Install skeleton into www/
-RUN composer create-project monkeyscloud/monkeyslegion-skeleton www --no-interaction --no-dev \
-    && cd www && composer dump-autoload --optimize
+# Install skeleton into www/ (--no-scripts to avoid migrate during build)
+RUN composer create-project monkeyscloud/monkeyslegion-skeleton www --no-interaction --no-dev --no-scripts \
+    && cd www \
+    && php -r "file_exists('.env') || copy('.env.example', '.env');" \
+    && composer dump-autoload --optimize
 
 # ─── Production image ───
 FROM php:8.4-fpm-alpine

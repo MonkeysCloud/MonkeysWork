@@ -125,9 +125,11 @@ final class AdminBlogController
         $id = $this->uuid();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-        // Generate slug
-        $slug = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', $data['title']), '-'));
-        $slug = substr($slug, 0, 200) . '-' . substr($id, 0, 8);
+        // Generate slug: use provided slug or auto-generate with date prefix
+        $slug = !empty($data['slug'])
+            ? $data['slug']
+            : date('Y-m-d') . '-' . strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', $data['title']), '-'));
+        $slug = substr($slug, 0, 200);
 
         $status = $data['status'] ?? 'draft';
         $publishedAt = ($status === 'published') ? $now : null;
@@ -139,19 +141,19 @@ final class AdminBlogController
              VALUES (:id, :title, :slug, :excerpt, :content, :cover, :status, :author,
                      :pub, :mt, :md, :now, :now)'
         )->execute([
-            'id'      => $id,
-            'title'   => $data['title'],
-            'slug'    => $slug,
-            'excerpt' => $data['excerpt'] ?? null,
-            'content' => $data['content'] ?? '',
-            'cover'   => $data['cover_image'] ?? null,
-            'status'  => $status,
-            'author'  => $userId,
-            'pub'     => $publishedAt,
-            'mt'      => $data['meta_title'] ?? null,
-            'md'      => $data['meta_description'] ?? null,
-            'now'     => $now,
-        ]);
+                    'id' => $id,
+                    'title' => $data['title'],
+                    'slug' => $slug,
+                    'excerpt' => $data['excerpt'] ?? null,
+                    'content' => $data['content'] ?? '',
+                    'cover' => $data['cover_image'] ?? null,
+                    'status' => $status,
+                    'author' => $userId,
+                    'pub' => $publishedAt,
+                    'mt' => $data['meta_title'] ?? null,
+                    'md' => $data['meta_description'] ?? null,
+                    'now' => $now,
+                ]);
 
         // Attach tags
         $this->syncTags($id, $data['tag_ids'] ?? []);
@@ -240,6 +242,90 @@ final class AdminBlogController
         return $this->json(['message' => 'Post published']);
     }
 
+    /* ── Upload image ───────────────────────────────── */
+
+    private const BLOG_UPLOAD_DIR = '/app/www/public/files/blog';
+    private const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+    private const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+
+    #[Route('POST', '/upload-image', name: 'admin.blog.upload', summary: 'Upload blog image', tags: ['Admin', 'Blog'])]
+    public function uploadImage(ServerRequestInterface $request): JsonResponse
+    {
+        try {
+            $uploadedFiles = $request->getUploadedFiles();
+            $raw = $uploadedFiles['image'] ?? null;
+
+            if (!$raw) {
+                return $this->error('No image file provided');
+            }
+
+            // Handle raw $_FILES array
+            if (is_array($raw) && isset($raw['tmp_name'])) {
+                $tmpName = $raw['tmp_name'];
+                $origName = $raw['name'] ?? 'upload';
+                $rawError = (int) ($raw['error'] ?? UPLOAD_ERR_NO_FILE);
+                $size = (int) ($raw['size'] ?? 0);
+
+                if ($rawError !== UPLOAD_ERR_OK || !is_uploaded_file($tmpName)) {
+                    return $this->error('Upload failed');
+                }
+
+                $mime = mime_content_type($tmpName);
+                if (!in_array($mime, self::ALLOWED_TYPES, true)) {
+                    return $this->error('Invalid image type. Allowed: jpg, png, gif, webp, svg');
+                }
+                if ($size > self::MAX_SIZE) {
+                    return $this->error('File too large (max 10 MB)');
+                }
+
+                $ext = pathinfo($origName, PATHINFO_EXTENSION) ?: 'jpg';
+                $filename = date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.' . strtolower($ext);
+
+                if (!is_dir(self::BLOG_UPLOAD_DIR)) {
+                    mkdir(self::BLOG_UPLOAD_DIR, 0755, true);
+                }
+
+                $filePath = self::BLOG_UPLOAD_DIR . '/' . $filename;
+                move_uploaded_file($tmpName, $filePath);
+            } elseif ($raw instanceof \Psr\Http\Message\UploadedFileInterface) {
+                $file = $raw;
+                if ($file->getError() !== UPLOAD_ERR_OK) {
+                    return $this->error('Upload failed');
+                }
+
+                $origName = $file->getClientFilename() ?? 'upload.jpg';
+                $mime = $file->getClientMediaType() ?? '';
+                $size = $file->getSize() ?? 0;
+
+                if (!in_array($mime, self::ALLOWED_TYPES, true)) {
+                    return $this->error('Invalid image type');
+                }
+                if ($size > self::MAX_SIZE) {
+                    return $this->error('File too large (max 10 MB)');
+                }
+
+                $ext = pathinfo($origName, PATHINFO_EXTENSION) ?: 'jpg';
+                $filename = date('Ymd-His') . '-' . bin2hex(random_bytes(4)) . '.' . strtolower($ext);
+
+                if (!is_dir(self::BLOG_UPLOAD_DIR)) {
+                    mkdir(self::BLOG_UPLOAD_DIR, 0755, true);
+                }
+
+                $filePath = self::BLOG_UPLOAD_DIR . '/' . $filename;
+                $file->moveTo($filePath);
+            } else {
+                return $this->error('No image file provided');
+            }
+
+            $url = '/files/blog/' . $filename;
+
+            return $this->json(['data' => ['url' => $url, 'filename' => $filename]]);
+        } catch (\Throwable $e) {
+            error_log('[BlogUpload] ERROR: ' . $e->getMessage());
+            return $this->error('Upload failed: ' . $e->getMessage(), 500);
+        }
+    }
+
     /* ── Tag CRUD ────────────────────────────────────── */
 
     #[Route('GET', '/tags', name: 'admin.blog.tags', summary: 'List all tags', tags: ['Admin', 'Blog'])]
@@ -303,9 +389,14 @@ final class AdminBlogController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 }

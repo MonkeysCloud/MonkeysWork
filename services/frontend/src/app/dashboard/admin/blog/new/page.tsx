@@ -35,16 +35,16 @@ export default function BlogEditorPage() {
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(!isNew);
 
-    // Auto-generate slug from title
+    // Auto-generate slug from date + title
     useEffect(() => {
         if (isNew && title) {
-            setSlug(
-                title
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, "-")
-                    .replace(/^-|-$/g, "")
-                    .slice(0, 200)
-            );
+            const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+            const titleSlug = title
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-|-$/g, "")
+                .slice(0, 180);
+            setSlug(`${date}-${titleSlug}`);
         }
     }, [title, isNew]);
 
@@ -153,6 +153,34 @@ export default function BlogEditorPage() {
         }
     };
 
+    const [uploading, setUploading] = useState(false);
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append("image", file);
+            const res = await fetch(`${API}/admin/blog/upload-image`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData,
+            });
+            const json = await res.json();
+            if (json.data?.url) {
+                // Build full URL from API base
+                const apiBase = API.replace(/\/api\/v1$/, "");
+                setCoverImage(`${apiBase}${json.data.url}`);
+            }
+        } catch (err) {
+            console.error("Upload failed", err);
+        } finally {
+            setUploading(false);
+            e.target.value = "";
+        }
+    };
+
     const toggleTag = (tagId: string) => {
         setSelectedTagIds((prev) =>
             prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
@@ -234,21 +262,63 @@ export default function BlogEditorPage() {
 
             {/* Cover Image */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cover Image URL</label>
-                <input
-                    type="url"
-                    value={coverImage}
-                    onChange={(e) => setCoverImage(e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
-                />
-                {coverImage && (
-                    <img
-                        src={coverImage}
-                        alt="Cover preview"
-                        className="mt-3 w-full max-h-48 object-cover rounded-lg border border-gray-100"
-                    />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Cover Image</label>
+
+                {coverImage ? (
+                    <div className="relative group">
+                        <img
+                            src={coverImage}
+                            alt="Cover preview"
+                            className="w-full max-h-56 object-cover rounded-lg border border-gray-100"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setCoverImage("")}
+                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                ) : (
+                    <label
+                        className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                            uploading
+                                ? "border-brand-orange bg-brand-orange-light/20"
+                                : "border-gray-200 hover:border-brand-orange hover:bg-gray-50"
+                        }`}
+                    >
+                        {uploading ? (
+                            <>
+                                <div className="animate-spin rounded-full h-8 w-8 border-2 border-brand-orange border-t-transparent mb-2" />
+                                <span className="text-sm text-brand-muted">Uploading…</span>
+                            </>
+                        ) : (
+                            <>
+                                <span className="text-3xl mb-1">📷</span>
+                                <span className="text-sm font-medium text-gray-600">Click to upload cover image</span>
+                                <span className="text-xs text-gray-400 mt-1">JPG, PNG, GIF, WebP — max 10 MB</span>
+                            </>
+                        )}
+                        <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                            className="hidden"
+                            disabled={uploading}
+                        />
+                    </label>
                 )}
+
+                <div className="mt-3">
+                    <label className="block text-xs text-gray-400 mb-1">Or paste image URL</label>
+                    <input
+                        type="url"
+                        value={coverImage}
+                        onChange={(e) => setCoverImage(e.target.value)}
+                        placeholder="https://example.com/image.jpg"
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
+                    />
+                </div>
             </div>
 
             {/* Excerpt */}

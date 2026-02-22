@@ -15,9 +15,11 @@ interface DashboardStats {
     proposals_received?: Record<string, number>;
     jobs?: Record<string, number>;
     invoices?: Record<string, number>;
+    disputes?: Record<string, number>;
     time_tracking?: Record<string, number>;
     earnings_timeline?: { bucket: string; amount: number }[];
     spending_timeline?: { bucket: string; amount: number }[];
+    revenue_timeline?: { bucket: string; amount: number }[];
 }
 
 /* ── Stat card ── */
@@ -144,6 +146,7 @@ export default function DashboardOverview() {
     const [loadingStats, setLoadingStats] = useState(true);
 
     const isClient = user?.role === "client";
+    const isAdmin = user?.role === "admin";
 
     /* Fetch active contracts */
     useEffect(() => {
@@ -185,8 +188,11 @@ export default function DashboardOverview() {
     const j = stats?.jobs ?? {};
     const c = stats?.contracts ?? {};
     const inv = stats?.invoices ?? {};
+    const d = stats?.disputes ?? {};
     const t = stats?.time_tracking ?? {};
-    const timeline = (isClient ? stats?.spending_timeline : stats?.earnings_timeline) ?? [];
+    const timeline = isAdmin
+        ? (stats?.revenue_timeline ?? [])
+        : (isClient ? stats?.spending_timeline : stats?.earnings_timeline) ?? [];
 
     const loading = loadingStats ? "…" : undefined;
 
@@ -198,15 +204,42 @@ export default function DashboardOverview() {
                     Welcome back, {user.display_name}
                 </h1>
                 <p className="text-sm text-brand-muted mt-1">
-                    {isClient
-                        ? "Here's an overview of your hiring activity."
-                        : "Here's an overview of your freelance activity."}
+                    {isAdmin
+                        ? "Platform overview — all metrics at a glance."
+                        : isClient
+                            ? "Here's an overview of your hiring activity."
+                            : "Here's an overview of your freelance activity."}
                 </p>
             </div>
 
             {/* primary stats */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                {isClient ? (
+                {isAdmin ? (
+                    <>
+                        <StatCard
+                            icon="👥"
+                            label="Total Users"
+                            value={loading ?? String(o.total_users ?? 0)}
+                            subtext={`${o.freelancers ?? 0} freelancers · ${o.clients ?? 0} clients`}
+                        />
+                        <StatCard
+                            icon="💰"
+                            label="Platform Revenue"
+                            value={loading ?? fmtMoney(Number(o.total_revenue ?? 0))}
+                            change={Number(o.period_revenue ?? 0) > 0 ? `+${fmtMoney(Number(o.period_revenue))} this period` : undefined}
+                        />
+                        <StatCard
+                            icon="📄"
+                            label="Active Contracts"
+                            value={loading ?? String(o.active_contracts ?? 0)}
+                        />
+                        <StatCard
+                            icon="⚠️"
+                            label="Open Disputes"
+                            value={loading ?? String(o.open_disputes ?? 0)}
+                        />
+                    </>
+                ) : isClient ? (
                     <>
                         <StatCard
                             icon="📋"
@@ -263,7 +296,34 @@ export default function DashboardOverview() {
 
             {/* secondary stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-                {isClient ? (
+                {isAdmin ? (
+                    <>
+                        <StatCard
+                            icon="📋"
+                            label="Total Jobs"
+                            value={loading ?? String(j.total ?? 0)}
+                            subtext={`${j.open ?? 0} open`}
+                        />
+                        <StatCard
+                            icon="📄"
+                            label="Total Contracts"
+                            value={loading ?? String(c.total ?? 0)}
+                            subtext={fmtMoney(c.total_value ?? 0) + " value"}
+                        />
+                        <StatCard
+                            icon="✅"
+                            label="Completed Contracts"
+                            value={loading ?? String(c.completed ?? 0)}
+                            subtext={fmtMoney(c.completed_value ?? 0) + " earned"}
+                        />
+                        <StatCard
+                            icon="🛡️"
+                            label="Disputes"
+                            value={loading ?? String(d.total ?? 0)}
+                            subtext={`${d.resolved ?? 0} resolved`}
+                        />
+                    </>
+                ) : isClient ? (
                     <>
                         <StatCard
                             icon="👥"
@@ -322,7 +382,35 @@ export default function DashboardOverview() {
                             Quick Actions
                         </h2>
                         <div className="space-y-3">
-                            {isClient ? (
+                            {isAdmin ? (
+                                <>
+                                    <QuickAction
+                                        icon="📰"
+                                        label="Blog Posts"
+                                        desc="Manage blog content"
+                                        href="/dashboard/admin/blog"
+                                        accent
+                                    />
+                                    <QuickAction
+                                        icon="👥"
+                                        label="Manage Users"
+                                        desc="View and manage accounts"
+                                        href="/dashboard/admin/users"
+                                    />
+                                    <QuickAction
+                                        icon="📄"
+                                        label="Contracts"
+                                        desc="Review all contracts"
+                                        href="/dashboard/admin/contracts"
+                                    />
+                                    <QuickAction
+                                        icon="⚠️"
+                                        label="Disputes"
+                                        desc="Resolve open disputes"
+                                        href="/dashboard/admin/disputes"
+                                    />
+                                </>
+                            ) : isClient ? (
                                 <>
                                     <QuickAction
                                         icon="📋"
@@ -374,9 +462,17 @@ export default function DashboardOverview() {
                     {!loadingStats && stats && (
                         <div className="bg-white rounded-xl border border-brand-border/60 p-5">
                             <h3 className="text-sm font-bold text-brand-dark mb-3">
-                                {isClient ? "Hiring Activity" : "Proposal Activity"}
+                                {isAdmin ? "Platform Activity" : isClient ? "Hiring Activity" : "Proposal Activity"}
                             </h3>
-                            {isClient ? (
+                            {isAdmin ? (
+                                <>
+                                    <ActivityRow icon="📋" label="Open jobs" value={j.open ?? 0} color="#f08a11" />
+                                    <ActivityRow icon="🔄" label="In progress" value={j.in_progress ?? 0} color="#3b82f6" />
+                                    <ActivityRow icon="✅" label="Completed jobs" value={j.completed ?? 0} color="#22c55e" />
+                                    <ActivityRow icon="📄" label="Active contracts" value={c.active ?? 0} color="#8b5cf6" />
+                                    <ActivityRow icon="⚠️" label="Open disputes" value={d.open ?? 0} color="#ef4444" />
+                                </>
+                            ) : isClient ? (
                                 <>
                                     <ActivityRow icon="📋" label="Open jobs" value={j.open ?? 0} color="#f08a11" />
                                     <ActivityRow icon="📝" label="Proposals received" value={p.total ?? 0} color="#3b82f6" />
@@ -400,17 +496,19 @@ export default function DashboardOverview() {
                     {!loadingStats && timeline.length > 0 && (
                         <div className="bg-white rounded-xl border border-brand-border/60 p-5">
                             <h3 className="text-sm font-bold text-brand-dark mb-1">
-                                {isClient ? "Spending (30 days)" : "Earnings (30 days)"}
+                                {isAdmin ? "Revenue (30 days)" : isClient ? "Spending (30 days)" : "Earnings (30 days)"}
                             </h3>
                             <p className="text-xs text-brand-muted mb-3">
-                                {isClient
-                                    ? fmtMoney(Number(o.period_spent ?? 0))
-                                    : fmtMoney(Number(o.period_earnings ?? 0))}{" "}
+                                {isAdmin
+                                    ? fmtMoney(Number(o.period_revenue ?? 0))
+                                    : isClient
+                                        ? fmtMoney(Number(o.period_spent ?? 0))
+                                        : fmtMoney(Number(o.period_earnings ?? 0))}{" "}
                                 this period
                             </p>
                             <SparkChart
                                 data={timeline}
-                                color={isClient ? "#f08a11" : "#22c55e"}
+                                color={isAdmin ? "#8b5cf6" : isClient ? "#f08a11" : "#22c55e"}
                             />
                             <div className="flex justify-between mt-1">
                                 <span className="text-[9px] text-brand-muted/50">{timeline[0]?.bucket}</span>
@@ -424,10 +522,10 @@ export default function DashboardOverview() {
                 <div className="lg:col-span-2">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-lg font-bold text-brand-dark">
-                            Active Contracts
+                            {isAdmin ? "Platform Contracts" : "Active Contracts"}
                         </h2>
                         <Link
-                            href="/dashboard/contracts"
+                            href={isAdmin ? "/dashboard/admin/contracts" : "/dashboard/contracts"}
                             className="text-xs font-semibold text-brand-orange hover:underline"
                         >
                             View All →
@@ -449,9 +547,11 @@ export default function DashboardOverview() {
                                 <span className="text-4xl mb-3 block">📄</span>
                                 <p className="text-sm text-brand-muted">
                                     No active contracts yet.
-                                    {isClient
-                                        ? " Accept a proposal to create your first contract!"
-                                        : " When a client accepts your proposal, a contract will appear here."}
+                                    {isAdmin
+                                        ? " No contracts on the platform yet."
+                                        : isClient
+                                            ? " Accept a proposal to create your first contract!"
+                                            : " When a client accepts your proposal, a contract will appear here."}
                                 </p>
                                 <Link
                                     href={
@@ -471,8 +571,8 @@ export default function DashboardOverview() {
 
                     {!loadingContracts && contracts.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                            {contracts.map((c) => (
-                                <ContractCard key={c.id} contract={c} isClient={isClient ?? false} />
+                            {contracts.map((ct) => (
+                                <ContractCard key={ct.id} contract={ct} isClient={isClient ?? false} />
                             ))}
                         </div>
                     )}
