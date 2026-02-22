@@ -25,7 +25,8 @@ final class AdminDisputeController
     public function __construct(
         private ConnectionInterface $db,
         private ?EventDispatcherInterface $events = null,
-    ) {}
+    ) {
+    }
 
     private function disputePayments(): DisputePaymentService
     {
@@ -40,16 +41,16 @@ final class AdminDisputeController
         $p = $this->pagination($request);
         $q = $request->getQueryParams();
 
-        $where  = ['1=1'];
+        $where = ['1=1'];
         $params = [];
 
         if (!empty($q['status'])) {
-            $where[]          = 'd.status = :status';
+            $where[] = 'd.status = :status';
             $params['status'] = $q['status'];
         }
 
         if (!empty($q['reason'])) {
-            $where[]          = 'd.reason = :reason';
+            $where[] = 'd.reason = :reason';
             $params['reason'] = $q['reason'];
         }
 
@@ -97,7 +98,7 @@ final class AdminDisputeController
              JOIN "job" j ON j.id = c.job_id
              JOIN "user" uc ON uc.id = c.client_id
              JOIN "user" uf ON uf.id = c.freelancer_id
-             JOIN "user" ub ON ub.id = d.filed_by
+             JOIN "user" ub ON ub.id = d.raised_by_id
              WHERE d.id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -160,8 +161,8 @@ final class AdminDisputeController
     public function addNote(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
-        $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $data = $this->body($request);
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $msgId = $this->uuid();
 
@@ -169,14 +170,14 @@ final class AdminDisputeController
             'INSERT INTO "disputemessage" (id, dispute_id, sender_id, body, attachments, is_internal, created_at)
              VALUES (:id, :did, :uid, :body, :atts, :internal, :now)'
         )->execute([
-            'id'       => $msgId,
-            'did'      => $id,
-            'uid'      => $userId,
-            'body'     => $data['body'] ?? '',
-            'atts'     => json_encode($data['attachments'] ?? []),
-            'internal' => $data['is_internal'] ?? true ? 'true' : 'false',
-            'now'      => $now,
-        ]);
+                    'id' => $msgId,
+                    'did' => $id,
+                    'uid' => $userId,
+                    'body' => $data['body'] ?? '',
+                    'atts' => json_encode($data['attachments'] ?? []),
+                    'internal' => $data['is_internal'] ?? true ? 'true' : 'false',
+                    'now' => $now,
+                ]);
 
         return $this->created(['data' => ['id' => $msgId]]);
     }
@@ -187,8 +188,8 @@ final class AdminDisputeController
     public function resolve(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
-        $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $data = $this->body($request);
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         // Fetch dispute
         $dStmt = $this->db->pdo()->prepare('SELECT contract_id, status FROM "dispute" WHERE id = :id');
@@ -207,17 +208,17 @@ final class AdminDisputeController
 
         $this->db->pdo()->prepare(
             'UPDATE "dispute" SET status = :status, resolution_notes = :notes, resolution_amount = :amount,
-                    resolved_by = :uid, resolved_at = :now, response_deadline = NULL,
-                    awaiting_response_from = NULL, updated_at = :now2 WHERE id = :id'
+                    resolved_by_id = :uid, resolved_at = :now, response_deadline = NULL,
+                    awaiting_response_from_id = NULL, updated_at = :now2 WHERE id = :id'
         )->execute([
-            'status' => $status,
-            'notes'  => $data['resolution_notes'] ?? null,
-            'amount' => $data['resolution_amount'] ?? null,
-            'uid'    => $userId,
-            'now'    => $now,
-            'now2'   => $now,
-            'id'     => $id,
-        ]);
+                    'status' => $status,
+                    'notes' => $data['resolution_notes'] ?? null,
+                    'amount' => $data['resolution_amount'] ?? null,
+                    'uid' => $userId,
+                    'now' => $now,
+                    'now2' => $now,
+                    'id' => $id,
+                ]);
 
         // Process financial effects of the resolution
         $this->disputePayments()->resolvePayment(
@@ -238,13 +239,87 @@ final class AdminDisputeController
         return $this->json(['message' => 'Dispute resolved']);
     }
 
+    /* ── Dispute report ───────────────────────────────── */
+
+    #[Route('GET', '/report', name: 'admin.disputes.report', summary: 'Dispute stats over time', tags: ['Admin'])]
+    public function report(ServerRequestInterface $request): JsonResponse
+    {
+        $pdo = $this->db->pdo();
+        $q = $request->getQueryParams();
+        $period = $q['period'] ?? 'month';
+        $group = $q['group'] ?? 'day';
+
+        $dateFilter = $this->dateFilter($period);
+
+        $groupExpr = match ($group) {
+            'week' => "to_char(date_trunc('week', d.created_at), 'YYYY-\"W\"IW')",
+            'month' => "to_char(d.created_at, 'YYYY-MM')",
+            default => "to_char(d.created_at, 'YYYY-MM-DD')",
+        };
+
+        $stmt = $pdo->prepare(
+            "SELECT $groupExpr AS period_label,
+                    COUNT(*) AS total_opened,
+                    COUNT(*) FILTER (WHERE d.status IN ('resolved_client','resolved_freelancer','resolved_split')) AS total_resolved,
+                    COUNT(*) FILTER (WHERE d.status = 'open') AS still_open,
+                    COUNT(*) FILTER (WHERE d.status = 'escalated') AS escalated,
+                    COALESCE(SUM(d.dispute_amount), 0) AS total_disputed_amount,
+                    COALESCE(SUM(d.resolution_amount), 0) AS total_resolved_amount
+             FROM \"dispute\" d
+             WHERE 1=1 $dateFilter
+             GROUP BY $groupExpr
+             ORDER BY $groupExpr ASC"
+        );
+        $stmt->execute();
+
+        $totals = $pdo->prepare(
+            "SELECT
+                COUNT(*) AS total_disputes,
+                COUNT(*) FILTER (WHERE status = 'open') AS open,
+                COUNT(*) FILTER (WHERE status = 'escalated') AS escalated,
+                COUNT(*) FILTER (WHERE status IN ('resolved_client','resolved_freelancer','resolved_split')) AS resolved,
+                COALESCE(SUM(dispute_amount), 0) AS total_disputed,
+                COALESCE(SUM(resolution_amount), 0) AS total_resolved_amount,
+                COALESCE(AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 86400), 0) AS avg_resolution_days
+             FROM \"dispute\" WHERE 1=1 " . $this->dateFilter($period)
+        );
+        $totals->execute();
+
+        return $this->json([
+            'data' => [
+                'period' => $period,
+                'group' => $group,
+                'summary' => $totals->fetch(\PDO::FETCH_ASSOC),
+                'items' => $stmt->fetchAll(\PDO::FETCH_ASSOC),
+            ]
+        ]);
+    }
+
+    /* ── Helpers ──────────────────────────────────────── */
+
+    private function dateFilter(string $period): string
+    {
+        return match ($period) {
+            'week' => " AND d.created_at >= NOW() - INTERVAL '7 days'",
+            'month' => " AND d.created_at >= NOW() - INTERVAL '1 month'",
+            'quarter' => " AND d.created_at >= NOW() - INTERVAL '3 months'",
+            'year' => " AND d.created_at >= NOW() - INTERVAL '1 year'",
+            default => '',
+        };
+    }
+
     private function uuid(): string
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 }

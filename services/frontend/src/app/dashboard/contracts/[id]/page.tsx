@@ -96,9 +96,24 @@ export default function ContractDetailPage() {
         setActionLoading(null);
     }
 
-    async function contractAction(action: string) {
+    async function contractAction(action: string, reviewData?: { rating: number; communication_rating: number; quality_rating: number; timeliness_rating: number; comment: string }) {
         setActionLoading(action);
         await fetch(`${API}/contracts/${id}/${action}`, { method: "POST", headers });
+        // Submit review if provided
+        if (reviewData && action === "complete") {
+            try {
+                await fetch(`${API}/reviews`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify({
+                        contract_id: id,
+                        ...reviewData,
+                    }),
+                });
+            } catch (e) {
+                console.error("Review submission failed:", e);
+            }
+        }
         await fetchContract();
         setActionLoading(null);
     }
@@ -144,10 +159,11 @@ export default function ContractDetailPage() {
             <ContractHeader
                 contract={contract}
                 isClient={isClient ?? false}
+                milestones={milestones}
                 acceptedCount={acceptedMs}
                 totalMilestones={milestones.length}
                 actionLoading={actionLoading}
-                onComplete={() => contractAction("complete")}
+                onComplete={(reviewData) => contractAction("complete", reviewData)}
                 onCancel={() => contractAction("cancel")}
             />
 
@@ -211,6 +227,7 @@ export default function ContractDetailPage() {
                     milestones={milestones}
                     isClient={isClient ?? false}
                     token={token ?? ""}
+                    contractStatus={contract.status}
                     actionLoading={actionLoading}
                     onMilestoneAction={milestoneAction}
                     onAddMilestone={addMilestone}
@@ -226,7 +243,15 @@ export default function ContractDetailPage() {
             )}
 
             {tab === "disputes" && (
-                <DisputesPanel contractId={id} token={token ?? ""} />
+                <DisputesPanel
+                    contractId={id}
+                    token={token ?? ""}
+                    contractType={contract.contract_type}
+                    contractAmount={contract.total_amount}
+                    contractCurrency={contract.currency}
+                    milestones={milestones}
+                    isClient={isClient ?? false}
+                />
             )}
 
             {tab === "chat" && (

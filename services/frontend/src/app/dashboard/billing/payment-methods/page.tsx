@@ -17,6 +17,7 @@ const getStripe = () => {
 interface PM {
     id: string; type: string; provider: string; last_four: string;
     expiry: string | null; is_default: boolean; stripe_payment_method_id: string;
+    verified?: boolean;
     [key: string]: unknown;
 }
 
@@ -33,6 +34,13 @@ export default function PaymentMethodsPage() {
     const [methods, setMethods] = useState<PM[]>([]);
     const [addMode, setAddMode] = useState<AddMode>(null);
     const [loading, setLoading] = useState(true);
+    const [deleteTarget, setDeleteTarget] = useState<PM | null>(null);
+    const [deleting, setDeleting] = useState(false);
+    const [verifyTarget, setVerifyTarget] = useState<PM | null>(null);
+    const [verifying, setVerifying] = useState(false);
+    const [verifyAmounts, setVerifyAmounts] = useState<[string, string]>(["", ""]);
+    const [verifyError, setVerifyError] = useState("");
+    const [verifySuccess, setVerifySuccess] = useState("");
 
     const load = useCallback(async () => {
         if (!token) return;
@@ -46,11 +54,18 @@ export default function PaymentMethodsPage() {
 
     useEffect(() => { load(); }, [load]);
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Remove this payment method?")) return;
-        await fetch(`${API}/payment-methods/${id}`, {
+    const handleDelete = async (pm: PM) => {
+        setDeleteTarget(pm);
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+        setDeleting(true);
+        await fetch(`${API}/payment-methods/${deleteTarget.id}`, {
             method: "DELETE", headers: { Authorization: `Bearer ${token}` },
         });
+        setDeleteTarget(null);
+        setDeleting(false);
         load();
     };
 
@@ -59,6 +74,31 @@ export default function PaymentMethodsPage() {
             method: "POST", headers: { Authorization: `Bearer ${token}` },
         });
         load();
+    };
+
+    const handleVerify = async () => {
+        if (!verifyTarget) return;
+        setVerifying(true);
+        setVerifyError("");
+        try {
+            const res = await fetch(`${API}/payment-methods/${verifyTarget.id}/verify`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ amounts: [parseInt(verifyAmounts[0]), parseInt(verifyAmounts[1])] }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.message || "Verification failed");
+            }
+            setVerifySuccess("Bank account verified successfully! ✅");
+            setVerifyTarget(null);
+            setVerifyAmounts(["", ""]);
+            load();
+            setTimeout(() => setVerifySuccess(""), 4000);
+        } catch (err: unknown) {
+            setVerifyError(err instanceof Error ? err.message : "Verification failed");
+        }
+        setVerifying(false);
     };
 
     const methodIcon = (pm: PM) => {
@@ -95,6 +135,15 @@ export default function PaymentMethodsPage() {
                     {addMode ? "Cancel" : "+ Add Method"}
                 </button>
             </div>
+
+            {/* ── Success Banner ── */}
+            {verifySuccess && (
+                <div style={{
+                    padding: "12px 16px", borderRadius: 10, background: "#f0fdf4",
+                    border: "1px solid #bbf7d0", color: "#16a34a", fontSize: 14,
+                    fontWeight: 600, marginBottom: 16, textAlign: "center",
+                }}>{verifySuccess}</div>
+            )}
 
             {/* ── Add Method Panel ── */}
             {addMode && (
@@ -170,10 +219,33 @@ export default function PaymentMethodsPage() {
                                     <div style={{ fontSize: 13, color: "#6b7280" }}>
                                         {pm.expiry || (pm.type === "us_bank_account" ? "ACH Direct Debit" : pm.type === "paypal" ? "PayPal Account" : "No expiry")}
                                         {pm.is_default && <span style={{ marginLeft: 8, color: "#f97316", fontWeight: 600 }}>★ Default</span>}
+                                        {pm.type === "us_bank_account" && pm.verified === false && (
+                                            <span style={{
+                                                marginLeft: 8, color: "#f59e0b", fontWeight: 600,
+                                                background: "#fffbeb", padding: "2px 8px", borderRadius: 6,
+                                                fontSize: 12, border: "1px solid #fde68a",
+                                            }}>⚠ Pending Verification</span>
+                                        )}
+                                        {pm.type === "us_bank_account" && pm.verified !== false && (
+                                            <span style={{
+                                                marginLeft: 8, color: "#16a34a", fontWeight: 600,
+                                                fontSize: 12,
+                                            }}>✓ Verified</span>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                             <div style={{ display: "flex", gap: 8 }}>
+                                {pm.type === "us_bank_account" && pm.verified === false && (
+                                    <button
+                                        onClick={() => { setVerifyTarget(pm); setVerifyError(""); setVerifyAmounts(["", ""]); }}
+                                        style={{
+                                            padding: "6px 14px", borderRadius: 8, border: "1px solid #fde68a",
+                                            background: "#fffbeb", fontSize: 13, cursor: "pointer",
+                                            color: "#92400e", fontWeight: 600,
+                                        }}
+                                    >Verify</button>
+                                )}
                                 {!pm.is_default && (
                                     <button
                                         onClick={() => handleSetDefault(pm.id)}
@@ -186,7 +258,7 @@ export default function PaymentMethodsPage() {
                                     </button>
                                 )}
                                 <button
-                                    onClick={() => handleDelete(pm.id)}
+                                    onClick={() => handleDelete(pm)}
                                     style={{
                                         padding: "6px 14px", borderRadius: 8, border: "1px solid #fecaca",
                                         background: "#fff", fontSize: 13, cursor: "pointer", color: "#dc2626",
@@ -197,6 +269,169 @@ export default function PaymentMethodsPage() {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* ── Delete Confirmation Modal ── */}
+            {deleteTarget && (
+                <div style={{
+                    position: "fixed", inset: 0, zIndex: 9999,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+                    onClick={() => !deleting && setDeleteTarget(null)}
+                >
+                    {/* Backdrop */}
+                    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} />
+
+                    {/* Modal */}
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            position: "relative", background: "#fff", borderRadius: 16,
+                            padding: "28px 32px", width: "100%", maxWidth: 420,
+                            boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+                        }}
+                    >
+                        <div style={{ textAlign: "center", marginBottom: 20 }}>
+                            <div style={{
+                                width: 56, height: 56, borderRadius: "50%",
+                                background: "#fef2f2", display: "flex", alignItems: "center",
+                                justifyContent: "center", margin: "0 auto 12px", fontSize: 28,
+                            }}>🗑️</div>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>
+                                Remove Payment Method?
+                            </h3>
+                            <p style={{ fontSize: 14, color: "#6b7280", marginTop: 8, lineHeight: 1.5 }}>
+                                Are you sure you want to remove <strong>{methodLabel(deleteTarget)} {deleteTarget.last_four ? `•••• ${deleteTarget.last_four}` : ""}</strong>?
+                                This action cannot be undone.
+                            </p>
+                        </div>
+
+                        <div style={{ display: "flex", gap: 10 }}>
+                            <button
+                                onClick={() => setDeleteTarget(null)}
+                                disabled={deleting}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "1px solid #e5e7eb", background: "#fff",
+                                    fontSize: 14, fontWeight: 600, cursor: "pointer",
+                                    color: "#374151",
+                                }}
+                            >Cancel</button>
+                            <button
+                                onClick={confirmDelete}
+                                disabled={deleting}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "none",
+                                    background: deleting ? "#f87171" : "linear-gradient(135deg, #ef4444, #dc2626)",
+                                    fontSize: 14, fontWeight: 600, cursor: deleting ? "wait" : "pointer",
+                                    color: "#fff",
+                                }}
+                            >{deleting ? "Removing…" : "Remove"}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Bank Verification Modal ── */}
+            {verifyTarget && (
+                <div style={{
+                    position: "fixed", inset: 0, zIndex: 9999,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+                    onClick={() => !verifying && setVerifyTarget(null)}
+                >
+                    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} />
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            position: "relative", background: "#fff", borderRadius: 16,
+                            padding: "28px 32px", width: "100%", maxWidth: 440,
+                            boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+                        }}
+                    >
+                        <div style={{ textAlign: "center", marginBottom: 20 }}>
+                            <div style={{
+                                width: 56, height: 56, borderRadius: "50%",
+                                background: "#eff6ff", display: "flex", alignItems: "center",
+                                justifyContent: "center", margin: "0 auto 12px", fontSize: 28,
+                            }}>🏦</div>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>
+                                Verify Bank Account
+                            </h3>
+                            <p style={{ fontSize: 14, color: "#6b7280", marginTop: 8, lineHeight: 1.5 }}>
+                                Enter the two microdeposit amounts (in cents) that were deposited into your <strong>{methodLabel(verifyTarget)} •••• {verifyTarget.last_four}</strong> account.
+                            </p>
+                        </div>
+
+                        <div style={{
+                            padding: "10px 14px", borderRadius: 8, background: "#eff6ff",
+                            color: "#1d4ed8", fontSize: 13, marginBottom: 16, lineHeight: 1.5,
+                        }}>
+                            ℹ️ Stripe sends two small deposits (e.g. $0.32 and $0.45). Enter the amounts in cents (e.g. 32 and 45).
+                        </div>
+
+                        <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Amount 1 (cents)</label>
+                                <input
+                                    type="number" min="1" max="99" placeholder="e.g. 32"
+                                    value={verifyAmounts[0]} onChange={(e) => setVerifyAmounts([e.target.value, verifyAmounts[1]])}
+                                    style={{
+                                        width: "100%", padding: "10px 14px", borderRadius: 8,
+                                        border: "1px solid #e5e7eb", fontSize: 15, background: "#f9fafb",
+                                        outline: "none", boxSizing: "border-box",
+                                    }}
+                                />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 4 }}>Amount 2 (cents)</label>
+                                <input
+                                    type="number" min="1" max="99" placeholder="e.g. 45"
+                                    value={verifyAmounts[1]} onChange={(e) => setVerifyAmounts([verifyAmounts[0], e.target.value])}
+                                    style={{
+                                        width: "100%", padding: "10px 14px", borderRadius: 8,
+                                        border: "1px solid #e5e7eb", fontSize: 15, background: "#f9fafb",
+                                        outline: "none", boxSizing: "border-box",
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        {verifyError && (
+                            <div style={{
+                                padding: "10px 14px", borderRadius: 8, background: "#fef2f2",
+                                color: "#dc2626", fontSize: 14, marginBottom: 16,
+                            }}>{verifyError}</div>
+                        )}
+
+                        <div style={{ display: "flex", gap: 10 }}>
+                            <button
+                                onClick={() => setVerifyTarget(null)}
+                                disabled={verifying}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "1px solid #e5e7eb", background: "#fff",
+                                    fontSize: 14, fontWeight: 600, cursor: "pointer",
+                                    color: "#374151",
+                                }}
+                            >Cancel</button>
+                            <button
+                                onClick={handleVerify}
+                                disabled={verifying || !verifyAmounts[0] || !verifyAmounts[1]}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "none",
+                                    background: (verifying || !verifyAmounts[0] || !verifyAmounts[1])
+                                        ? "#93c5fd" : "linear-gradient(135deg, #3b82f6, #2563eb)",
+                                    fontSize: 14, fontWeight: 600,
+                                    cursor: (verifying || !verifyAmounts[0] || !verifyAmounts[1]) ? "not-allowed" : "pointer",
+                                    color: "#fff",
+                                }}
+                            >{verifying ? "Verifying…" : "Verify Account"}</button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
@@ -307,6 +542,7 @@ function AddBankForm({ token, onSuccess }: { token: string; onSuccess: () => voi
                 headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
                     payment_method_id: setupIntent?.payment_method,
+                    setup_intent_id: setupIntent?.id,
                     type: "us_bank_account",
                 }),
             });
@@ -339,7 +575,7 @@ function AddBankForm({ token, onSuccess }: { token: string; onSuccess: () => voi
                         <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", marginBottom: 4, display: "block" }}>Routing Number</label>
                         <input
                             required value={routingNumber} onChange={(e) => setRoutingNumber(e.target.value.replace(/\D/g, "").slice(0, 9))}
-                            placeholder="9 digits" maxLength={9} style={inputStyle}
+                            placeholder="e.g. 110000000" maxLength={9} style={inputStyle}
                         />
                     </div>
                     <div style={{ flex: 1 }}>

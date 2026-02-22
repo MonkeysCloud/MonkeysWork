@@ -19,11 +19,13 @@ final class BillingController
 {
     use ApiController;
 
-    private ?StripeService  $stripe = null;
-    private ?FeeCalculator  $fees   = null;
+    private ?StripeService $stripe = null;
+    private ?FeeCalculator $fees = null;
     private ?DisputePaymentService $disputePayments = null;
 
-    public function __construct(private ConnectionInterface $db) {}
+    public function __construct(private ConnectionInterface $db)
+    {
+    }
 
     private function stripe(): StripeService
     {
@@ -47,7 +49,7 @@ final class BillingController
     {
         try {
             $userId = $this->userId($request);
-            $pdo    = $this->db->pdo();
+            $pdo = $this->db->pdo();
 
             // Escrow balance (as client)
             $escrow = $pdo->prepare(
@@ -65,8 +67,8 @@ final class BillingController
             $e = $escrow->fetch(\PDO::FETCH_ASSOC);
 
             $balance = ((float) ($e['total_funded'] ?? 0))
-                     - ((float) ($e['total_released'] ?? 0))
-                     - ((float) ($e['total_refunded'] ?? 0));
+                - ((float) ($e['total_released'] ?? 0))
+                - ((float) ($e['total_refunded'] ?? 0));
 
             // This month's spending (as client)
             $month = $pdo->prepare(
@@ -109,23 +111,31 @@ final class BillingController
             );
             $contracts->execute(['uid1' => $userId, 'uid2' => $userId]);
 
-            return $this->json(['data' => [
-                'escrow_balance'      => number_format($balance, 2, '.', ''),
-                'month_spending'      => number_format((float) $monthTotal, 2, '.', ''),
-                'total_funded'        => $e['total_funded'] ?? '0.00',
-                'total_released'      => $e['total_released'] ?? '0.00',
-                'total_fees_paid'     => number_format(
-                    (float) ($e['total_fees'] ?? 0) + (float) ($e['total_client_fees'] ?? 0), 2, '.', ''
-                ),
-                'total_earned'        => $earn['total_earned'] ?? '0.00',
-                'total_commission'    => $earn['total_commission'] ?? '0.00',
-                'net_earnings'        => number_format(
-                    (float) ($earn['total_earned'] ?? 0) - (float) ($earn['total_commission'] ?? 0), 2, '.', ''
-                ),
-                'pending_payouts'     => $pendingPayoutAmount,
-                'active_contracts'    => (int) $contracts->fetchColumn(),
-                'disputed_amount'     => $this->getDisputedAmount($userId, $pdo),
-            ]]);
+            return $this->json([
+                'data' => [
+                    'escrow_balance' => number_format($balance, 2, '.', ''),
+                    'month_spending' => number_format((float) $monthTotal, 2, '.', ''),
+                    'total_funded' => $e['total_funded'] ?? '0.00',
+                    'total_released' => $e['total_released'] ?? '0.00',
+                    'total_fees_paid' => number_format(
+                        (float) ($e['total_fees'] ?? 0) + (float) ($e['total_client_fees'] ?? 0),
+                        2,
+                        '.',
+                        ''
+                    ),
+                    'total_earned' => $earn['total_earned'] ?? '0.00',
+                    'total_commission' => $earn['total_commission'] ?? '0.00',
+                    'net_earnings' => number_format(
+                        (float) ($earn['total_earned'] ?? 0) - (float) ($earn['total_commission'] ?? 0),
+                        2,
+                        '.',
+                        ''
+                    ),
+                    'pending_payouts' => $pendingPayoutAmount,
+                    'active_contracts' => (int) $contracts->fetchColumn(),
+                    'disputed_amount' => $this->getDisputedAmount($userId, $pdo),
+                ]
+            ]);
         } catch (\Throwable $ex) {
             error_log('[BillingController] summary ERROR: ' . $ex->getMessage() . ' in ' . $ex->getFile() . ':' . $ex->getLine());
             return $this->json(['error' => true, 'message' => $ex->getMessage()], 500);
@@ -138,14 +148,14 @@ final class BillingController
     public function transactions(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $p      = $this->pagination($request);
-        $pdo    = $this->db->pdo();
+        $p = $this->pagination($request);
+        $pdo = $this->db->pdo();
 
         $params = $request->getQueryParams();
-        $type   = $params['type'] ?? null;  // fund, release, refund, platform_fee, client_fee
+        $type = $params['type'] ?? null;  // fund, release, refund, platform_fee, client_fee
 
         $where = 'WHERE (c.client_id = :uid OR c.freelancer_id = :uid)';
-        $bind  = ['uid' => $userId];
+        $bind = ['uid' => $userId];
         if ($type) {
             $where .= ' AND et.type = :type';
             $bind['type'] = $type;
@@ -163,7 +173,9 @@ final class BillingController
              $where
              ORDER BY et.created_at DESC LIMIT :lim OFFSET :off"
         );
-        foreach ($bind as $k => $v) { $stmt->bindValue($k, $v); }
+        foreach ($bind as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
         $stmt->bindValue('lim', $p['perPage'], \PDO::PARAM_INT);
         $stmt->bindValue('off', $p['offset'], \PDO::PARAM_INT);
         $stmt->execute();
@@ -188,9 +200,11 @@ final class BillingController
 
         $rate = $this->fees()->getEffectiveRate($contract['client_id'], $contract['freelancer_id'], $pdo);
 
-        return $this->json(['data' => array_merge($rate, [
-            'client_fee_rate' => '5%',
-        ])]);
+        return $this->json([
+            'data' => array_merge($rate, [
+                'client_fee_rate' => '5%',
+            ])
+        ]);
     }
 
     /* ─── Weekly billing cron (Monday) ─── */
@@ -198,7 +212,7 @@ final class BillingController
     #[Route('POST', '/charge-weekly', name: 'billing.chargeWeekly', summary: 'Weekly hourly billing cron', tags: ['Billing'])]
     public function chargeWeekly(ServerRequestInterface $request): JsonResponse
     {
-        $pdo    = $this->db->pdo();
+        $pdo = $this->db->pdo();
         $results = [];
 
         // Find approved timesheets not yet billed (from the last 7 days)
@@ -217,23 +231,37 @@ final class BillingController
         foreach ($timesheets as $ts) {
             try {
                 $amount = (float) $ts['total_amount'];
-                if ($amount <= 0) continue;
+                if ($amount <= 0)
+                    continue;
 
-                $clientFee   = $this->fees()->calculateClientFee($ts['total_amount']);
+                $clientFee = $this->fees()->calculateClientFee($ts['total_amount']);
                 $totalCharge = $this->fees()->totalClientCharge($ts['total_amount']);
                 $amountCents = $this->fees()->toCents($totalCharge);
 
-                // Get client's default payment method
-                $pm = $this->getDefaultPaymentMethod($ts['client_id'], $pdo);
-                if (!$pm) {
+                // Get ALL verified payment methods for retry
+                $pms = $this->getVerifiedPaymentMethods($ts['client_id'], $pdo);
+                if (empty($pms)) {
                     $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-                    $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'fund_failed',
-                        $ts['total_amount'], 'failed', null, $now,
-                        ['error' => 'No payment method on file']);
-                    $this->notifyChargeFailed($pdo,
-                        $ts['client_id'], $ts['contract_id'], $ts['contract_title'],
-                        'No payment method on file', $now);
-                    $results[] = ['timesheet' => $ts['timesheet_id'], 'error' => 'No payment method'];
+                    $this->insertEscrowTransaction(
+                        $pdo,
+                        $ts['contract_id'],
+                        null,
+                        'fund_failed',
+                        $ts['total_amount'],
+                        'failed',
+                        null,
+                        $now,
+                        ['error' => 'No verified payment method on file']
+                    );
+                    $this->notifyChargeFailed(
+                        $pdo,
+                        $ts['client_id'],
+                        $ts['contract_id'],
+                        $ts['contract_title'],
+                        'No verified payment method on file',
+                        $now
+                    );
+                    $results[] = ['timesheet' => $ts['timesheet_id'], 'error' => 'No verified payment method'];
                     continue;
                 }
 
@@ -244,42 +272,123 @@ final class BillingController
 
                 if (!$customerId) {
                     $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-                    $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'fund_failed',
-                        $ts['total_amount'], 'failed', null, $now,
-                        ['error' => 'No Stripe customer']);
-                    $this->notifyChargeFailed($pdo,
-                        $ts['client_id'], $ts['contract_id'], $ts['contract_title'],
-                        'No Stripe customer configured', $now);
+                    $this->insertEscrowTransaction(
+                        $pdo,
+                        $ts['contract_id'],
+                        null,
+                        'fund_failed',
+                        $ts['total_amount'],
+                        'failed',
+                        null,
+                        $now,
+                        ['error' => 'No Stripe customer']
+                    );
+                    $this->notifyChargeFailed(
+                        $pdo,
+                        $ts['client_id'],
+                        $ts['contract_id'],
+                        $ts['contract_title'],
+                        'No Stripe customer configured',
+                        $now
+                    );
                     $results[] = ['timesheet' => $ts['timesheet_id'], 'error' => 'No Stripe customer'];
                     continue;
                 }
 
-                // Charge via Stripe
-                $pi = $this->stripe()->createPaymentIntent(
-                    $amountCents,
-                    'usd',
-                    $customerId,
-                    $pm['stripe_payment_method_id'],
-                    [
-                        'mw_type'        => 'weekly_billing',
-                        'mw_timesheet'   => $ts['timesheet_id'],
-                        'mw_contract'    => $ts['contract_id'],
-                    ]
-                );
+                // Try each PM until one succeeds
+                $pi = null;
+                $lastError = '';
+                foreach ($pms as $pm) {
+                    try {
+                        // Ensure PM is attached
+                        $pmObj = $this->stripe()->retrievePaymentMethod($pm['stripe_payment_method_id']);
+                        if (!$pmObj->customer) {
+                            $this->stripe()->attachPaymentMethod($pm['stripe_payment_method_id'], $customerId);
+                        }
+                        $pmType = $pmObj->type ?? 'card';
+
+                        $pi = $this->stripe()->getClient()->paymentIntents->create([
+                            'amount' => $amountCents,
+                            'currency' => 'usd',
+                            'customer' => $customerId,
+                            'payment_method' => $pm['stripe_payment_method_id'],
+                            'payment_method_types' => [$pmType],
+                            'off_session' => true,
+                            'confirm' => true,
+                            'metadata' => [
+                                'mw_type' => 'weekly_billing',
+                                'mw_timesheet' => $ts['timesheet_id'],
+                                'mw_contract' => $ts['contract_id'],
+                            ],
+                        ]);
+                        break; // Success
+                    } catch (\Throwable $e) {
+                        $lastError = $e->getMessage();
+                        error_log("[BillingController] chargeWeekly PM {$pm['stripe_payment_method_id']} failed: {$lastError}");
+                        $pi = null;
+                    }
+                }
 
                 $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
+                if (!$pi) {
+                    // All PMs failed
+                    $this->insertEscrowTransaction(
+                        $pdo,
+                        $ts['contract_id'],
+                        null,
+                        'fund_failed',
+                        $ts['total_amount'],
+                        'failed',
+                        null,
+                        $now,
+                        ['error' => $lastError]
+                    );
+                    $this->notifyChargeFailed(
+                        $pdo,
+                        $ts['client_id'],
+                        $ts['contract_id'],
+                        $ts['contract_title'],
+                        $lastError,
+                        $now
+                    );
+                    $results[] = ['timesheet' => $ts['timesheet_id'], 'error' => 'All payment methods failed: ' . $lastError];
+                    continue;
+                }
+
                 // Record escrow fund transaction
-                $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'fund',
-                    $ts['total_amount'], 'completed', $pi->id, $now);
+                $this->insertEscrowTransaction(
+                    $pdo,
+                    $ts['contract_id'],
+                    null,
+                    'fund',
+                    $ts['total_amount'],
+                    'completed',
+                    $pi->id,
+                    $now
+                );
 
                 // Record client fee transaction
-                $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'client_fee',
-                    $clientFee, 'completed', $pi->id, $now);
+                $this->insertEscrowTransaction(
+                    $pdo,
+                    $ts['contract_id'],
+                    null,
+                    'client_fee',
+                    $clientFee,
+                    'completed',
+                    $pi->id,
+                    $now
+                );
 
                 // Auto-generate invoice
-                $this->autoGenerateInvoice($pdo, $ts['contract_id'], $ts['total_amount'],
-                    $clientFee, $ts['contract_title'] . ' — Weekly billing', $now);
+                $this->autoGenerateInvoice(
+                    $pdo,
+                    $ts['contract_id'],
+                    $ts['total_amount'],
+                    $clientFee,
+                    $ts['contract_title'] . ' — Weekly billing',
+                    $now
+                );
 
                 // Mark timesheet as billed
                 $pdo->prepare('UPDATE "weeklytimesheet" SET billed = true, updated_at = :now WHERE id = :id')
@@ -287,17 +396,30 @@ final class BillingController
 
                 $results[] = [
                     'timesheet' => $ts['timesheet_id'],
-                    'charged'   => $totalCharge,
+                    'charged' => $totalCharge,
                     'stripe_pi' => $pi->id,
                 ];
             } catch (\Throwable $e) {
                 $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-                $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'fund_failed',
-                    $ts['total_amount'], 'failed', null, $now,
-                    ['error' => $e->getMessage()]);
-                $this->notifyChargeFailed($pdo,
-                    $ts['client_id'], $ts['contract_id'], $ts['contract_title'],
-                    $e->getMessage(), $now);
+                $this->insertEscrowTransaction(
+                    $pdo,
+                    $ts['contract_id'],
+                    null,
+                    'fund_failed',
+                    $ts['total_amount'],
+                    'failed',
+                    null,
+                    $now,
+                    ['error' => $e->getMessage()]
+                );
+                $this->notifyChargeFailed(
+                    $pdo,
+                    $ts['client_id'],
+                    $ts['contract_id'],
+                    $ts['contract_title'],
+                    $e->getMessage(),
+                    $now
+                );
                 $results[] = ['timesheet' => $ts['timesheet_id'], 'error' => $e->getMessage()];
                 error_log('[BillingController] chargeWeekly ERROR: ' . $e->getMessage());
             }
@@ -306,7 +428,7 @@ final class BillingController
         return $this->json([
             'data' => [
                 'processed' => count($results),
-                'results'   => $results,
+                'results' => $results,
             ],
         ]);
     }
@@ -316,7 +438,7 @@ final class BillingController
     #[Route('POST', '/payout-weekly', name: 'billing.payoutWeekly', summary: 'Friday freelancer payout cron', tags: ['Billing'])]
     public function payoutWeekly(ServerRequestInterface $request): JsonResponse
     {
-        $pdo     = $this->db->pdo();
+        $pdo = $this->db->pdo();
         $results = [];
 
         try {
@@ -392,22 +514,22 @@ final class BillingController
                                  failure_reason, created_at)
                              VALUES (:id, :uid, :amt, \'USD\', \'0.00\', :net, \'delayed\', :reason, :now)'
                         )->execute([
-                            'id'     => $payoutId,
-                            'uid'    => $fl['id'],
-                            'amt'    => number_format($available, 2, '.', ''),
-                            'net'    => number_format($available, 2, '.', ''),
-                            'reason' => "Client payment pending for: {$contractList} (unpaid: \${$unpaidTotal})",
-                            'now'    => $now,
-                        ]);
+                                    'id' => $payoutId,
+                                    'uid' => $fl['id'],
+                                    'amt' => number_format($available, 2, '.', ''),
+                                    'net' => number_format($available, 2, '.', ''),
+                                    'reason' => "Client payment pending for: {$contractList} (unpaid: \${$unpaidTotal})",
+                                    'now' => $now,
+                                ]);
 
                         // Notify freelancer about delayed payout
                         $this->notifyPayoutDelayed($pdo, $fl['id'], $contractList, $available, $now);
 
                         $results[] = [
                             'freelancer' => $fl['id'],
-                            'name'       => $fl['display_name'],
-                            'status'     => 'delayed',
-                            'reason'     => "Unpaid timesheets on: {$contractList}",
+                            'name' => $fl['display_name'],
+                            'status' => 'delayed',
+                            'reason' => "Unpaid timesheets on: {$contractList}",
                         ];
                         continue;
                     }
@@ -427,22 +549,22 @@ final class BillingController
                                  failure_reason, created_at)
                              VALUES (:id, :uid, :amt, \'USD\', \'0.00\', :net, \'delayed\', :reason, :now)'
                         )->execute([
-                            'id'     => $payoutId,
-                            'uid'    => $fl['id'],
-                            'amt'    => number_format($available, 2, '.', ''),
-                            'net'    => number_format($available, 2, '.', ''),
-                            'reason' => "Active dispute(s) on: {$contractList}",
-                            'now'    => $now,
-                        ]);
+                                    'id' => $payoutId,
+                                    'uid' => $fl['id'],
+                                    'amt' => number_format($available, 2, '.', ''),
+                                    'net' => number_format($available, 2, '.', ''),
+                                    'reason' => "Active dispute(s) on: {$contractList}",
+                                    'now' => $now,
+                                ]);
 
                         // Notify freelancer
                         $this->disputePayments()->notifyDisputeHold($fl['id'], $contractList, $now);
 
                         $results[] = [
                             'freelancer' => $fl['id'],
-                            'name'       => $fl['display_name'],
-                            'status'     => 'delayed',
-                            'reason'     => "Active dispute(s) on: {$contractList}",
+                            'name' => $fl['display_name'],
+                            'status' => 'delayed',
+                            'reason' => "Active dispute(s) on: {$contractList}",
                         ];
                         continue;
                     }
@@ -457,15 +579,15 @@ final class BillingController
                     $defaultMethod = $methodStmt->fetch(\PDO::FETCH_ASSOC);
 
                     $payoutType = $defaultMethod['type'] ?? 'bank_transfer';
-                    $metadata   = $defaultMethod['metadata'] ? json_decode($defaultMethod['metadata'], true) : [];
+                    $metadata = $defaultMethod['metadata'] ? json_decode($defaultMethod['metadata'], true) : [];
                     $gatewayRef = '';
-                    $fee        = '0.00';
+                    $fee = '0.00';
 
                     if ($payoutType === 'paypal' && !empty($metadata['paypal_email'])) {
                         // ── PayPal Payout ──
                         $paypalFee = $available * 0.01; // 1% PayPal fee
                         $netAmount = $available - $paypalFee;
-                        $fee       = number_format($paypalFee, 2, '.', '');
+                        $fee = number_format($paypalFee, 2, '.', '');
 
                         $paypal = new \App\Service\PayPalService();
                         $result = $paypal->createPayout(
@@ -489,12 +611,12 @@ final class BillingController
                             'usd',
                             $fl['stripe_connect_account_id'],
                             [
-                                'mw_type'       => 'weekly_payout',
+                                'mw_type' => 'weekly_payout',
                                 'mw_freelancer' => $fl['id'],
                             ]
                         );
                         $gatewayRef = $transfer->id;
-                        $netAmount  = $available;
+                        $netAmount = $available;
                     }
 
                     $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
@@ -507,26 +629,26 @@ final class BillingController
                              gateway_reference, processed_at, created_at)
                          VALUES (:id, :uid, :amt, \'USD\', :fee, :net, \'completed\', :ref, :now, :now)'
                     )->execute([
-                        'id'  => $payoutId,
-                        'uid' => $fl['id'],
-                        'amt' => number_format($available, 2, '.', ''),
-                        'fee' => $fee,
-                        'net' => number_format($netAmount, 2, '.', ''),
-                        'ref' => $gatewayRef,
-                        'now' => $now,
-                    ]);
+                                'id' => $payoutId,
+                                'uid' => $fl['id'],
+                                'amt' => number_format($available, 2, '.', ''),
+                                'fee' => $fee,
+                                'net' => number_format($netAmount, 2, '.', ''),
+                                'ref' => $gatewayRef,
+                                'now' => $now,
+                            ]);
 
                     $results[] = [
                         'freelancer' => $fl['id'],
-                        'name'       => $fl['display_name'],
-                        'amount'     => number_format($available, 2, '.', ''),
-                        'method'     => $payoutType,
-                        'reference'  => $gatewayRef,
+                        'name' => $fl['display_name'],
+                        'amount' => number_format($available, 2, '.', ''),
+                        'method' => $payoutType,
+                        'reference' => $gatewayRef,
                     ];
                 } catch (\Throwable $e) {
                     $results[] = [
                         'freelancer' => $fl['id'],
-                        'error'      => $e->getMessage(),
+                        'error' => $e->getMessage(),
                     ];
                     error_log('[BillingController] payoutWeekly freelancer ' . $fl['id'] . ' ERROR: ' . $e->getMessage());
                 }
@@ -539,28 +661,34 @@ final class BillingController
         return $this->json([
             'data' => [
                 'processed' => count($results),
-                'results'   => $results,
+                'results' => $results,
             ],
         ]);
     }
 
     /* ─── Helpers ─── */
 
-    private function getDefaultPaymentMethod(string $userId, \PDO $pdo): ?array
+    private function getVerifiedPaymentMethods(string $userId, \PDO $pdo): array
     {
         $stmt = $pdo->prepare(
-            'SELECT id, stripe_payment_method_id FROM "paymentmethod"
-             WHERE user_id = :uid AND is_active = true AND stripe_payment_method_id IS NOT NULL
-             ORDER BY is_default DESC, created_at DESC LIMIT 1'
+            'SELECT id, stripe_payment_method_id, type FROM "paymentmethod"
+             WHERE user_id = :uid AND is_active = true AND verified = true
+               AND stripe_payment_method_id IS NOT NULL
+             ORDER BY is_default DESC, created_at DESC'
         );
         $stmt->execute(['uid' => $userId]);
-        return $stmt->fetch(\PDO::FETCH_ASSOC) ?: null;
+        return $stmt->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     private function insertEscrowTransaction(
-        \PDO $pdo, string $contractId, ?string $milestoneId,
-        string $type, string $amount, string $status,
-        ?string $gatewayRef, string $now,
+        \PDO $pdo,
+        string $contractId,
+        ?string $milestoneId,
+        string $type,
+        string $amount,
+        string $status,
+        ?string $gatewayRef,
+        string $now,
         ?array $gatewayMetadata = null
     ): string {
         $id = $this->uuid();
@@ -570,24 +698,28 @@ final class BillingController
                  gateway_reference, gateway_metadata, created_at)
              VALUES (:id, :cid, :mid, :type, :amt, \'USD\', :status, :ref, :meta, :now)'
         )->execute([
-            'id'     => $id,
-            'cid'    => $contractId,
-            'mid'    => $milestoneId,
-            'type'   => $type,
-            'amt'    => $amount,
-            'status' => $status,
-            'ref'    => $gatewayRef,
-            'meta'   => $gatewayMetadata ? json_encode($gatewayMetadata) : null,
-            'now'    => $now,
-        ]);
+                    'id' => $id,
+                    'cid' => $contractId,
+                    'mid' => $milestoneId,
+                    'type' => $type,
+                    'amt' => $amount,
+                    'status' => $status,
+                    'ref' => $gatewayRef,
+                    'meta' => $gatewayMetadata ? json_encode($gatewayMetadata) : null,
+                    'now' => $now,
+                ]);
         return $id;
     }
 
     private function autoGenerateInvoice(
-        \PDO $pdo, string $contractId, string $subtotal,
-        string $clientFee, string $description, string $now
+        \PDO $pdo,
+        string $contractId,
+        string $subtotal,
+        string $clientFee,
+        string $description,
+        string $now
     ): string {
-        $id  = $this->uuid();
+        $id = $this->uuid();
         $total = number_format((float) $subtotal + (float) $clientFee, 2, '.', '');
         $invNum = 'INV-' . strtoupper(substr($id, 0, 8));
 
@@ -598,15 +730,15 @@ final class BillingController
              VALUES (:id, :cid, :num, :sub, :fee, \'0.00\', :total, \'USD\', \'paid\',
                      :now, :now, :notes, :now, :now)'
         )->execute([
-            'id'    => $id,
-            'cid'   => $contractId,
-            'num'   => $invNum,
-            'sub'   => $subtotal,
-            'fee'   => $clientFee,
-            'total' => $total,
-            'now'   => $now,
-            'notes' => $description,
-        ]);
+                    'id' => $id,
+                    'cid' => $contractId,
+                    'num' => $invNum,
+                    'sub' => $subtotal,
+                    'fee' => $clientFee,
+                    'total' => $total,
+                    'now' => $now,
+                    'notes' => $description,
+                ]);
 
         return $id;
     }
@@ -615,17 +747,26 @@ final class BillingController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 
     /* ─── Notify client about a failed charge ─── */
 
     private function notifyChargeFailed(
-        \PDO $pdo, string $clientId, string $contractId,
-        string $contractTitle, string $errorMsg, string $now
+        \PDO $pdo,
+        string $clientId,
+        string $contractId,
+        string $contractTitle,
+        string $errorMsg,
+        string $now
     ): void {
         $notifId = $this->uuid();
         try {
@@ -633,37 +774,45 @@ final class BillingController
                 'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
                  VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
             )->execute([
-                'id'    => $notifId,
-                'uid'   => $clientId,
-                'type'  => 'billing.charge_failed',
-                'title' => '⚠️ Payment Failed',
-                'body'  => "Your payment for \"{$contractTitle}\" could not be processed. Please update your payment method to avoid delays.",
-                'data'  => json_encode([
-                    'contract_id' => $contractId,
-                    'error'       => $errorMsg,
-                    'link'        => '/dashboard/billing/payment-methods',
-                ]),
-                'prio'  => 'warning',
-                'chan'   => 'in_app',
-                'now'   => $now,
-            ]);
+                        'id' => $notifId,
+                        'uid' => $clientId,
+                        'type' => 'billing.charge_failed',
+                        'title' => '⚠️ Payment Failed',
+                        'body' => "Your payment for \"{$contractTitle}\" could not be processed. Please update your payment method to avoid delays.",
+                        'data' => json_encode([
+                            'contract_id' => $contractId,
+                            'error' => $errorMsg,
+                            'link' => '/dashboard/billing/payment-methods',
+                        ]),
+                        'prio' => 'warning',
+                        'chan' => 'in_app',
+                        'now' => $now,
+                    ]);
         } catch (\Throwable $e) {
             error_log('[BillingController] notifyChargeFailed insert: ' . $e->getMessage());
         }
 
         // Real-time push via Redis/Socket.IO
-        $this->pushSocketNotification($clientId, $notifId, 'billing.charge_failed',
+        $this->pushSocketNotification(
+            $clientId,
+            $notifId,
+            'billing.charge_failed',
             '⚠️ Payment Failed',
             "Your payment for \"{$contractTitle}\" could not be processed.",
             ['contract_id' => $contractId, 'link' => '/dashboard/billing/payment-methods'],
-            'warning', $now);
+            'warning',
+            $now
+        );
     }
 
     /* ─── Notify freelancer about a delayed payout ─── */
 
     private function notifyPayoutDelayed(
-        \PDO $pdo, string $freelancerId, string $contractList,
-        float $amount, string $now
+        \PDO $pdo,
+        string $freelancerId,
+        string $contractList,
+        float $amount,
+        string $now
     ): void {
         $notifId = $this->uuid();
         $formattedAmount = number_format($amount, 2);
@@ -672,36 +821,47 @@ final class BillingController
                 'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
                  VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
             )->execute([
-                'id'    => $notifId,
-                'uid'   => $freelancerId,
-                'type'  => 'billing.payout_delayed',
-                'title' => '⏳ Payout Delayed',
-                'body'  => "Your weekly payout of \${$formattedAmount} has been delayed. We're waiting for client payment on: {$contractList}. Your payout will be processed as soon as the payment clears.",
-                'data'  => json_encode([
-                    'contracts' => $contractList,
-                    'amount'    => $formattedAmount,
-                    'link'      => '/dashboard/billing',
-                ]),
-                'prio'  => 'warning',
-                'chan'   => 'in_app',
-                'now'   => $now,
-            ]);
+                        'id' => $notifId,
+                        'uid' => $freelancerId,
+                        'type' => 'billing.payout_delayed',
+                        'title' => '⏳ Payout Delayed',
+                        'body' => "Your weekly payout of \${$formattedAmount} has been delayed. We're waiting for client payment on: {$contractList}. Your payout will be processed as soon as the payment clears.",
+                        'data' => json_encode([
+                            'contracts' => $contractList,
+                            'amount' => $formattedAmount,
+                            'link' => '/dashboard/billing',
+                        ]),
+                        'prio' => 'warning',
+                        'chan' => 'in_app',
+                        'now' => $now,
+                    ]);
         } catch (\Throwable $e) {
             error_log('[BillingController] notifyPayoutDelayed insert: ' . $e->getMessage());
         }
 
-        $this->pushSocketNotification($freelancerId, $notifId, 'billing.payout_delayed',
+        $this->pushSocketNotification(
+            $freelancerId,
+            $notifId,
+            'billing.payout_delayed',
             '⏳ Payout Delayed',
             "Your weekly payout of \${$formattedAmount} has been delayed.",
             ['contracts' => $contractList, 'link' => '/dashboard/billing'],
-            'warning', $now);
+            'warning',
+            $now
+        );
     }
 
     /* ─── Push real-time notification via Redis/Socket.IO ─── */
 
     private function pushSocketNotification(
-        string $userId, string $notifId, string $type, string $title,
-        string $body, array $data, string $priority, string $now
+        string $userId,
+        string $notifId,
+        string $type,
+        string $title,
+        string $body,
+        array $data,
+        string $priority,
+        string $now
     ): void {
         try {
             $redisHost = getenv('REDIS_HOST') ?: 'redis';
@@ -711,12 +871,12 @@ final class BillingController
 
             $socket = new \App\Service\SocketEvent($redis);
             $socket->toUser($userId, 'notification:new', [
-                'id'         => $notifId,
-                'type'       => $type,
-                'title'      => $title,
-                'body'       => $body,
-                'data'       => $data,
-                'priority'   => $priority,
+                'id' => $notifId,
+                'type' => $type,
+                'title' => $title,
+                'body' => $body,
+                'data' => $data,
+                'priority' => $priority,
                 'created_at' => $now,
             ]);
 
@@ -749,13 +909,14 @@ final class BillingController
                 return $this->error('Timesheet not found or already billed', 404);
             }
 
-            $clientFee   = $this->fees()->calculateClientFee($ts['total_amount']);
+            $clientFee = $this->fees()->calculateClientFee($ts['total_amount']);
             $totalCharge = $this->fees()->totalClientCharge($ts['total_amount']);
             $amountCents = $this->fees()->toCents($totalCharge);
 
-            $pm = $this->getDefaultPaymentMethod($ts['client_id'], $pdo);
-            if (!$pm) {
-                return $this->error('Client has no payment method on file');
+            // Get ALL verified PMs for retry
+            $pms = $this->getVerifiedPaymentMethods($ts['client_id'], $pdo);
+            if (empty($pms)) {
+                return $this->error('Client has no verified payment method on file');
             }
 
             $customerStmt = $pdo->prepare('SELECT stripe_customer_id FROM "user" WHERE id = :uid');
@@ -766,19 +927,73 @@ final class BillingController
                 return $this->error('Client has no Stripe customer');
             }
 
-            $pi = $this->stripe()->createPaymentIntent(
-                $amountCents, 'usd', $customerId, $pm['stripe_payment_method_id'],
-                ['mw_type' => 'retry_charge', 'mw_timesheet' => $timesheetId, 'mw_contract' => $ts['contract_id']]
-            );
+            // Try each PM until one succeeds
+            $pi = null;
+            $lastError = '';
+            foreach ($pms as $pm) {
+                try {
+                    $pmObj = $this->stripe()->retrievePaymentMethod($pm['stripe_payment_method_id']);
+                    if (!$pmObj->customer) {
+                        $this->stripe()->attachPaymentMethod($pm['stripe_payment_method_id'], $customerId);
+                    }
+                    $pmType = $pmObj->type ?? 'card';
+
+                    $pi = $this->stripe()->getClient()->paymentIntents->create([
+                        'amount' => $amountCents,
+                        'currency' => 'usd',
+                        'customer' => $customerId,
+                        'payment_method' => $pm['stripe_payment_method_id'],
+                        'payment_method_types' => [$pmType],
+                        'off_session' => true,
+                        'confirm' => true,
+                        'metadata' => [
+                            'mw_type' => 'retry_charge',
+                            'mw_timesheet' => $timesheetId,
+                            'mw_contract' => $ts['contract_id'],
+                        ],
+                    ]);
+                    break; // Success
+                } catch (\Throwable $e) {
+                    $lastError = $e->getMessage();
+                    error_log("[BillingController] retryCharge PM {$pm['stripe_payment_method_id']} failed: {$lastError}");
+                    $pi = null;
+                }
+            }
+
+            if (!$pi) {
+                return $this->error('All payment methods failed: ' . $lastError, 402);
+            }
 
             $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-            $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'fund',
-                $ts['total_amount'], 'completed', $pi->id, $now);
-            $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'client_fee',
-                $clientFee, 'completed', $pi->id, $now);
-            $this->autoGenerateInvoice($pdo, $ts['contract_id'], $ts['total_amount'],
-                $clientFee, $ts['contract_title'] . ' — Retry charge', $now);
+            $this->insertEscrowTransaction(
+                $pdo,
+                $ts['contract_id'],
+                null,
+                'fund',
+                $ts['total_amount'],
+                'completed',
+                $pi->id,
+                $now
+            );
+            $this->insertEscrowTransaction(
+                $pdo,
+                $ts['contract_id'],
+                null,
+                'client_fee',
+                $clientFee,
+                'completed',
+                $pi->id,
+                $now
+            );
+            $this->autoGenerateInvoice(
+                $pdo,
+                $ts['contract_id'],
+                $ts['total_amount'],
+                $clientFee,
+                $ts['contract_title'] . ' — Retry charge',
+                $now
+            );
 
             $pdo->prepare('UPDATE "weeklytimesheet" SET billed = true, updated_at = :now WHERE id = :id')
                 ->execute(['now' => $now, 'id' => $timesheetId]);
@@ -791,9 +1006,9 @@ final class BillingController
             )->execute(['cid' => $ts['contract_id']]);
 
             return $this->json([
-                'message'   => 'Charge retried successfully',
+                'message' => 'Charge retried successfully',
                 'stripe_pi' => $pi->id,
-                'charged'   => $totalCharge,
+                'charged' => $totalCharge,
             ]);
         } catch (\Throwable $e) {
             error_log('[BillingController] retryCharge ERROR: ' . $e->getMessage());

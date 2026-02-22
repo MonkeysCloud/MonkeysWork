@@ -291,6 +291,17 @@ const ADMIN_MENU: MenuConfig = {
             ],
         },
         {
+            icon: "📄",
+            label: "Contracts",
+            href: "/dashboard/admin/contracts",
+            children: [
+                { label: "All Contracts", href: "/dashboard/admin/contracts" },
+                { label: "Active", href: "/dashboard/admin/contracts?status=active" },
+                { label: "Completed", href: "/dashboard/admin/contracts?status=completed" },
+                { label: "Cancelled", href: "/dashboard/admin/contracts?status=cancelled" },
+            ],
+        },
+        {
             icon: "✅",
             label: "Verifications",
             href: "/dashboard/admin/verifications",
@@ -319,8 +330,23 @@ const ADMIN_MENU: MenuConfig = {
                 { label: "Payouts", href: "/dashboard/admin/billing/payouts" },
             ],
         },
+        {
+            icon: "⭐",
+            label: "Reviews",
+            href: "/dashboard/admin/reviews",
+        },
+        {
+            icon: "💬",
+            label: "Conversations",
+            href: "/dashboard/admin/conversations",
+        },
     ],
     secondary: [
+        {
+            icon: "📈",
+            label: "Reports Dashboard",
+            href: "/dashboard/admin/reports-dashboard",
+        },
         {
             icon: "📜",
             label: "Activity Log",

@@ -27,7 +27,8 @@ final class DisputeController
     public function __construct(
         private ConnectionInterface $db,
         private ?EventDispatcherInterface $events = null,
-    ) {}
+    ) {
+    }
 
     private function disputePayments(): DisputePaymentService
     {
@@ -43,11 +44,11 @@ final class DisputeController
         $p = $this->pagination($request);
         $q = $request->getQueryParams();
 
-        $where  = ['(c.client_id = :uid OR c.freelancer_id = :uid)'];
+        $where = ['(c.client_id = :uid OR c.freelancer_id = :uid)'];
         $params = ['uid' => $userId];
 
         if (!empty($q['status'])) {
-            $where[]          = 'd.status = :status';
+            $where[] = 'd.status = :status';
             $params['status'] = $q['status'];
         }
 
@@ -85,7 +86,7 @@ final class DisputeController
     public function create(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         if (empty($data['contract_id']) || empty($data['reason'])) {
             return $this->error('contract_id and reason are required');
@@ -110,25 +111,27 @@ final class DisputeController
             ? $contract['freelancer_id']
             : $contract['client_id'];
 
-        $id  = $this->uuid();
+        $id = $this->uuid();
         $now = new \DateTimeImmutable();
         $deadline = $now->modify('+' . self::RESPONSE_DAYS . ' days');
 
         $this->db->pdo()->prepare(
-            'INSERT INTO "dispute" (id, contract_id, filed_by, reason, description, evidence_urls, status,
-                    response_deadline, awaiting_response_from, created_at, updated_at)
-             VALUES (:id, :cid, :uid, :reason, :desc, :evidence, \'open\', :deadline, :respondent, :now, :now)'
+            'INSERT INTO "dispute" (id, contract_id, milestone_id, raised_by_id, reason, description, evidence_urls, status,
+                    resolution_amount, response_deadline, awaiting_response_from_id, created_at, updated_at)
+             VALUES (:id, :cid, :mid, :uid, :reason, :desc, :evidence, \'open\', :amount, :deadline, :respondent, :now, :now)'
         )->execute([
-            'id'         => $id,
-            'cid'        => $data['contract_id'],
-            'uid'        => $userId,
-            'reason'     => $data['reason'],
-            'desc'       => $data['description'] ?? '',
-            'evidence'   => json_encode($data['evidence_urls'] ?? []),
-            'deadline'   => $deadline->format('Y-m-d H:i:s'),
-            'respondent' => $respondent,
-            'now'        => $now->format('Y-m-d H:i:s'),
-        ]);
+                    'id' => $id,
+                    'cid' => $data['contract_id'],
+                    'mid' => $data['milestone_id'] ?? null,
+                    'uid' => $userId,
+                    'reason' => $data['reason'],
+                    'desc' => $data['description'] ?? '',
+                    'evidence' => json_encode($data['evidence_urls'] ?? []),
+                    'amount' => $data['dispute_amount'] ?? null,
+                    'deadline' => $deadline->format('Y-m-d H:i:s'),
+                    'respondent' => $respondent,
+                    'now' => $now->format('Y-m-d H:i:s'),
+                ]);
 
         // Update contract status
         $this->db->pdo()->prepare(
@@ -151,7 +154,9 @@ final class DisputeController
             $cTitle->execute(['cid' => $data['contract_id']]);
             $contractTitle = $cTitle->fetchColumn() ?: 'Contract';
             $this->disputePayments()->notifyDisputeHold(
-                $freelancerId, $contractTitle, $now->format('Y-m-d H:i:s')
+                $freelancerId,
+                $contractTitle,
+                $now->format('Y-m-d H:i:s')
             );
         }
 
@@ -179,7 +184,7 @@ final class DisputeController
              JOIN "job" j ON j.id = c.job_id
              JOIN "user" uc ON uc.id = c.client_id
              JOIN "user" uf ON uf.id = c.freelancer_id
-             JOIN "user" ub ON ub.id = d.filed_by
+             JOIN "user" ub ON ub.id = d.raised_by_id
              WHERE d.id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -217,7 +222,7 @@ final class DisputeController
     public function addMessage(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         // Verify the dispute exists and user is a party
         $dStmt = $this->db->pdo()->prepare(
@@ -241,20 +246,19 @@ final class DisputeController
         }
 
         $msgId = $this->uuid();
-        $now   = new \DateTimeImmutable();
+        $now = new \DateTimeImmutable();
 
         $this->db->pdo()->prepare(
-            'INSERT INTO "disputemessage" (id, dispute_id, sender_id, body, attachment_url, attachments, created_at)
-             VALUES (:id, :did, :uid, :body, :att, :atts, :now)'
+            'INSERT INTO "disputemessage" (id, dispute_id, sender_id, content, attachments, created_at)
+             VALUES (:id, :did, :uid, :body, :atts, :now)'
         )->execute([
-            'id'   => $msgId,
-            'did'  => $id,
-            'uid'  => $userId,
-            'body' => $data['body'] ?? '',
-            'att'  => $data['attachment_url'] ?? null,
-            'atts' => json_encode($data['attachments'] ?? []),
-            'now'  => $now->format('Y-m-d H:i:s'),
-        ]);
+                    'id' => $msgId,
+                    'did' => $id,
+                    'uid' => $userId,
+                    'body' => $data['body'] ?? '',
+                    'atts' => json_encode($data['attachments'] ?? []),
+                    'now' => $now->format('Y-m-d H:i:s'),
+                ]);
 
         // Reset response deadline: the OTHER party now has 3 days to respond
         $otherParty = $dispute['client_id'] === $userId
@@ -264,14 +268,14 @@ final class DisputeController
         $newDeadline = $now->modify('+' . self::RESPONSE_DAYS . ' days');
 
         $this->db->pdo()->prepare(
-            'UPDATE "dispute" SET awaiting_response_from = :other,
+            'UPDATE "dispute" SET awaiting_response_from_id = :other,
                     response_deadline = :deadline, updated_at = :now WHERE id = :id'
         )->execute([
-            'other'    => $otherParty,
-            'deadline' => $newDeadline->format('Y-m-d H:i:s'),
-            'now'      => $now->format('Y-m-d H:i:s'),
-            'id'       => $id,
-        ]);
+                    'other' => $otherParty,
+                    'deadline' => $newDeadline->format('Y-m-d H:i:s'),
+                    'now' => $now->format('Y-m-d H:i:s'),
+                    'id' => $id,
+                ]);
 
         return $this->created(['data' => ['id' => $msgId]]);
     }
@@ -307,7 +311,7 @@ final class DisputeController
     public function escalate(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         // Verify dispute + party
         $dStmt = $this->db->pdo()->prepare(
@@ -340,9 +344,9 @@ final class DisputeController
     #[Route('POST', '/{id}/resolve', name: 'disputes.resolve', summary: 'Resolve dispute', tags: ['Disputes'])]
     public function resolve(ServerRequestInterface $request, string $id): JsonResponse
     {
-        $data   = $this->body($request);
+        $data = $this->body($request);
         $userId = $this->userId($request);
-        $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $dStmt = $this->db->pdo()->prepare('SELECT contract_id FROM "dispute" WHERE id = :id');
         $dStmt->execute(['id' => $id]);
@@ -357,17 +361,17 @@ final class DisputeController
 
         $this->db->pdo()->prepare(
             'UPDATE "dispute" SET status = :status, resolution_notes = :notes, resolution_amount = :amount,
-                    resolved_by = :uid, resolved_at = :now, response_deadline = NULL,
-                    awaiting_response_from = NULL, updated_at = :now2 WHERE id = :id'
+                    resolved_by_id = :uid, resolved_at = :now, response_deadline = NULL,
+                    awaiting_response_from_id = NULL, updated_at = :now2 WHERE id = :id'
         )->execute([
-            'status' => $resolveStatus,
-            'notes'  => $data['resolution_notes'] ?? null,
-            'amount' => $resolutionAmount,
-            'uid'    => $userId,
-            'now'    => $now,
-            'now2'   => $now,
-            'id'     => $id,
-        ]);
+                    'status' => $resolveStatus,
+                    'notes' => $data['resolution_notes'] ?? null,
+                    'amount' => $resolutionAmount,
+                    'uid' => $userId,
+                    'now' => $now,
+                    'now2' => $now,
+                    'id' => $id,
+                ]);
 
         // Process financial effects of the resolution
         $this->disputePayments()->resolvePayment(
@@ -393,7 +397,7 @@ final class DisputeController
     #[Route('POST', '/check-deadlines', name: 'disputes.checkDeadlines', summary: 'Auto-resolve expired disputes', tags: ['Disputes'])]
     public function checkDeadlines(ServerRequestInterface $request): JsonResponse
     {
-        $now  = new \DateTimeImmutable();
+        $now = new \DateTimeImmutable();
         $stmt = $this->db->pdo()->prepare(
             'SELECT d.*, c.client_id, c.freelancer_id
              FROM "dispute" d
@@ -401,7 +405,7 @@ final class DisputeController
              WHERE d.status IN (\'open\', \'under_review\')
                AND d.response_deadline IS NOT NULL
                AND d.response_deadline < :now
-               AND d.awaiting_response_from IS NOT NULL'
+               AND d.awaiting_response_from_id IS NOT NULL'
         );
         $stmt->execute(['now' => $now->format('Y-m-d H:i:s')]);
 
@@ -410,20 +414,20 @@ final class DisputeController
 
         foreach ($expired as $d) {
             // The party who didn't respond loses — resolve in favor of the OTHER party
-            $loser  = $d['awaiting_response_from'];
+            $loser = $d['awaiting_response_from_id'];
             $status = $loser === $d['client_id'] ? 'resolved_freelancer' : 'resolved_client';
 
             $this->db->pdo()->prepare(
                 'UPDATE "dispute" SET status = :status, resolution_notes = :notes,
                         resolved_at = :now, response_deadline = NULL,
-                        awaiting_response_from = NULL, updated_at = :now2 WHERE id = :id'
+                        awaiting_response_from_id = NULL, updated_at = :now2 WHERE id = :id'
             )->execute([
-                'status' => $status,
-                'notes'  => 'Auto-resolved: respondent did not reply within the ' . self::RESPONSE_DAYS . '-day deadline.',
-                'now'    => $now->format('Y-m-d H:i:s'),
-                'now2'   => $now->format('Y-m-d H:i:s'),
-                'id'     => $d['id'],
-            ]);
+                        'status' => $status,
+                        'notes' => 'Auto-resolved: respondent did not reply within the ' . self::RESPONSE_DAYS . '-day deadline.',
+                        'now' => $now->format('Y-m-d H:i:s'),
+                        'now2' => $now->format('Y-m-d H:i:s'),
+                        'id' => $d['id'],
+                    ]);
 
             $this->events?->dispatch(new DisputeResolved(
                 $d['id'],
@@ -442,7 +446,7 @@ final class DisputeController
 
     private function checkDeadlineForDispute(array $dispute): void
     {
-        if (empty($dispute['response_deadline']) || empty($dispute['awaiting_response_from'])) {
+        if (empty($dispute['response_deadline']) || empty($dispute['awaiting_response_from_id'])) {
             return;
         }
         if (!in_array($dispute['status'], ['open', 'under_review'])) {
@@ -455,30 +459,35 @@ final class DisputeController
         }
 
         // Auto-resolve: loser is the one who didn't respond
-        $loser  = $dispute['awaiting_response_from'];
+        $loser = $dispute['awaiting_response_from_id'];
         $status = ($loser === ($dispute['client_id'] ?? '')) ? 'resolved_freelancer' : 'resolved_client';
-        $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $this->db->pdo()->prepare(
             'UPDATE "dispute" SET status = :status, resolution_notes = :notes,
                     resolved_at = :now, response_deadline = NULL,
-                    awaiting_response_from = NULL, updated_at = :now2 WHERE id = :id'
+                    awaiting_response_from_id = NULL, updated_at = :now2 WHERE id = :id'
         )->execute([
-            'status' => $status,
-            'notes'  => 'Auto-resolved: respondent did not reply within the ' . self::RESPONSE_DAYS . '-day deadline.',
-            'now'    => $now,
-            'now2'   => $now,
-            'id'     => $dispute['id'],
-        ]);
+                    'status' => $status,
+                    'notes' => 'Auto-resolved: respondent did not reply within the ' . self::RESPONSE_DAYS . '-day deadline.',
+                    'now' => $now,
+                    'now2' => $now,
+                    'id' => $dispute['id'],
+                ]);
     }
 
     private function uuid(): string
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Service\StripeService;
+use App\Service\EmailNotificationService;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -18,10 +19,12 @@ final class PaymentMethodController
     use ApiController;
 
     private StripeService $stripe;
+    private EmailNotificationService $emailNotifier;
 
     public function __construct(private ConnectionInterface $db)
     {
         $this->stripe = new StripeService();
+        $this->emailNotifier = new EmailNotificationService($db);
     }
 
     /* ─── List saved payment methods ─── */
@@ -34,7 +37,7 @@ final class PaymentMethodController
 
             $stmt = $this->db->pdo()->prepare(
                 'SELECT id, type, provider, last_four, expiry, is_default, is_active,
-                        stripe_payment_method_id, metadata, created_at
+                        stripe_payment_method_id, metadata, verified, setup_intent_id, created_at
                  FROM "paymentmethod" WHERE user_id = :uid AND is_active = true
                  ORDER BY is_default DESC, created_at DESC'
             );
@@ -43,6 +46,7 @@ final class PaymentMethodController
             $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
             foreach ($rows as &$row) {
                 $row['metadata'] = $row['metadata'] ? json_decode($row['metadata'], true) : null;
+                $row['verified'] = (bool) ($row['verified'] ?? true);
             }
 
             return $this->json(['data' => $rows]);
@@ -59,8 +63,8 @@ final class PaymentMethodController
     {
         try {
             $userId = $this->userId($request);
-            $pdo    = $this->db->pdo();
-            $body   = $this->body($request);
+            $pdo = $this->db->pdo();
+            $body = $this->body($request);
 
             error_log('[PaymentMethodController] setupIntent: userId=' . $userId);
 
@@ -100,7 +104,7 @@ final class PaymentMethodController
             return $this->json([
                 'data' => [
                     'client_secret' => $si->client_secret,
-                    'customer_id'   => $customerId,
+                    'customer_id' => $customerId,
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -117,11 +121,11 @@ final class PaymentMethodController
     {
         try {
             $userId = $this->userId($request);
-            $data   = $this->body($request);
-            $pdo    = $this->db->pdo();
-            $type   = $data['type'] ?? 'card';
+            $data = $this->body($request);
+            $pdo = $this->db->pdo();
+            $type = $data['type'] ?? 'card';
 
-            $id  = $this->uuid();
+            $id = $this->uuid();
             $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
             // Auto-set as default if first payment method
@@ -151,22 +155,27 @@ final class PaymentMethodController
                                                   created_at, updated_at)
                      VALUES (:id, :uid, :type, :prov, :last4, :tok, :spm, :meta, :def, true, null, :now, :now)'
                 )->execute([
-                    'id'   => $id,
-                    'uid'  => $userId,
-                    'type' => 'paypal',
-                    'prov' => 'paypal',
-                    'last4' => substr($paypalEmail, 0, 4),
-                    'tok'  => null,
-                    'spm'  => null,
-                    'meta' => json_encode(['paypal_email' => $paypalEmail]),
-                    'def'  => $setDefault ? 'true' : 'false',
-                    'now'  => $now,
-                ]);
+                            'id' => $id,
+                            'uid' => $userId,
+                            'type' => 'paypal',
+                            'prov' => 'paypal',
+                            'last4' => substr($paypalEmail, 0, 4),
+                            'tok' => null,
+                            'spm' => null,
+                            'meta' => json_encode(['paypal_email' => $paypalEmail]),
+                            'def' => $setDefault ? 'true' : 'false',
+                            'now' => $now,
+                        ]);
 
-                return $this->created(['data' => [
-                    'id' => $id, 'type' => 'paypal', 'provider' => 'paypal',
-                    'last_four' => substr($paypalEmail, 0, 4), 'is_default' => $setDefault,
-                ]]);
+                return $this->created([
+                    'data' => [
+                        'id' => $id,
+                        'type' => 'paypal',
+                        'provider' => 'paypal',
+                        'last_four' => substr($paypalEmail, 0, 4),
+                        'is_default' => $setDefault,
+                    ]
+                ]);
             }
 
             // ── Stripe card or bank account ──
@@ -179,73 +188,196 @@ final class PaymentMethodController
 
             // Determine type-specific fields
             if ($type === 'us_bank_account' || ($pm->type ?? '') === 'us_bank_account') {
-                $bank     = $pm->us_bank_account ?? null;
-                $pmType   = 'us_bank_account';
+                $bank = $pm->us_bank_account ?? null;
+                $pmType = 'us_bank_account';
                 $provider = $bank->bank_name ?? 'Bank';
-                $last4    = $bank->last4 ?? '••••';
-                $expiry   = null;
-                $meta     = json_encode([
-                    'bank_name'      => $bank->bank_name ?? null,
-                    'account_type'   => $bank->account_type ?? null,
+                $last4 = $bank->last4 ?? '••••';
+                $expiry = null;
+                $meta = json_encode([
+                    'bank_name' => $bank->bank_name ?? null,
+                    'account_type' => $bank->account_type ?? null,
                     'routing_number' => $bank->routing_number ?? null,
                 ]);
             } else {
-                $pmType   = $pm->type ?? 'card';
+                $pmType = $pm->type ?? 'card';
                 $provider = $pm->card->brand ?? 'unknown';
-                $last4    = $pm->card->last4 ?? '••••';
-                $expiry   = $pm->card ? sprintf('%02d/%04d', $pm->card->exp_month, $pm->card->exp_year) : null;
-                $meta     = json_encode([
-                    'funding'   => $pm->card->funding ?? null,
+                $last4 = $pm->card->last4 ?? '••••';
+                $expiry = $pm->card ? sprintf('%02d/%04d', $pm->card->exp_month, $pm->card->exp_year) : null;
+                $meta = json_encode([
+                    'funding' => $pm->card->funding ?? null,
                     'exp_month' => $pm->card->exp_month ?? null,
-                    'exp_year'  => $pm->card->exp_year ?? null,
+                    'exp_year' => $pm->card->exp_year ?? null,
                 ]);
             }
+
+            // Bank accounts require verification; cards/paypal are auto-verified
+            $verified = ($pmType !== 'us_bank_account');
+
+            // Get setup_intent_id from the SetupIntent confirmation if available
+            $setupIntentId = $data['setup_intent_id'] ?? null;
 
             $pdo->prepare(
                 'INSERT INTO "paymentmethod" (id, user_id, type, provider, last_four,
                                               token, stripe_payment_method_id, metadata,
-                                              is_default, is_active, expiry,
+                                              is_default, is_active, expiry, verified, setup_intent_id,
                                               created_at, updated_at)
-                 VALUES (:id, :uid, :type, :prov, :last4, :tok, :spm, :meta, :def, true, :exp, :now, :now)'
+                 VALUES (:id, :uid, :type, :prov, :last4, :tok, :spm, :meta, :def, true, :exp, :ver, :si, :now, :now)'
             )->execute([
-                'id'    => $id,
-                'uid'   => $userId,
-                'type'  => $pmType,
-                'prov'  => $provider,
-                'last4' => $last4,
-                'tok'   => null,
-                'spm'   => $stripePmId,
-                'meta'  => $meta,
-                'def'   => $setDefault ? 'true' : 'false',
-                'exp'   => $expiry,
-                'now'   => $now,
-            ]);
+                        'id' => $id,
+                        'uid' => $userId,
+                        'type' => $pmType,
+                        'prov' => $provider,
+                        'last4' => $last4,
+                        'tok' => null,
+                        'spm' => $stripePmId,
+                        'meta' => $meta,
+                        'def' => $setDefault ? 'true' : 'false',
+                        'exp' => $expiry,
+                        'ver' => $verified ? 'true' : 'false',
+                        'si' => $setupIntentId,
+                        'now' => $now,
+                    ]);
 
-            return $this->created(['data' => [
-                'id'        => $id,
-                'type'      => $pmType,
-                'provider'  => $provider,
-                'last_four' => $last4,
-                'is_default' => $setDefault,
-            ]]);
+            // Send email notification
+            try {
+                $this->emailNotifier->notify(
+                    $userId,
+                    'payment_emails',
+                    'Payment Method Added',
+                    'payment-method-added',
+                    [
+                        'methodType' => $pmType === 'us_bank_account' ? 'Bank Account' : ucfirst($pmType),
+                        'provider' => $provider,
+                        'lastFour' => $last4,
+                        'verified' => $verified,
+                    ],
+                    ['payment-methods']
+                );
+            } catch (\Throwable) { /* email failure should not block */
+            }
+
+            return $this->created([
+                'data' => [
+                    'id' => $id,
+                    'type' => $pmType,
+                    'provider' => $provider,
+                    'last_four' => $last4,
+                    'is_default' => $setDefault,
+                    'verified' => $verified,
+                ]
+            ]);
         } catch (\Throwable $e) {
             error_log('[PaymentMethodController] create ERROR: ' . $e->getMessage());
             return $this->error('Failed to add payment method: ' . $e->getMessage(), 500);
         }
     }
 
-    /* ─── Delete (detach from Stripe + soft-delete) ─── */
+    /* ─── Verify bank account with microdeposits ─── */
+
+    #[Route('POST', '/{id}/verify', name: 'pm.verify', summary: 'Verify bank account', tags: ['Payment Methods'])]
+    public function verify(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        try {
+            $userId = $this->userId($request);
+            $pdo = $this->db->pdo();
+            $body = $this->body($request);
+
+            $stmt = $pdo->prepare(
+                'SELECT stripe_payment_method_id, setup_intent_id, type FROM "paymentmethod"
+                 WHERE id = :id AND user_id = :uid AND is_active = true'
+            );
+            $stmt->execute(['id' => $id, 'uid' => $userId]);
+            $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                return $this->notFound('Payment method');
+            }
+
+            if ($row['type'] !== 'us_bank_account') {
+                return $this->error('Only bank accounts require verification', 400);
+            }
+
+            $amounts = $body['amounts'] ?? [];
+            if (count($amounts) !== 2) {
+                return $this->error('Two microdeposit amounts are required (in cents)', 400);
+            }
+
+            // Find or create setup intent for this PM
+            $siId = $row['setup_intent_id'];
+
+            if (!$siId) {
+                // Get customer ID
+                $userStmt = $pdo->prepare('SELECT stripe_customer_id FROM "user" WHERE id = :uid');
+                $userStmt->execute(['uid' => $userId]);
+                $customerId = $userStmt->fetchColumn();
+
+                if (!$customerId) {
+                    return $this->error('No Stripe customer found', 400);
+                }
+
+                // Attach PM to customer first (required by Stripe before confirm)
+                $stripePmId = $row['stripe_payment_method_id'];
+                try {
+                    $pmObj = $this->stripe->retrievePaymentMethod($stripePmId);
+                    if (!$pmObj->customer) {
+                        $this->stripe->attachPaymentMethod($stripePmId, $customerId);
+                    }
+                } catch (\Throwable $attachErr) {
+                    error_log('[PaymentMethodController] attach for verify: ' . $attachErr->getMessage());
+                    return $this->error('Failed to prepare payment method: ' . $attachErr->getMessage(), 400);
+                }
+
+                // Create a SetupIntent for verification
+                $si = $this->stripe->getClient()->setupIntents->create([
+                    'customer' => $customerId,
+                    'payment_method' => $stripePmId,
+                    'payment_method_types' => ['us_bank_account'],
+                    'confirm' => true,
+                    'payment_method_options' => [
+                        'us_bank_account' => ['verification_method' => 'microdeposits'],
+                    ],
+                ]);
+                $siId = $si->id;
+
+                // Save setup_intent_id
+                $pdo->prepare('UPDATE "paymentmethod" SET setup_intent_id = :si WHERE id = :id')
+                    ->execute(['si' => $siId, 'id' => $id]);
+            }
+
+            // Verify microdeposits
+            try {
+                $this->stripe->getClient()->setupIntents->verifyMicrodeposits($siId, [
+                    'amounts' => array_map('intval', $amounts),
+                ]);
+            } catch (\Throwable $e) {
+                error_log('[PaymentMethodController] verify ERROR: ' . $e->getMessage());
+                return $this->error('Verification failed: Incorrect amounts. Please check your bank statement and try again.', 400);
+            }
+
+            // Mark as verified
+            $pdo->prepare('UPDATE "paymentmethod" SET verified = true, updated_at = :now WHERE id = :id')
+                ->execute(['now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'), 'id' => $id]);
+
+            return $this->json(['message' => 'Bank account verified successfully']);
+        } catch (\Throwable $e) {
+            error_log('[PaymentMethodController] verify ERROR: ' . $e->getMessage());
+            return $this->error('Verification failed: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /* ─── Delete (detach from Stripe + soft-delete + auto-default) ─── */
 
     #[Route('DELETE', '/{id}', name: 'pm.delete', summary: 'Remove payment method', tags: ['Payment Methods'])]
     public function delete(ServerRequestInterface $request, string $id): JsonResponse
     {
         try {
             $userId = $this->userId($request);
-            $pdo    = $this->db->pdo();
+            $pdo = $this->db->pdo();
 
-            // Get the Stripe PM id
+            // Get the PM details
             $stmt = $pdo->prepare(
-                'SELECT stripe_payment_method_id FROM "paymentmethod" WHERE id = :id AND user_id = :uid AND is_active = true'
+                'SELECT stripe_payment_method_id, is_default, type, provider, last_four
+                 FROM "paymentmethod" WHERE id = :id AND user_id = :uid AND is_active = true'
             );
             $stmt->execute(['id' => $id, 'uid' => $userId]);
             $row = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -263,14 +395,44 @@ final class PaymentMethodController
                 }
             }
 
+            $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
             // Soft-delete in DB
             $pdo->prepare(
                 'UPDATE "paymentmethod" SET is_active = false, updated_at = :now WHERE id = :id AND user_id = :uid'
-            )->execute([
-                'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-                'id'  => $id,
-                'uid' => $userId,
-            ]);
+            )->execute(['now' => $now, 'id' => $id, 'uid' => $userId]);
+
+            // Auto-promote next PM as default if the deleted one was default
+            if ($row['is_default']) {
+                $nextStmt = $pdo->prepare(
+                    'SELECT id FROM "paymentmethod" WHERE user_id = :uid AND is_active = true
+                     ORDER BY created_at DESC LIMIT 1'
+                );
+                $nextStmt->execute(['uid' => $userId]);
+                $nextId = $nextStmt->fetchColumn();
+
+                if ($nextId) {
+                    $pdo->prepare('UPDATE "paymentmethod" SET is_default = true, updated_at = :now WHERE id = :id')
+                        ->execute(['now' => $now, 'id' => $nextId]);
+                }
+            }
+
+            // Send email notification
+            try {
+                $this->emailNotifier->notify(
+                    $userId,
+                    'payment_emails',
+                    'Payment Method Removed',
+                    'payment-method-removed',
+                    [
+                        'methodType' => $row['type'] === 'us_bank_account' ? 'Bank Account' : ucfirst($row['type']),
+                        'provider' => $row['provider'],
+                        'lastFour' => $row['last_four'],
+                    ],
+                    ['payment-methods']
+                );
+            } catch (\Throwable) { /* email failure should not block */
+            }
 
             return $this->noContent();
         } catch (\Throwable $e) {
@@ -285,7 +447,7 @@ final class PaymentMethodController
     public function setDefault(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $pdo    = $this->db->pdo();
+        $pdo = $this->db->pdo();
 
         $pdo->beginTransaction();
         try {
@@ -297,7 +459,7 @@ final class PaymentMethodController
                  WHERE id = :id AND user_id = :uid AND is_active = true'
             );
             $stmt->execute([
-                'id'  => $id,
+                'id' => $id,
                 'uid' => $userId,
                 'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
             ]);
@@ -320,9 +482,14 @@ final class PaymentMethodController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 }

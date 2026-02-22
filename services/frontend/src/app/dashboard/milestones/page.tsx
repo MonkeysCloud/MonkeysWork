@@ -105,10 +105,56 @@ function SummaryCard({ label, value, sub, icon, accent }: { label: string; value
     );
 }
 
+/* ── Inline star rating for dashboard ──────────────── */
+function InlineStarDashboard({ value, onChange, size = 24 }: { value: number; onChange: (v: number) => void; size?: number }) {
+    const [hover, setHover] = useState(0);
+    return (
+        <span style={{ display: "inline-flex", gap: 2, cursor: "pointer" }}>
+            {[1, 2, 3, 4, 5].map((s) => (
+                <svg
+                    key={s} width={size} height={size} viewBox="0 0 20 20"
+                    fill={(hover || value) >= s ? "#f59e0b" : "#e5e7eb"}
+                    onMouseEnter={() => setHover(s)} onMouseLeave={() => setHover(0)}
+                    onClick={() => onChange(s)}
+                    style={{ transition: "transform 0.15s", transform: hover === s ? "scale(1.15)" : "scale(1)" }}
+                >
+                    <path d="M10 1l2.39 4.84L17.82 7l-3.91 3.81.92 5.38L10 13.47l-4.83 2.72.92-5.38L2.18 7l5.43-.79z" />
+                </svg>
+            ))}
+        </span>
+    );
+}
+
 /* ── Milestone card ────────────────────────────────── */
-function MilestoneCard({ ms, isClient }: { ms: Milestone; isClient: boolean }) {
+function MilestoneCard({ ms, isClient, token, onRefresh }: { ms: Milestone; isClient: boolean; token: string; onRefresh: () => void }) {
     const sc = STATUS_CONFIG[ms.status] || STATUS_CONFIG.pending;
     const otherParty = isClient ? ms.freelancer_name : ms.client_name;
+    const [busy, setBusy] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
+
+    async function handleAction(endpoint: string, label: string, body?: object) {
+        if (busy) return;
+        setBusy(label);
+        setActionError(null);
+        try {
+            const res = await fetch(`${API}/milestones/${ms.id}/${endpoint}`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: body ? JSON.stringify(body) : undefined,
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.message || `Failed (${res.status})`);
+            onRefresh();
+        } catch (e) {
+            setActionError(e instanceof Error ? e.message : "Action failed");
+        }
+        setBusy(null);
+    }
+
+    // Modal state
+    const [modal, setModal] = useState<"fund" | "accept" | null>(null);
+    const [reviewRating, setReviewRating] = useState(0);
+    const [reviewComment, setReviewComment] = useState("");
 
     return (
         <div style={{
@@ -176,18 +222,29 @@ function MilestoneCard({ ms, isClient }: { ms: Milestone; isClient: boolean }) {
                 )}
             </div>
 
+            {/* Action error */}
+            {actionError && (
+                <div style={{ fontSize: "0.75rem", color: "#dc2626", background: "#fef2f2", padding: "6px 10px", borderRadius: 8, marginTop: 8 }}>
+                    ⚠️ {actionError}
+                </div>
+            )}
+
             {/* Actions */}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                 {isClient && ms.status === "pending" && !ms.escrow_funded && (
-                    <ActionBtn label="Fund Escrow" color="#2563eb" />
+                    <ActionBtn label="Fund Escrow" color="#2563eb" loading={busy === "Fund Escrow"}
+                        onClick={() => setModal("fund")} />
                 )}
                 {!isClient && ms.status === "in_progress" && (
-                    <ActionBtn label="Submit Work" color="#7c3aed" />
+                    <ActionBtn label="Submit Work" color="#7c3aed" loading={busy === "Submit Work"}
+                        onClick={() => handleAction("submit", "Submit Work")} />
                 )}
                 {isClient && ms.status === "submitted" && (
                     <>
-                        <ActionBtn label="Accept" color="#16a34a" />
-                        <ActionBtn label="Request Revision" color="#ea580c" outline />
+                        <ActionBtn label="Accept" color="#16a34a" loading={busy === "Accept"}
+                            onClick={() => setModal("accept")} />
+                        <ActionBtn label="Request Revision" color="#ea580c" outline loading={busy === "Request Revision"}
+                            onClick={() => handleAction("request-revision", "Request Revision")} />
                     </>
                 )}
                 <Link
@@ -207,13 +264,196 @@ function MilestoneCard({ ms, isClient }: { ms: Milestone; isClient: boolean }) {
                     View Contract →
                 </Link>
             </div>
+
+            {/* ── Fund Escrow Modal ── */}
+            {modal === "fund" && (
+                <div
+                    style={{
+                        position: "fixed", inset: 0, zIndex: 1000,
+                        background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                    onClick={() => setModal(null)}
+                >
+                    <div
+                        style={{
+                            background: "#fff", borderRadius: 16, padding: "28px 24px",
+                            maxWidth: 420, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ textAlign: "center", marginBottom: 20 }}>
+                            <div style={{
+                                width: 56, height: 56, borderRadius: "50%",
+                                background: "#eff6ff", display: "flex", alignItems: "center",
+                                justifyContent: "center", margin: "0 auto 12px", fontSize: 28,
+                            }}>💰</div>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>Fund Escrow</h3>
+                        </div>
+
+                        <div style={{
+                            background: "#f8fafc", borderRadius: 10, padding: 16,
+                            marginBottom: 16, border: "1px solid #e2e8f0",
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                <span style={{ fontSize: 14, color: "#64748b" }}>Milestone</span>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{ms.title}</span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                <span style={{ fontSize: 14, color: "#64748b" }}>Amount</span>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{fmtMoney(ms.amount, ms.currency)}</span>
+                            </div>
+                            <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 8, display: "flex", justifyContent: "space-between" }}>
+                                <span style={{ fontSize: 14, color: "#64748b" }}>+ Platform fee</span>
+                                <span style={{ fontSize: 13, color: "#94a3b8" }}>applied at checkout</span>
+                            </div>
+                        </div>
+
+                        <div style={{
+                            padding: "10px 14px", borderRadius: 8, background: "#fffbeb",
+                            color: "#92400e", fontSize: 13, marginBottom: 16, lineHeight: 1.5,
+                        }}>
+                            ⚠️ This will charge your default payment method. Funds will be held in escrow until the milestone is completed.
+                        </div>
+
+                        <div style={{ display: "flex", gap: 10 }}>
+                            <button
+                                onClick={() => setModal(null)}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "1px solid #e5e7eb", background: "#fff",
+                                    fontSize: 14, fontWeight: 600, cursor: "pointer", color: "#374151",
+                                }}
+                            >Cancel</button>
+                            <button
+                                onClick={() => { setModal(null); handleAction("fund", "Fund Escrow"); }}
+                                disabled={!!busy}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "none", color: "#fff", fontSize: 14, fontWeight: 600,
+                                    cursor: busy ? "not-allowed" : "pointer",
+                                    background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+                                }}
+                            >
+                                {busy === "Fund Escrow" ? "Processing..." : "💰 Confirm & Fund"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Accept / Complete Milestone Modal ── */}
+            {modal === "accept" && (
+                <div
+                    style={{
+                        position: "fixed", inset: 0, zIndex: 1000,
+                        background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                    onClick={() => setModal(null)}
+                >
+                    <div
+                        style={{
+                            background: "#fff", borderRadius: 16, padding: "28px 24px",
+                            maxWidth: 420, width: "90%", maxHeight: "90vh", overflowY: "auto",
+                            boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ textAlign: "center", marginBottom: 20 }}>
+                            <div style={{
+                                width: 56, height: 56, borderRadius: "50%",
+                                background: "#f0fdf4", display: "flex", alignItems: "center",
+                                justifyContent: "center", margin: "0 auto 12px", fontSize: 28,
+                            }}>✅</div>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>Complete Milestone</h3>
+                        </div>
+
+                        <div style={{
+                            background: "#f8fafc", borderRadius: 10, padding: 16,
+                            marginBottom: 16, border: "1px solid #e2e8f0",
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                <span style={{ fontSize: 14, color: "#64748b" }}>Milestone</span>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{ms.title}</span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <span style={{ fontSize: 14, color: "#64748b" }}>Amount</span>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{fmtMoney(ms.amount, ms.currency)}</span>
+                            </div>
+                        </div>
+
+                        {/* Star rating */}
+                        <div style={{ marginBottom: 16 }}>
+                            <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                                ⭐ Rate this milestone (optional)
+                            </label>
+                            <InlineStarDashboard value={reviewRating} onChange={setReviewRating} />
+                        </div>
+
+                        {reviewRating > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                                <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
+                                    Comment (optional)
+                                </label>
+                                <textarea
+                                    value={reviewComment}
+                                    onChange={(e) => setReviewComment(e.target.value)}
+                                    placeholder="How was the work on this milestone?"
+                                    style={{
+                                        width: "100%", padding: "10px 14px", borderRadius: 8,
+                                        border: "1px solid #e5e7eb", fontSize: 14, background: "#f9fafb",
+                                        outline: "none", boxSizing: "border-box", minHeight: 60, resize: "vertical",
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        <div style={{
+                            padding: "10px 14px", borderRadius: 8, background: "#f0fdf4",
+                            color: "#166534", fontSize: 13, marginBottom: 16, lineHeight: 1.5,
+                        }}>
+                            ✅ Accepting this milestone will release escrow funds to the freelancer. This action cannot be undone.
+                        </div>
+
+                        <div style={{ display: "flex", gap: 10 }}>
+                            <button
+                                onClick={() => { setModal(null); setReviewRating(0); setReviewComment(""); }}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "1px solid #e5e7eb", background: "#fff",
+                                    fontSize: 14, fontWeight: 600, cursor: "pointer", color: "#374151",
+                                }}
+                            >Cancel</button>
+                            <button
+                                onClick={() => {
+                                    const body = reviewRating > 0 ? { rating: reviewRating, comment: reviewComment } : undefined;
+                                    setModal(null); setReviewRating(0); setReviewComment("");
+                                    handleAction("accept", "Accept", body);
+                                }}
+                                disabled={!!busy}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "none", color: "#fff", fontSize: 14, fontWeight: 600,
+                                    cursor: busy ? "not-allowed" : "pointer",
+                                    background: "linear-gradient(135deg, #22c55e, #16a34a)",
+                                }}
+                            >
+                                {busy === "Accept" ? "Processing..." : "✅ Confirm & Release"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-function ActionBtn({ label, color, outline }: { label: string; color: string; outline?: boolean }) {
+function ActionBtn({ label, color, outline, loading, onClick }: { label: string; color: string; outline?: boolean; loading?: boolean; onClick: () => void }) {
     return (
         <button
+            onClick={onClick}
+            disabled={loading}
             style={{
                 fontSize: "0.75rem",
                 fontWeight: 700,
@@ -222,9 +462,14 @@ function ActionBtn({ label, color, outline }: { label: string; color: string; ou
                 border: `1.5px solid ${color}`,
                 padding: "6px 14px",
                 borderRadius: 8,
-                cursor: "pointer",
+                cursor: loading ? "wait" : "pointer",
+                opacity: loading ? 0.6 : 1,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
             }}
         >
+            {loading && <span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />}
             {label}
         </button>
     );
@@ -253,7 +498,7 @@ function MilestonesInner() {
     const statusParam = searchParams.get("status") ?? "";
     const activeTab = TABS.find((t) => t.status === statusParam)?.key ?? "all";
 
-    useEffect(() => {
+    const fetchData = () => {
         if (!token) return;
         setLoading(true);
         const url = statusParam
@@ -269,7 +514,11 @@ function MilestonesInner() {
             })
             .catch((e) => setError(e.message))
             .finally(() => setLoading(false));
-    }, [token, statusParam]);
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, [token, statusParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /* Client-side search */
     const filtered = useMemo(() => {
@@ -452,7 +701,7 @@ function MilestonesInner() {
             {!loading && filtered.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                     {filtered.map((ms) => (
-                        <MilestoneCard key={ms.id} ms={ms} isClient={isClient ?? false} />
+                        <MilestoneCard key={ms.id} ms={ms} isClient={isClient ?? false} token={token!} onRefresh={fetchData} />
                     ))}
                 </div>
             )}
