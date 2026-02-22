@@ -4,10 +4,12 @@ on:
   pull_request:
     paths:
       - "terraform/**"
+      - "infra/terraform/**"
   push:
     branches: [main]
     paths:
       - "terraform/**"
+      - "infra/terraform/**"
 
 env:
   TF_VAR_project_id: monkeyswork
