@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ai-fraud-v1
-  namespace: monkeyswork-ai
+  namespace: monkeyswork
   labels:
     app: ai-fraud-v1
 spec:
@@ -67,7 +67,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ai-fraud-v1
-  namespace: monkeyswork-ai
+  namespace: monkeyswork
 spec:
   selector:
     app: ai-fraud-v1
