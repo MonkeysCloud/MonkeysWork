@@ -64,6 +64,14 @@ export default function Header() {
     const router = useRouter();
     const { user, isAuthenticated, logout } = useAuth();
 
+    /* Role-based nav filtering */
+    const filteredNavLinks = NAV_LINKS.filter((link) => {
+        if (!isAuthenticated || !user) return true; // show all when logged out
+        if (user.role === "freelancer" && link.href === "/freelancers") return false; // hide Find Talent
+        if (user.role === "client" && link.href === "/jobs") return false; // hide Find Work
+        return true;
+    });
+
     /* scroll listener ---------------------------------------------------- */
     useEffect(() => {
         const onScroll = () => setScrolled(window.scrollY > 20);
@@ -119,7 +127,7 @@ export default function Header() {
 
                         {/* ── Desktop Nav ── */}
                         <nav className="hidden md:flex items-center gap-1">
-                            {NAV_LINKS.map((link) =>
+                            {filteredNavLinks.map((link) =>
                                 link.dropdown ? (
                                     /* dropdown trigger */
                                     <div
@@ -249,7 +257,7 @@ export default function Header() {
 
                         {/* nav links */}
                         <nav className="flex-1 overflow-y-auto px-6 py-4">
-                            {NAV_LINKS.map((link) => (
+                            {filteredNavLinks.map((link) => (
                                 <div key={link.label}>
                                     <Link
                                         href={link.href}

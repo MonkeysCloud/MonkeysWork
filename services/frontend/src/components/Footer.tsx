@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 
 /* ── footer link columns ─────────────────────────────── */
 const COLUMNS = [
@@ -73,7 +74,21 @@ function GitHubIcon() {
 /* ───────────────────── component ────────────────────── */
 export default function Footer() {
     const pathname = usePathname();
+    const { user, isAuthenticated } = useAuth();
     if (pathname.startsWith("/dashboard")) return null;
+
+    /* Role-based link filtering for Platform column */
+    const filteredColumns = COLUMNS.map((col) => {
+        if (col.title !== "Platform" || !isAuthenticated || !user) return col;
+        return {
+            ...col,
+            links: col.links.filter((link) => {
+                if (user.role === "freelancer" && link.href === "/freelancers") return false;
+                if (user.role === "client" && link.href === "/jobs") return false;
+                return true;
+            }),
+        };
+    });
 
     return (
         <footer className="bg-brand-dark text-white/80">
@@ -100,7 +115,7 @@ export default function Footer() {
                     </div>
 
                     {/* link columns */}
-                    {COLUMNS.map((col) => (
+                    {filteredColumns.map((col) => (
                         <div key={col.title}>
                             <h3 className="text-xs font-bold uppercase tracking-wider text-white/40 mb-4">
                                 {col.title}
