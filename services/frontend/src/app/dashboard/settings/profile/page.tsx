@@ -391,6 +391,9 @@ export default function ProfileSettingsPage() {
     const [profileVisibility, setProfileVisibility] = useState("public");
     const [skills, setSkills] = useState<Array<{ id: string; name: string; slug: string }>>([]);
 
+    /* ── AI assist state ── */
+    const [aiGenerating, setAiGenerating] = useState(false);
+
     const isFreelancer = user?.role === "freelancer";
 
     /* ── Close language dropdown on outside click ── */
@@ -630,6 +633,41 @@ export default function ProfileSettingsPage() {
         setUserLanguages((prev) =>
             prev.map((l) => (l.code === code ? { ...l, level } : l))
         );
+    };
+
+    /* ── AI profile enhancement ── */
+    const aiEnhanceProfile = async () => {
+        setAiGenerating(true);
+        try {
+            const authToken = token || localStorage.getItem("mw_token");
+            const res = await fetch(`${API_BASE}/ai/profile/enhance`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                },
+                body: JSON.stringify({
+                    current_headline: headline,
+                    current_bio: bio,
+                    skills: skills.map((s) => s.name),
+                    experience_years: Number(experienceYears) || 0,
+                    tone: "professional",
+                }),
+            });
+            if (res.ok) {
+                const body = await res.json();
+                const d = body.data || {};
+                if (d.headline) setHeadline(d.headline);
+                if (d.bio) setBio(d.bio);
+                setToast({ message: "AI-generated headline & bio applied!", type: "success" });
+            } else {
+                setToast({ message: "AI service is temporarily unavailable.", type: "error" });
+            }
+        } catch {
+            setToast({ message: "Could not reach AI service.", type: "error" });
+        } finally {
+            setAiGenerating(false);
+        }
     };
 
     const filteredLanguages = LANGUAGES.filter(
@@ -905,6 +943,36 @@ export default function ProfileSettingsPage() {
                             />
                             <p className="text-[11px] text-brand-muted mt-1 text-right">{bio.length}/2000</p>
                         </Field>
+
+                        {/* AI Assist button */}
+                        <button
+                            type="button"
+                            onClick={aiEnhanceProfile}
+                            disabled={aiGenerating}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
+                                bg-gradient-to-r from-purple-500 to-indigo-500 text-white
+                                hover:from-purple-600 hover:to-indigo-600
+                                disabled:opacity-50 disabled:cursor-not-allowed
+                                shadow-[0_2px_10px_rgba(139,92,246,0.3)]
+                                transition-all duration-200"
+                        >
+                            {aiGenerating ? (
+                                <>
+                                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Generating…
+                                </>
+                            ) : (
+                                <>
+                                    ✨ AI Assist — Generate Headline & Bio
+                                </>
+                            )}
+                        </button>
+                        <p className="text-[11px] text-brand-muted -mt-3">
+                            AI will use your skills and experience to craft a professional profile.
+                        </p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Field label="Hourly Rate (USD)">

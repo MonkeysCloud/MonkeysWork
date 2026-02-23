@@ -569,6 +569,11 @@ export default function CompleteProfileWizard() {
     const [langDropdownOpen, setLangDropdownOpen] = useState(false);
     const langRef = useRef<HTMLDivElement>(null);
 
+    /* ── AI assist state ── */
+    const [aiGenerating, setAiGenerating] = useState(false);
+    const [aiSuggestingSkills, setAiSuggestingSkills] = useState(false);
+    const [aiSuggestedSkills, setAiSuggestedSkills] = useState<{ name: string; reason: string }[]>([]);
+
     const isClient = user?.role === "client";
     const [verifEvidence, setVerifEvidence] = useState<VerificationEvidence>(EMPTY_VERIFICATION);
     const [verifStatuses, setVerifStatuses] = useState<VerificationStatus[]>([]);
@@ -732,6 +737,75 @@ export default function CompleteProfileWizard() {
             setForm((prev) => ({ ...prev, [field]: value })),
         []
     );
+
+    /* ── AI profile enhancement ── */
+    const aiEnhanceProfile = async () => {
+        setAiGenerating(true);
+        setError("");
+        try {
+            const authToken = token || localStorage.getItem("mw_token");
+            const res = await fetch(`${API_BASE}/ai/profile/enhance`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                },
+                body: JSON.stringify({
+                    current_headline: form.headline,
+                    current_bio: form.bio,
+                    skills: form.selected_skills.map((s) => s.name),
+                    experience_years: Number(form.experience_years) || 0,
+                    tone: "professional",
+                }),
+            });
+            if (res.ok) {
+                const body = await res.json();
+                const d = body.data || {};
+                if (d.headline) set("headline", d.headline);
+                if (d.bio) set("bio", d.bio);
+            } else {
+                setError("AI service is temporarily unavailable. Try again later.");
+            }
+        } catch {
+            setError("Could not reach AI service.");
+        } finally {
+            setAiGenerating(false);
+        }
+    };
+
+    /* ── AI skill suggestions ── */
+    const aiSuggestSkills = async () => {
+        setAiSuggestingSkills(true);
+        setAiSuggestedSkills([]);
+        setError("");
+        try {
+            const authToken = token || localStorage.getItem("mw_token");
+            const res = await fetch(`${API_BASE}/ai/profile/suggest-skills`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                },
+                body: JSON.stringify({
+                    headline: form.headline,
+                    bio: form.bio,
+                    experience_years: Number(form.experience_years) || 0,
+                    current_skills: form.selected_skills.map((s) => s.name),
+                }),
+            });
+            if (res.ok) {
+                const body = await res.json();
+                const d = body.data || {};
+                setAiSuggestedSkills(d.suggested_skills || []);
+            } else {
+                setError("AI service is temporarily unavailable.");
+            }
+        } catch {
+            setError("Could not reach AI service.");
+        } finally {
+            setAiSuggestingSkills(false);
+        }
+    };
 
     /* ── Submit ──────────────────────────────── */
     const submit = async () => {
@@ -1149,6 +1223,38 @@ export default function CompleteProfileWizard() {
                     onChange={(e) => set("bio", e.target.value)}
                 />
             </Field>
+
+            {/* AI Assist button */}
+            <button
+                type="button"
+                onClick={aiEnhanceProfile}
+                disabled={aiGenerating}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
+                    bg-gradient-to-r from-purple-500 to-indigo-500 text-white
+                    hover:from-purple-600 hover:to-indigo-600
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                    shadow-[0_2px_10px_rgba(139,92,246,0.3)]
+                    transition-all duration-200"
+            >
+                {aiGenerating ? (
+                    <>
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Generating…
+                    </>
+                ) : (
+                    <>
+                        ✨ AI Assist — Generate Headline & Bio
+                    </>
+                )}
+            </button>
+            <p className="text-[11px] text-brand-muted -mt-3">
+                AI will use your skills and experience to craft a professional profile.
+                {form.selected_skills.length === 0 && " Tip: Add skills first for better results."}
+            </p>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                 <Field label="Hourly Rate ($)">
                     <input
@@ -1249,6 +1355,83 @@ export default function CompleteProfileWizard() {
                     Skills
                     <span className="text-brand-muted/50 font-normal ml-1">(select at least 3)</span>
                 </label>
+
+                {/* AI Suggest Skills button */}
+                <button
+                    type="button"
+                    onClick={aiSuggestSkills}
+                    disabled={aiSuggestingSkills}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold mb-3
+                        bg-gradient-to-r from-purple-500 to-indigo-500 text-white
+                        hover:from-purple-600 hover:to-indigo-600
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        shadow-[0_2px_10px_rgba(139,92,246,0.3)]
+                        transition-all duration-200"
+                >
+                    {aiSuggestingSkills ? (
+                        <>
+                            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Analyzing…
+                        </>
+                    ) : (
+                        <>
+                            🎯 AI Suggest Skills
+                        </>
+                    )}
+                </button>
+
+                {/* AI Suggested skills chips */}
+                {aiSuggestedSkills.length > 0 && (
+                    <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-xl">
+                        <p className="text-xs font-semibold text-purple-700 mb-2">AI Suggestions — click to add:</p>
+                        <div className="flex flex-wrap gap-2">
+                            {aiSuggestedSkills.map((s) => {
+                                const matchedSkill = skills.find(
+                                    (sk) => sk.name.toLowerCase() === s.name.toLowerCase()
+                                );
+                                const alreadyAdded = form.selected_skills.some(
+                                    (ss) => ss.name.toLowerCase() === s.name.toLowerCase()
+                                );
+                                if (alreadyAdded) return null;
+                                return (
+                                    <button
+                                        key={s.name}
+                                        type="button"
+                                        onClick={() => {
+                                            if (matchedSkill) {
+                                                addSkill(matchedSkill);
+                                            }
+                                            setAiSuggestedSkills((prev) =>
+                                                prev.filter((x) => x.name !== s.name)
+                                            );
+                                        }}
+                                        className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
+                                            bg-white border border-purple-300 text-purple-700
+                                            hover:bg-purple-100 hover:border-purple-400
+                                            transition-all duration-200"
+                                        title={s.reason}
+                                    >
+                                        <span>+</span>
+                                        <span>{s.name}</span>
+                                        {!matchedSkill && (
+                                            <span className="text-purple-400 text-[10px]">(not in list)</span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setAiSuggestedSkills([])}
+                            className="mt-2 text-[10px] text-purple-400 hover:text-purple-600"
+                        >
+                            Dismiss all
+                        </button>
+                    </div>
+                )}
 
                 {/* Search input */}
                 <input
