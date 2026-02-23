@@ -32,7 +32,6 @@ const COLUMNS = [
             { label: "About", href: "/about" },
             { label: "Contact", href: "/contact" },
             { label: "Enterprise", href: "/enterprise" },
-            { label: "Careers", href: "/careers" },
         ],
     },
     {
@@ -41,7 +40,6 @@ const COLUMNS = [
             { label: "Terms", href: "/terms" },
             { label: "Privacy", href: "/privacy" },
             { label: "Cookies", href: "/cookies" },
-            { label: "Accessibility", href: "/accessibility" },
         ],
     },
 ] as const;

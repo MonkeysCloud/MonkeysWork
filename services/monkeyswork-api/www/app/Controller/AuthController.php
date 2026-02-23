@@ -353,6 +353,47 @@ final class AuthController
     }
 
     /* ------------------------------------------------------------------ */
+    /*  POST /auth/change-password  (authenticated)                        */
+    /* ------------------------------------------------------------------ */
+    #[Route('POST', '/change-password', name: 'auth.changePassword', summary: 'Change password (logged in)', tags: ['Auth'], middleware: ['auth'])]
+    public function changePassword(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $data = $this->body($request);
+
+        if (empty($data['current_password']) || empty($data['new_password'])) {
+            return $this->error('current_password and new_password are required');
+        }
+
+        if (strlen($data['new_password']) < 8) {
+            return $this->error('New password must be at least 8 characters');
+        }
+
+        // Fetch current hash
+        $stmt = $this->db->pdo()->prepare('SELECT password_hash FROM "user" WHERE id = :id');
+        $stmt->execute(['id' => $userId]);
+        $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$user || !password_verify($data['current_password'], $user['password_hash'])) {
+            return $this->error('Current password is incorrect', 403);
+        }
+
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        $this->db->pdo()->prepare(
+            'UPDATE "user" SET password_hash = :hash,
+                token_version = token_version + 1,
+                updated_at = :now WHERE id = :id'
+        )->execute([
+                    'hash' => password_hash($data['new_password'], PASSWORD_BCRYPT),
+                    'now' => $now,
+                    'id' => $userId,
+                ]);
+
+        return $this->json(['message' => 'Password changed successfully']);
+    }
+
+    /* ------------------------------------------------------------------ */
     /*  POST /auth/verify-email                                            */
     /* ------------------------------------------------------------------ */
     #[Route('POST', '/verify-email', name: 'auth.verify', summary: 'Verify email token', tags: ['Auth'])]
