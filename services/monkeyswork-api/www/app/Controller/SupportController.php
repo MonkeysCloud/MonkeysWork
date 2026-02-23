@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Controller\ApiController;
+use App\Service\GcsStorage;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Route;
@@ -15,8 +16,10 @@ final class SupportController
 {
     use ApiController;
 
-    public function __construct(private ConnectionInterface $db)
-    {
+    public function __construct(
+        private ConnectionInterface $db,
+        private GcsStorage $gcs = new GcsStorage(),
+    ) {
     }
 
     /* ── Create ticket (public — no auth required) ───── */
@@ -79,10 +82,15 @@ final class SupportController
                 continue;
             }
             $newName = $id . '-' . uniqid('', true) . '.' . $ext;
-            $file->moveTo($uploadDir . '/' . $newName);
+            $localPath = $uploadDir . '/' . $newName;
+            $file->moveTo($localPath);
+
+            // Upload to GCS
+            $url = $this->gcs->upload($localPath, "support/{$newName}");
+
             $attachments[] = [
                 'name' => $file->getClientFilename(),
-                'url' => '/files/support/' . $newName,
+                'url' => $url,
                 'size' => $file->getSize(),
                 'type' => $ext,
             ];

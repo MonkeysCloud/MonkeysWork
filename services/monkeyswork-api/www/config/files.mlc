@@ -31,13 +31,11 @@ files {
         #   public_base_url  = "https://my-cloudfront/"
         # }
 
-        # Uncomment & fill out to enable GCS
-        # gcs {
-        #   project_id       = "my-gcp-project"
-        #   key_file_path    = "/path/to/key.json"
-        #   bucket           = "my-gcs-bucket"
-        #   prefix           = "uploads/"
-        #   public_base_url  = "https://cdn.example.com"
-        # }
+        # GCS (enabled in production via env vars)
+        gcs {
+            bucket           = "mw-prod-uploads-monkeyswork"
+            prefix           = ""
+            public_base_url  = "https://storage.googleapis.com/mw-prod-uploads-monkeyswork"
+        }
     }
 }

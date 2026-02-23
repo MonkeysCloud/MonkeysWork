@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\GcsStorage;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -16,7 +17,11 @@ final class UserController
 {
     use ApiController;
 
-    public function __construct(private ConnectionInterface $db) {}
+    public function __construct(
+        private ConnectionInterface $db,
+        private GcsStorage $gcs = new GcsStorage(),
+    ) {
+    }
 
     /* ------------------------------------------------------------------ */
     /*  GET /users/me                                                      */
@@ -50,18 +55,28 @@ final class UserController
     public function update(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
-        $allowed = ['display_name', 'first_name', 'last_name', 'avatar_url',
-                     'phone', 'country', 'timezone', 'locale', 'metadata', 'languages'];
+        $allowed = [
+            'display_name',
+            'first_name',
+            'last_name',
+            'avatar_url',
+            'phone',
+            'country',
+            'timezone',
+            'locale',
+            'metadata',
+            'languages'
+        ];
 
-        $sets   = [];
+        $sets = [];
         $params = ['id' => $userId];
 
         foreach ($allowed as $field) {
             if (array_key_exists($field, $data)) {
                 $value = in_array($field, ['metadata', 'languages']) ? json_encode($data[$field]) : $data[$field];
-                $sets[]         = "\"{$field}\" = :{$field}";
+                $sets[] = "\"{$field}\" = :{$field}";
                 $params[$field] = $value;
             }
         }
@@ -70,7 +85,7 @@ final class UserController
             return $this->error('No valid fields to update');
         }
 
-        $sets[]           = '"updated_at" = :updated_at';
+        $sets[] = '"updated_at" = :updated_at';
         $params['updated_at'] = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $sql = 'UPDATE "user" SET ' . implode(', ', $sets) . ' WHERE id = :id AND deleted_at IS NULL';
@@ -100,9 +115,9 @@ final class UserController
             if (is_array($raw) && isset($raw['tmp_name'])) {
                 // Raw $_FILES array — extract values directly
                 error_log('[UserController::uploadAvatar] handling raw $_FILES array');
-                $tmpName  = $raw['tmp_name'];
-                $rawMime  = $raw['type'] ?? '';
-                $rawSize  = (int) ($raw['size'] ?? 0);
+                $tmpName = $raw['tmp_name'];
+                $rawMime = $raw['type'] ?? '';
+                $rawSize = (int) ($raw['size'] ?? 0);
                 $rawError = (int) ($raw['error'] ?? UPLOAD_ERR_NO_FILE);
 
                 if ($rawError !== UPLOAD_ERR_OK || !is_uploaded_file($tmpName)) {
@@ -121,12 +136,16 @@ final class UserController
                 $extMap = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
                 $ext = $extMap[$rawMime] ?? 'jpg';
                 $dir = '/app/www/public/files/avatars';
-                if (!is_dir($dir)) { mkdir($dir, 0755, true); }
+                if (!is_dir($dir)) {
+                    mkdir($dir, 0755, true);
+                }
 
                 $filename = "{$userId}.{$ext}";
                 $filePath = "{$dir}/{$filename}";
 
-                foreach (glob("{$dir}/{$userId}.*") as $old) { @unlink($old); }
+                foreach (glob("{$dir}/{$userId}.*") as $old) {
+                    @unlink($old);
+                }
 
                 if (!move_uploaded_file($tmpName, $filePath)) {
                     error_log('[UserController::uploadAvatar] move_uploaded_file failed');
@@ -151,12 +170,16 @@ final class UserController
                 $extMap = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
                 $ext = $extMap[$rawMime] ?? 'jpg';
                 $dir = '/app/www/public/files/avatars';
-                if (!is_dir($dir)) { mkdir($dir, 0755, true); }
+                if (!is_dir($dir)) {
+                    mkdir($dir, 0755, true);
+                }
 
                 $filename = "{$userId}.{$ext}";
                 $filePath = "{$dir}/{$filename}";
 
-                foreach (glob("{$dir}/{$userId}.*") as $old) { @unlink($old); }
+                foreach (glob("{$dir}/{$userId}.*") as $old) {
+                    @unlink($old);
+                }
 
                 $file->moveTo($filePath);
             } else {
@@ -166,15 +189,16 @@ final class UserController
 
             error_log('[UserController::uploadAvatar] file saved to ' . $filePath);
 
-            $avatarUrl = "/files/avatars/{$filename}";
+            // Upload to GCS (returns public URL in prod, relative path in dev)
+            $avatarUrl = $this->gcs->upload($filePath, "avatars/{$filename}", $rawMime);
 
             $this->db->pdo()->prepare(
                 'UPDATE "user" SET avatar_url = :url, updated_at = :now WHERE id = :id'
             )->execute([
-                'url' => $avatarUrl,
-                'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-                'id'  => $userId,
-            ]);
+                        'url' => $avatarUrl,
+                        'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+                        'id' => $userId,
+                    ]);
 
             error_log('[UserController::uploadAvatar] SUCCESS url=' . $avatarUrl);
             return $this->json([
@@ -194,7 +218,7 @@ final class UserController
     public function changePassword(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         if (empty($data['current_password']) || empty($data['new_password'])) {
             return $this->error('Current and new password are required');
@@ -212,10 +236,10 @@ final class UserController
             'UPDATE "user" SET password_hash = :hash, token_version = token_version + 1,
                                updated_at = :now WHERE id = :id'
         )->execute([
-            'hash' => password_hash($data['new_password'], PASSWORD_BCRYPT),
-            'now'  => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-            'id'   => $userId,
-        ]);
+                    'hash' => password_hash($data['new_password'], PASSWORD_BCRYPT),
+                    'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+                    'id' => $userId,
+                ]);
 
         return $this->json(['message' => 'Password changed']);
     }
@@ -231,10 +255,10 @@ final class UserController
         $this->db->pdo()->prepare(
             'UPDATE "user" SET status = :status, deleted_at = :now, updated_at = :now WHERE id = :id'
         )->execute([
-            'status' => 'deactivated',
-            'now'    => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-            'id'     => $userId,
-        ]);
+                    'status' => 'deactivated',
+                    'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+                    'id' => $userId,
+                ]);
 
         return $this->json(['message' => 'Account deactivated']);
     }
@@ -292,7 +316,7 @@ final class UserController
         );
         $stmt->execute([
             'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-            'id'  => $id,
+            'id' => $id,
             'uid' => $userId,
         ]);
 

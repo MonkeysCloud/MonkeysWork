@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Controller\ApiController;
+use App\Service\GcsStorage;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -17,8 +18,10 @@ final class AdminBlogController
 {
     use ApiController;
 
-    public function __construct(private ConnectionInterface $db)
-    {
+    public function __construct(
+        private ConnectionInterface $db,
+        private GcsStorage $gcs = new GcsStorage(),
+    ) {
     }
 
     /* ── List posts ──────────────────────────────────── */
@@ -317,7 +320,7 @@ final class AdminBlogController
                 return $this->error('No image file provided');
             }
 
-            $url = '/files/blog/' . $filename;
+            $url = $this->gcs->upload($filePath, "blog/{$filename}");
 
             return $this->json(['data' => ['url' => $url, 'filename' => $filename]]);
         } catch (\Throwable $e) {

@@ -84,6 +84,10 @@ spec:
                   key: token
             - name: GCP_PROJECT_ID
               value: "monkeyswork-prod"
+            - name: GCS_BUCKET
+              value: "mw-prod-uploads-monkeyswork"
+            - name: GCS_PUBLIC_URL
+              value: "https://storage.googleapis.com/mw-prod-uploads-monkeyswork"
             - name: AI_FRAUD_URL
               value: "http://ai-fraud-v1.monkeyswork-ai.svc.cluster.local/api/v1/fraud/check"
             - name: AI_MATCH_URL

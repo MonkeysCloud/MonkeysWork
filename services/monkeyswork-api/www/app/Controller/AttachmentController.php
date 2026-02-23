@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Service\GcsStorage;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Route;
@@ -14,9 +15,12 @@ final class AttachmentController
 {
     use ApiController;
 
-    private const ALLOWED_MIME  = [
+    private const ALLOWED_MIME = [
         // Images
-        'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
         // Documents
         'application/pdf',
         'application/msword',                                                          // .doc
@@ -29,9 +33,13 @@ final class AttachmentController
         'text/csv',                                                                    // .csv
     ];
     private const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
-    private const UPLOAD_DIR    = '/app/www/public/files/attachments';
+    private const UPLOAD_DIR = '/app/www/public/files/attachments';
 
-    public function __construct(private ConnectionInterface $db) {}
+    public function __construct(
+        private ConnectionInterface $db,
+        private GcsStorage $gcs = new GcsStorage(),
+    ) {
+    }
 
     /* ------------------------------------------------------------------ */
     /*  POST /attachments/upload  (multipart/form-data)                    */
@@ -39,151 +47,154 @@ final class AttachmentController
     #[Route('POST', '/upload', name: 'attachments.upload', summary: 'Upload files', tags: ['Attachments'])]
     public function upload(ServerRequestInterface $request): JsonResponse
     {
-      try {
-        error_log('[ATTACH] upload() entered');
-        $userId = $this->userId($request);
-        error_log('[ATTACH] userId=' . ($userId ?? 'NULL'));
-        if (!$userId) {
-            return $this->json(['error' => 'Authentication required'], 401);
-        }
-
-        $params = $request->getParsedBody() ?? [];
-        $entityType = $params['entity_type'] ?? null;
-        $entityId   = $params['entity_id']   ?? null;
-
-        if (!$entityType || !$entityId) {
-            error_log('[ATTACH] missing entity_type or entity_id');
-            return $this->error('entity_type and entity_id are required');
-        }
-
-        $uploadedFiles = $request->getUploadedFiles();
-        $raw = $uploadedFiles['files'] ?? [];
-
-        // The framework returns raw $_FILES structure for files[]:
-        // $raw = ['name' => [...], 'type' => [...], 'tmp_name' => [...], 'error' => [...], 'size' => [...]]
-        // Normalize to a list of file info arrays
-        $files = [];
-        if (is_array($raw) && isset($raw['name'])) {
-            // Raw $_FILES format — multiple files via files[]
-            $names = is_array($raw['name']) ? $raw['name'] : [$raw['name']];
-            for ($i = 0; $i < count($names); $i++) {
-                $files[] = [
-                    'name'     => is_array($raw['name']) ? $raw['name'][$i] : $raw['name'],
-                    'type'     => is_array($raw['type']) ? $raw['type'][$i] : $raw['type'],
-                    'tmp_name' => is_array($raw['tmp_name']) ? $raw['tmp_name'][$i] : $raw['tmp_name'],
-                    'error'    => is_array($raw['error']) ? $raw['error'][$i] : $raw['error'],
-                    'size'     => is_array($raw['size']) ? $raw['size'][$i] : $raw['size'],
-                ];
+        try {
+            error_log('[ATTACH] upload() entered');
+            $userId = $this->userId($request);
+            error_log('[ATTACH] userId=' . ($userId ?? 'NULL'));
+            if (!$userId) {
+                return $this->json(['error' => 'Authentication required'], 401);
             }
-        } elseif (is_array($raw)) {
-            // Possibly already normalized array of UploadedFileInterface objects
-            foreach ($raw as $item) {
-                if (is_object($item)) {
+
+            $params = $request->getParsedBody() ?? [];
+            $entityType = $params['entity_type'] ?? null;
+            $entityId = $params['entity_id'] ?? null;
+
+            if (!$entityType || !$entityId) {
+                error_log('[ATTACH] missing entity_type or entity_id');
+                return $this->error('entity_type and entity_id are required');
+            }
+
+            $uploadedFiles = $request->getUploadedFiles();
+            $raw = $uploadedFiles['files'] ?? [];
+
+            // The framework returns raw $_FILES structure for files[]:
+            // $raw = ['name' => [...], 'type' => [...], 'tmp_name' => [...], 'error' => [...], 'size' => [...]]
+            // Normalize to a list of file info arrays
+            $files = [];
+            if (is_array($raw) && isset($raw['name'])) {
+                // Raw $_FILES format — multiple files via files[]
+                $names = is_array($raw['name']) ? $raw['name'] : [$raw['name']];
+                for ($i = 0; $i < count($names); $i++) {
                     $files[] = [
-                        'name'     => $item->getClientFilename(),
-                        'type'     => $item->getClientMediaType(),
-                        'tmp_name' => $item->getStream()->getMetadata('uri'),
-                        'error'    => $item->getError(),
-                        'size'     => $item->getSize(),
-                        '_psr7'    => $item,
+                        'name' => is_array($raw['name']) ? $raw['name'][$i] : $raw['name'],
+                        'type' => is_array($raw['type']) ? $raw['type'][$i] : $raw['type'],
+                        'tmp_name' => is_array($raw['tmp_name']) ? $raw['tmp_name'][$i] : $raw['tmp_name'],
+                        'error' => is_array($raw['error']) ? $raw['error'][$i] : $raw['error'],
+                        'size' => is_array($raw['size']) ? $raw['size'][$i] : $raw['size'],
                     ];
                 }
+            } elseif (is_array($raw)) {
+                // Possibly already normalized array of UploadedFileInterface objects
+                foreach ($raw as $item) {
+                    if (is_object($item)) {
+                        $files[] = [
+                            'name' => $item->getClientFilename(),
+                            'type' => $item->getClientMediaType(),
+                            'tmp_name' => $item->getStream()->getMetadata('uri'),
+                            'error' => $item->getError(),
+                            'size' => $item->getSize(),
+                            '_psr7' => $item,
+                        ];
+                    }
+                }
             }
-        }
 
-        if (empty($files)) {
-            return $this->error('No files uploaded');
-        }
+            if (empty($files)) {
+                return $this->error('No files uploaded');
+            }
 
-        // Prepare storage directory
-        $dir = self::UPLOAD_DIR . "/{$entityType}/{$entityId}";
-        if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
+            // Prepare storage directory
+            $dir = self::UPLOAD_DIR . "/{$entityType}/{$entityId}";
+            if (!is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
 
-        $saved = [];
-        $stmt  = $this->db->pdo()->prepare(
-            'INSERT INTO "attachment" (id, entity_type, entity_id, uploaded_by_id,
+            $saved = [];
+            $stmt = $this->db->pdo()->prepare(
+                'INSERT INTO "attachment" (id, entity_type, entity_id, uploaded_by_id,
                                        file_name, file_path, file_url, file_size,
                                        mime_type, sort_order)
              VALUES (:id, :etype, :eid, :uid, :fname, :fpath, :furl, :fsize, :mime, :sort)'
-        );
+            );
 
-        $sortOrder = 0;
+            $sortOrder = 0;
 
-        foreach ($files as $idx => $f) {
-            if ((int)($f['error'] ?? 1) !== UPLOAD_ERR_OK) {
-                continue;
+            foreach ($files as $idx => $f) {
+                if ((int) ($f['error'] ?? 1) !== UPLOAD_ERR_OK) {
+                    continue;
+                }
+
+                $mime = $f['type'] ?? '';
+                $size = (int) ($f['size'] ?? 0);
+                $originalName = $f['name'] ?? 'unknown';
+                $tmpName = $f['tmp_name'] ?? '';
+
+                // Validate MIME
+                if (!in_array($mime, self::ALLOWED_MIME, true)) {
+                    continue;
+                }
+
+                // Validate size
+                if ($size > self::MAX_FILE_SIZE) {
+                    continue;
+                }
+
+                // Generate safe filename
+                $ext = pathinfo($originalName, PATHINFO_EXTENSION);
+                $safeName = bin2hex(random_bytes(16)) . ($ext ? ".{$ext}" : '');
+                $filePath = "{$dir}/{$safeName}";
+                $gcsPath = "attachments/{$entityType}/{$entityId}/{$safeName}";
+
+                // Move file locally first
+                if (isset($f['_psr7'])) {
+                    $f['_psr7']->moveTo($filePath);
+                } else {
+                    move_uploaded_file($tmpName, $filePath);
+                }
+
+                // Upload to GCS (returns public URL in prod, relative path in dev)
+                $fileUrl = $this->gcs->upload($filePath, $gcsPath, $mime);
+
+                // Insert DB record
+                $bytes = random_bytes(16);
+                $bytes[6] = chr((ord($bytes[6]) & 0x0f) | 0x40); // version 4
+                $bytes[8] = chr((ord($bytes[8]) & 0x3f) | 0x80); // variant RFC 4122
+                $id = vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
+                $stmt->execute([
+                    'id' => $id,
+                    'etype' => $entityType,
+                    'eid' => $entityId,
+                    'uid' => $userId,
+                    'fname' => $originalName,
+                    'fpath' => $filePath,
+                    'furl' => $fileUrl,
+                    'fsize' => $size,
+                    'mime' => $mime,
+                    'sort' => $sortOrder++,
+                ]);
+
+                $saved[] = [
+                    'id' => $id,
+                    'file_name' => $originalName,
+                    'file_url' => $fileUrl,
+                    'file_size' => $size,
+                    'mime_type' => $mime,
+                ];
             }
 
-            $mime = $f['type'] ?? '';
-            $size = (int)($f['size'] ?? 0);
-            $originalName = $f['name'] ?? 'unknown';
-            $tmpName = $f['tmp_name'] ?? '';
-
-            // Validate MIME
-            if (!in_array($mime, self::ALLOWED_MIME, true)) {
-                continue;
+            if (empty($saved)) {
+                return $this->error('No valid files were uploaded');
             }
 
-            // Validate size
-            if ($size > self::MAX_FILE_SIZE) {
-                continue;
-            }
-
-            // Generate safe filename
-            $ext = pathinfo($originalName, PATHINFO_EXTENSION);
-            $safeName = bin2hex(random_bytes(16)) . ($ext ? ".{$ext}" : '');
-            $filePath = "{$dir}/{$safeName}";
-            $fileUrl  = "/files/attachments/{$entityType}/{$entityId}/{$safeName}";
-
-            // Move file
-            if (isset($f['_psr7'])) {
-                $f['_psr7']->moveTo($filePath);
-            } else {
-                move_uploaded_file($tmpName, $filePath);
-            }
-
-            // Insert DB record
-            $bytes = random_bytes(16);
-            $bytes[6] = chr((ord($bytes[6]) & 0x0f) | 0x40); // version 4
-            $bytes[8] = chr((ord($bytes[8]) & 0x3f) | 0x80); // variant RFC 4122
-            $id = vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
-            $stmt->execute([
-                'id'    => $id,
-                'etype' => $entityType,
-                'eid'   => $entityId,
-                'uid'   => $userId,
-                'fname' => $originalName,
-                'fpath' => $filePath,
-                'furl'  => $fileUrl,
-                'fsize' => $size,
-                'mime'  => $mime,
-                'sort'  => $sortOrder++,
-            ]);
-
-            $saved[] = [
-                'id'        => $id,
-                'file_name' => $originalName,
-                'file_url'  => $fileUrl,
-                'file_size' => $size,
-                'mime_type' => $mime,
-            ];
+            return $this->created(['data' => $saved]);
+        } catch (\Throwable $e) {
+            return $this->json([
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => array_slice(explode("\n", $e->getTraceAsString()), 0, 5),
+            ], 500);
         }
-
-        if (empty($saved)) {
-            return $this->error('No valid files were uploaded');
-        }
-
-        return $this->created(['data' => $saved]);
-      } catch (\Throwable $e) {
-          return $this->json([
-              'error'   => $e->getMessage(),
-              'file'    => $e->getFile(),
-              'line'    => $e->getLine(),
-              'trace'   => array_slice(explode("\n", $e->getTraceAsString()), 0, 5),
-          ], 500);
-      }
     }
 
     /* ------------------------------------------------------------------ */
@@ -235,6 +246,12 @@ final class AttachmentController
             unlink($row['file_path']);
         }
 
+        // Delete from GCS
+        $gcsPath = $this->gcs->urlToObjectPath($row['file_url'] ?? '');
+        if ($gcsPath) {
+            $this->gcs->delete($gcsPath);
+        }
+
         // Delete DB record
         $this->db->pdo()->prepare('DELETE FROM "attachment" WHERE id = :id')->execute(['id' => $id]);
 
@@ -267,9 +284,9 @@ final class AttachmentController
             $stream,
             200,
             [
-                'Content-Type'        => $mimeType,
+                'Content-Type' => $mimeType,
                 'Content-Disposition' => 'attachment; filename="' . addslashes($fileName) . '"',
-                'Content-Length'      => (string) filesize($row['file_path']),
+                'Content-Length' => (string) filesize($row['file_path']),
                 'Access-Control-Allow-Origin' => '*',
             ]
         );
