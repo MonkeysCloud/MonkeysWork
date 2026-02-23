@@ -16,11 +16,36 @@ spec:
         app: monkeyswork-api
     spec:
       serviceAccountName: api-core
+
+      # ── Sync uploaded files from GCS on startup ──
+      initContainers:
+        - name: file-sync
+          image: gcr.io/google.com/cloudsdktool/cloud-sdk:alpine
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Syncing files from GCS..."
+              gsutil -m rsync -r gs://mw-prod-uploads-monkeyswork/files/ /mnt/files/ 2>&1 || true
+              echo "File sync complete: $(find /mnt/files -type f | wc -l) files"
+          volumeMounts:
+            - name: uploaded-files
+              mountPath: /mnt/files
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
       containers:
         - name: monkeyswork-api
           image: IMAGE_PLACEHOLDER
           ports:
             - containerPort: 8080
+          volumeMounts:
+            - name: uploaded-files
+              mountPath: /app/www/public/files
           env:
             - name: APP_ENV
               value: prod
@@ -116,6 +141,10 @@ spec:
               port: 8080
             initialDelaySeconds: 15
             periodSeconds: 20
+
+      volumes:
+        - name: uploaded-files
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
