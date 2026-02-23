@@ -341,19 +341,31 @@ FREELANCER PROFILE:
 - Name: {freelancer_name}
 - Skills: {freelancer_skills}
 - Bio: {freelancer_bio}
-- Additional highlights: {highlights}
+- Years of Experience: {freelancer_experience_years}
+- Hourly Rate: {freelancer_hourly_rate}
+- Certifications: {freelancer_certifications}
+- Portfolio Items: {freelancer_portfolio_count}
+- Education: {freelancer_education}
 
-TONE: {tone}
+FREELANCER TRACK RECORD:
+- Total Jobs Completed: {freelancer_total_jobs}
+- Average Rating: {freelancer_avg_rating}/5
+- Success Rate: {freelancer_success_rate}%
+
+ADDITIONAL CONTEXT:
+- Highlights from freelancer: {highlights}
+- Desired tone: {tone}
 
 WRITE a compelling proposal cover letter (300-500 words) that:
-1. Acknowledges the client's specific needs
-2. Highlights relevant experience and skills
-3. Proposes a clear approach/methodology
-4. Expresses enthusiasm and professionalism
-5. Ends with a strong call-to-action
+1. Acknowledges the client's specific needs from the job description
+2. Highlights the freelancer's relevant experience, years of work, and matching skills
+3. Mentions certifications, portfolio, or track record where relevant
+4. Proposes a clear approach/methodology
+5. Uses the freelancer's real stats (rating, jobs completed) as trust signals
+6. Ends with a strong call-to-action
 
 Also suggest:
-- A competitive bid amount within the budget range
+- A competitive bid amount within the budget range (consider the freelancer's hourly rate)
 - 3-5 milestones with titles, descriptions, and amounts
 - Estimated duration in weeks
 
@@ -380,12 +392,34 @@ async def generate_proposal_with_vertex(
     freelancer_name: str = "",
     freelancer_skills: list = None,
     freelancer_bio: str = "",
+    freelancer_experience_years: int = 0,
+    freelancer_hourly_rate: float = None,
+    freelancer_certifications: list = None,
+    freelancer_portfolio: list = None,
+    freelancer_education: list = None,
+    freelancer_total_jobs: int = 0,
+    freelancer_avg_rating: float = 0.0,
+    freelancer_success_rate: float = 0.0,
     highlights: str = "",
     tone: str = "professional",
 ) -> Optional[dict]:
     """Use Vertex AI Gemini to generate a proposal draft."""
     if not is_vertex_enabled():
         return None
+
+    # Format certifications and education for the prompt
+    cert_str = "None"
+    if freelancer_certifications:
+        cert_names = [c.get('name', c.get('title', '')) for c in freelancer_certifications if isinstance(c, dict)]
+        cert_str = ", ".join(n for n in cert_names if n) or "None"
+
+    edu_str = "None"
+    if freelancer_education:
+        edu_items = []
+        for e in freelancer_education:
+            if isinstance(e, dict):
+                edu_items.append(f"{e.get('degree', '')} - {e.get('institution', '')}")
+        edu_str = "; ".join(edu_items) or "None"
 
     prompt = PROPOSAL_PROMPT.format(
         job_title=job_title,
@@ -398,6 +432,14 @@ async def generate_proposal_with_vertex(
         freelancer_name=freelancer_name or "Freelancer",
         freelancer_skills=", ".join(freelancer_skills or []),
         freelancer_bio=freelancer_bio or "Not provided",
+        freelancer_experience_years=freelancer_experience_years or "Not specified",
+        freelancer_hourly_rate=f"${freelancer_hourly_rate}/hr" if freelancer_hourly_rate else "Not specified",
+        freelancer_certifications=cert_str,
+        freelancer_portfolio_count=len(freelancer_portfolio or []),
+        freelancer_education=edu_str,
+        freelancer_total_jobs=freelancer_total_jobs,
+        freelancer_avg_rating=freelancer_avg_rating,
+        freelancer_success_rate=freelancer_success_rate,
         highlights=highlights or "Not provided",
         tone=tone,
     )

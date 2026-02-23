@@ -31,6 +31,14 @@ class ProposalGenRequest(BaseModel):
     freelancer_name: str = ""
     freelancer_skills: List[str] = []
     freelancer_bio: str = ""
+    freelancer_experience_years: int = 0
+    freelancer_hourly_rate: Optional[float] = None
+    freelancer_certifications: List[dict] = []
+    freelancer_portfolio: List[str] = []
+    freelancer_education: List[dict] = []
+    freelancer_total_jobs: int = 0
+    freelancer_avg_rating: float = 0.0
+    freelancer_success_rate: float = 0.0
     highlights: str = ""
     tone: str = "professional"  # professional | friendly | technical
 
@@ -64,11 +72,29 @@ def _dev_generate(req: ProposalGenRequest) -> ProposalGenResponse:
     matching = set(s.lower() for s in req.freelancer_skills) & set(s.lower() for s in req.required_skills)
     match_str = ", ".join(matching) if matching else ", ".join(req.required_skills[:3]) if req.required_skills else "the required technologies"
 
+    # Experience context
+    exp_str = f"{req.freelancer_experience_years}+ years of experience" if req.freelancer_experience_years > 0 else "relevant experience"
+    stats_str = ""
+    if req.freelancer_total_jobs > 0:
+        stats_str = f" With {req.freelancer_total_jobs} completed projects"
+        if req.freelancer_avg_rating > 0:
+            stats_str += f" and a {req.freelancer_avg_rating:.1f}/5 average rating"
+        if req.freelancer_success_rate > 0:
+            stats_str += f" ({req.freelancer_success_rate:.0f}% success rate)"
+        stats_str += ", I have a proven track record of delivering quality work."
+
+    cert_str = ""
+    if req.freelancer_certifications:
+        cert_names = [c.get('name', c.get('title', '')) for c in req.freelancer_certifications if isinstance(c, dict)]
+        cert_names = [n for n in cert_names if n]
+        if cert_names:
+            cert_str = f" I hold certifications in {', '.join(cert_names[:3])}."
+
     # Tone-specific openings
     tone_map = {
-        "professional": f"Dear Hiring Manager,\n\nI am writing to express my strong interest in your project \"{job}\". After reviewing your requirements, I am confident that my skills and experience make me an excellent fit for this role.",
-        "friendly": f"Hi there! 👋\n\nI just came across your project \"{job}\" and I'm really excited about it. This is right in my wheelhouse and I'd love to help bring your vision to life!",
-        "technical": f"Hello,\n\nI've carefully analyzed the technical requirements for \"{job}\". Based on my experience with {match_str}, I have a clear approach for delivering a high-quality solution.",
+        "professional": f"Dear Hiring Manager,\n\nI am writing to express my strong interest in your project \"{job}\". With {exp_str} in {match_str}, I am confident that my skills make me an excellent fit for this role.",
+        "friendly": f"Hi there! 👋\n\nI just came across your project \"{job}\" and I'm really excited about it. With {exp_str}, this is right in my wheelhouse and I'd love to help bring your vision to life!",
+        "technical": f"Hello,\n\nI've carefully analyzed the technical requirements for \"{job}\". With {exp_str} in {match_str}, I have a clear approach for delivering a high-quality solution.",
     }
 
     # Tone-specific approaches
@@ -88,7 +114,7 @@ def _dev_generate(req: ProposalGenRequest) -> ProposalGenResponse:
 
     cover_letter = f"""{tone_map[tone]}
 
-With experience in {match_str}, I have successfully delivered similar projects that required attention to detail, performance optimization, and user-centric design.
+With {exp_str} in {match_str}, I have successfully delivered similar projects that required attention to detail, performance optimization, and user-centric design.{stats_str}{cert_str}
 
 {approach_map[tone]}
 
@@ -181,6 +207,14 @@ async def generate_proposal(request: ProposalGenRequest):
             freelancer_name=request.freelancer_name,
             freelancer_skills=request.freelancer_skills,
             freelancer_bio=request.freelancer_bio,
+            freelancer_experience_years=request.freelancer_experience_years,
+            freelancer_hourly_rate=request.freelancer_hourly_rate,
+            freelancer_certifications=request.freelancer_certifications,
+            freelancer_portfolio=request.freelancer_portfolio,
+            freelancer_education=request.freelancer_education,
+            freelancer_total_jobs=request.freelancer_total_jobs,
+            freelancer_avg_rating=request.freelancer_avg_rating,
+            freelancer_success_rate=request.freelancer_success_rate,
             highlights=request.highlights,
             tone=request.tone,
         )

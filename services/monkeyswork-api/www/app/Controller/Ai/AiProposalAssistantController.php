@@ -57,11 +57,23 @@ final class AiProposalAssistantController
         } catch (\Throwable) {
         }
 
-        // Fetch freelancer profile (display_name from user, bio/headline from freelancer_profile)
-        $user = ['display_name' => '', 'bio' => '', 'headline' => ''];
+        // Fetch freelancer profile — full data for AI context
+        $user = [
+            'display_name' => '',
+            'bio' => '',
+            'headline' => '',
+            'experience_years' => 0,
+            'hourly_rate' => null,
+            'certifications' => '[]',
+            'portfolio_urls' => '[]',
+            'education' => '[]'
+        ];
         try {
             $userStmt = $this->db->pdo()->prepare(
-                'SELECT u.display_name, fp.bio, fp.headline
+                'SELECT u.display_name,
+                        fp.bio, fp.headline, fp.experience_years,
+                        fp.hourly_rate, fp.certifications,
+                        fp.portfolio_urls, fp.education
                  FROM "user" u
                  LEFT JOIN "freelancer_profile" fp ON fp.user_id = u.id
                  WHERE u.id = :uid'
@@ -82,6 +94,18 @@ final class AiProposalAssistantController
         } catch (\Throwable) {
         }
 
+        // Fetch freelancer performance stats
+        $stats = ['total_jobs_completed' => 0, 'avg_rating' => 0, 'success_rate' => 0, 'total_reviews' => 0];
+        try {
+            $statsStmt = $this->db->pdo()->prepare(
+                'SELECT total_jobs_completed, avg_rating, success_rate, total_reviews
+                 FROM "freelancer_profile" WHERE user_id = :uid'
+            );
+            $statsStmt->execute(['uid' => $userId]);
+            $stats = $statsStmt->fetch(\PDO::FETCH_ASSOC) ?: $stats;
+        } catch (\Throwable) {
+        }
+
         $proposalUrl = getenv('AI_PROPOSAL_URL') ?: 'http://ai-scope-assistant:8080/api/v1/proposal/generate';
 
         $payload = [
@@ -95,6 +119,14 @@ final class AiProposalAssistantController
             'freelancer_name' => $user['display_name'] ?? '',
             'freelancer_skills' => $freelancerSkills,
             'freelancer_bio' => $user['bio'] ?? ($user['headline'] ?? ''),
+            'freelancer_experience_years' => (int) ($user['experience_years'] ?? 0),
+            'freelancer_hourly_rate' => isset($user['hourly_rate']) ? (float) $user['hourly_rate'] : null,
+            'freelancer_certifications' => json_decode($user['certifications'] ?: '[]', true),
+            'freelancer_portfolio' => json_decode($user['portfolio_urls'] ?: '[]', true),
+            'freelancer_education' => json_decode($user['education'] ?: '[]', true),
+            'freelancer_total_jobs' => (int) ($stats['total_jobs_completed'] ?? 0),
+            'freelancer_avg_rating' => (float) ($stats['avg_rating'] ?? 0),
+            'freelancer_success_rate' => (float) ($stats['success_rate'] ?? 0),
             'highlights' => $data['highlights'] ?? '',
             'tone' => $data['tone'] ?? 'professional',
         ];
