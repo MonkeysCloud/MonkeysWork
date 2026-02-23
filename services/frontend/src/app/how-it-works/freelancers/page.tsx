@@ -64,7 +64,7 @@ const STEPS = [
         num: "04",
         icon: "💰",
         title: "Deliver & Get Paid",
-        desc: "Work through milestones, submit deliverables, and get paid securely. Funds are in escrow before you start — so you're always protected.",
+        desc: "Work through milestones, submit deliverables, and get paid securely. Funds are in escrow before you start — so you're always protected. Platform fee: 10% on the first $10K per client, then just 5%.",
         details: [
             "Milestone-based secure payments",
             "Time tracking for hourly contracts",
@@ -327,7 +327,7 @@ export default function HowItWorksFreelancersPage() {
                             Browse Open Jobs
                         </a>
                     </div>
-                    <p className="text-xs text-white/30 mt-6">Free forever · No monthly fees · Keep most of what you earn</p>
+                    <p className="text-xs text-white/30 mt-6">Free forever · No monthly fees · 10% fee drops to 5% after $10K per client</p>
                 </div>
             </section>
         </main>

@@ -67,7 +67,7 @@ const sections = [
     {
         id: "contact",
         title: "12. Contact Us",
-        content: `For privacy questions, data requests, or complaints: Email: privacy@monkeysworks.com. Data Protection Officer: dpo@monkeysworks.com. MonkeysCloud LLC, Delaware, USA. EU Representative (GDPR Art. 27): Contact details available upon request. You also have the right to lodge a complaint with your local data protection authority (supervisory authority) if you believe your rights have been violated.`,
+        content: `For privacy questions, data requests, or complaints: Email: privacy@monkeysworks.com. Data Protection Officer: dpo@monkeysworks.com. MonkeysCloud LLC, Denver, Colorado, USA. EU Representative (GDPR Art. 27): Contact details available upon request. You also have the right to lodge a complaint with your local data protection authority (supervisory authority) if you believe your rights have been violated.`,
     },
 ];
 

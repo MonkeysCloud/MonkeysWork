@@ -251,7 +251,7 @@ export default function ContactPage() {
                             MonkeysCloud LLC
                         </h3>
                         <p style={{ fontSize: "0.8125rem", color: "#64748b", lineHeight: 1.6, margin: 0 }}>
-                            Delaware, United States
+                            Denver, Colorado, United States
                         </p>
                     </div>
 

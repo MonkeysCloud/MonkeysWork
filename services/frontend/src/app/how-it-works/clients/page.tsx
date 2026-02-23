@@ -52,7 +52,7 @@ const STEPS = [
         num: "03",
         icon: "🤝",
         title: "Hire & Kick Off",
-        desc: "Accept a proposal and the contract is created automatically with escrow protection. Fund milestones upfront — your money is held safely until work is approved.",
+        desc: "Accept a proposal and the contract is created automatically with escrow protection. Fund milestones upfront with a transparent 5% platform fee — your money is held safely until work is approved.",
         details: [
             "One-click contract creation",
             "Milestone-based escrow payments",
@@ -269,7 +269,7 @@ export default function HowItWorksClientsPage() {
                             ["Milestone Payments", "✅", "Basic"],
                             ["Built-in Messaging", "✅", "✅"],
                             ["Mobile App", "✅", "Some"],
-                            ["Platform Fee", "Competitive", "15–20%"],
+                            ["Platform Fee", "5% (client)", "15–20%"],
                         ].map(([feature, us, them], i) => (
                             <div
                                 key={feature}

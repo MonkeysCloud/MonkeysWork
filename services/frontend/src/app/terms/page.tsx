@@ -44,11 +44,14 @@ BY REGISTERING ON THE PLATFORM, YOU EXPRESSLY ACKNOWLEDGE AND AGREE THAT (a) NO 
         title: "6. Platform Fees & Commissions",
         content: `MonkeysWork charges service fees on completed transactions to sustain the Platform, provide payment protection, and fund dispute resolution. By registering and using the Platform, you agree to the following fee structure:
 
-Freelancer Service Fee: MonkeysWork deducts a commission from each payment made to Freelancers. The applicable rate is displayed when submitting a proposal and on the Contract details page. Current standard rate: 10% of the contract value.
+Client Platform Fee: A 5% fee is added on top of each milestone amount when funding escrow. This fee covers platform operations, escrow protection, payment processing, and support services. The total client charge is the milestone amount plus the 5% platform fee. Payment processing costs (card fees, etc.) are absorbed by MonkeysWork and are not charged separately to the Client.
 
-Client Payment Processing Fee: Clients may be charged a payment processing fee on funded milestones. The applicable rate is displayed before confirming payment.
+Freelancer Service Fee (Tiered): MonkeysWork deducts a commission from each payment released to Freelancers, based on the cumulative billing per client relationship:
+• 10% on the first $10,000 billed with each client
+• 5% on all earnings above $10,000 with the same client
+The tier resets per client relationship — working with a new client starts at the 10% tier.
 
-Withdrawal Fees: Fees may apply when withdrawing funds to certain payment methods. Applicable fees are displayed before confirming withdrawal.
+Freelancer Payout Fees: Bank transfer payouts are free. PayPal payouts incur a 1% fee. Availability depends on country and compliance.
 
 Fee Changes: MonkeysWork reserves the right to modify fee rates with 30 days' prior notice. Existing active Contracts will not be affected by fee increases until their completion.
 
@@ -80,7 +83,7 @@ Step 2 — Platform Mediation: If direct resolution fails, either party may file
 
 Step 3 — Binding Decision: If mediation does not result in agreement, MonkeysWork will issue a binding decision regarding escrowed funds within 14 business days. This decision is final and non-appealable with respect to escrowed funds.
 
-For disputes not resolved through our process, or for claims exceeding the escrowed amount, the parties agree to binding arbitration under the rules of the American Arbitration Association, conducted in Delaware, USA. Each party bears its own costs unless the arbitrator determines otherwise.
+For disputes not resolved through our process, or for claims exceeding the escrowed amount, the parties agree to binding arbitration under the rules of the American Arbitration Association, conducted in Colorado, USA. Each party bears its own costs unless the arbitrator determines otherwise.
 
 CLASS ACTION WAIVER: TO THE MAXIMUM EXTENT PERMITTED BY LAW, ALL DISPUTES MUST BE BROUGHT IN THE PARTIES' INDIVIDUAL CAPACITY AND NOT AS A PLAINTIFF OR CLASS MEMBER IN ANY PURPORTED CLASS, COLLECTIVE, OR REPRESENTATIVE PROCEEDING.
 
@@ -109,12 +112,12 @@ By registering on the Platform, you acknowledge and agree to this Dispute Resolu
     {
         id: "governing-law",
         title: "15. Governing Law",
-        content: `These Terms are governed by the laws of the State of Delaware, USA, without regard to conflict of law principles. For users in the European Union, mandatory consumer protection laws of your country of residence will apply to the extent they provide greater protection. For users in California, the CCPA and other applicable California laws apply in addition to these Terms.`,
+        content: `These Terms are governed by the laws of the State of Colorado, USA, without regard to conflict of law principles. For users in the European Union, mandatory consumer protection laws of your country of residence will apply to the extent they provide greater protection. For users in California, the CCPA and other applicable California laws apply in addition to these Terms.`,
     },
     {
         id: "contact",
         title: "16. Contact",
-        content: `For questions about these Terms, contact us at: legal@monkeysworks.com or through our Contact page. MonkeysCloud LLC, Delaware, USA.`,
+        content: `For questions about these Terms, contact us at: legal@monkeysworks.com or through our Contact page. MonkeysCloud LLC, Denver, Colorado, USA.`,
     },
 ];
 

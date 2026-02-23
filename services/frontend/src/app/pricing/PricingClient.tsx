@@ -93,13 +93,11 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 function FeeCalculator() {
     const [amount, setAmount] = useState(5000);
     const [feeTier, setFeeTier] = useState<10 | 5>(10);
-    const [paymentMethod, setPaymentMethod] = useState<"card" | "bank">("card");
     const [payoutMethod, setPayoutMethod] = useState<"bank" | "paypal">("bank");
 
     // Client side
     const clientPlatformFee = amount * 0.05;
-    const clientProcessing = paymentMethod === "card" ? amount * 0.029 + 0.3 : 0;
-    const clientTotal = amount + clientPlatformFee + clientProcessing;
+    const clientTotal = amount + clientPlatformFee;
 
     // Freelancer side
     const freelancerPlatformFee = amount * (feeTier / 100);
@@ -142,19 +140,6 @@ function FeeCalculator() {
                         </select>
                     </div>
 
-                    {/* payment method */}
-                    <div>
-                        <label className="block text-xs font-semibold text-brand-muted mb-1.5">Client Payment Method</label>
-                        <select
-                            value={paymentMethod}
-                            onChange={(e) => setPaymentMethod(e.target.value as "card" | "bank")}
-                            className="w-full px-3 py-2.5 text-sm border border-brand-border/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange text-brand-dark bg-white"
-                        >
-                            <option value="card">Card (2.9% + $0.30)</option>
-                            <option value="bank">Bank Transfer</option>
-                        </select>
-                    </div>
-
                     {/* payout method */}
                     <div>
                         <label className="block text-xs font-semibold text-brand-muted mb-1.5">Freelancer Payout Method</label>
@@ -183,10 +168,6 @@ function FeeCalculator() {
                         <div className="flex justify-between text-sm">
                             <span className="text-brand-muted">Platform fee (5%)</span>
                             <span className="text-brand-dark font-medium">{fmt(clientPlatformFee)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                            <span className="text-brand-muted">Processing fee</span>
-                            <span className="text-brand-dark font-medium">{fmt(clientProcessing)}</span>
                         </div>
                         <div className="border-t border-brand-border/40 pt-2.5 flex justify-between text-base font-bold">
                             <span className="text-brand-dark">Total</span>
@@ -280,7 +261,7 @@ export default function PricingClient() {
                                     <span className="text-brand-muted ml-2 text-sm">platform fee per milestone</span>
                                 </div>
                                 <p className="mt-2 text-xs text-brand-muted">
-                                    + 2.9% + $0.30 per card transaction. Bank transfer fees may vary by provider and region.
+                                    Payment processing fees (Stripe) are absorbed by MonkeysWork — you only pay the 5% platform fee.
                                 </p>
                             </div>
                             <div className="p-7 sm:p-8">
