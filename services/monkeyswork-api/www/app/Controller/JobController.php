@@ -764,7 +764,7 @@ final class JobController
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $this->db->pdo()->prepare(
-            'INSERT INTO "invitation" (id, job_id, client_id, freelancer_id, message, status, created_at)
+            'INSERT INTO "invitations" (id, job_id, client_id, freelancer_id, message, status, created_at)
              VALUES (:id, :jid, :cid, :fid, :msg, \'pending\', :now)'
         )->execute([
                     'id' => $invId,

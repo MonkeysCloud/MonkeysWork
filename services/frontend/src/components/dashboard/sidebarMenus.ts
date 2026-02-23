@@ -37,6 +37,7 @@ const CLIENT_MENU: MenuConfig = {
                     label: "Closed",
                     href: "/dashboard/jobs?status=completed,cancelled",
                 },
+                { label: "Sent Invitations", href: "/dashboard/invitations" },
             ],
         },
         {
