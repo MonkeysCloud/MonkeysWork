@@ -9,8 +9,8 @@ import {
     formatMoney,
     styles,
     API,
-    FILE_HOST,
 } from "./types";
+import { fileUrl } from "@/lib/fileUrl";
 
 interface Props {
     milestones: Milestone[];
@@ -413,7 +413,7 @@ export default function MilestoneList({
                                             >
                                                 <span>📎</span>
                                                 <a
-                                                    href={`${FILE_HOST}${d.file_url ?? d.url ?? ""}`}
+                                                    href={fileUrl(d.file_url ?? d.url ?? "")}
                                                     target="_blank"
                                                     rel="noreferrer"
                                                     style={{ color: "#6366f1", textDecoration: "none", fontWeight: 500 }}

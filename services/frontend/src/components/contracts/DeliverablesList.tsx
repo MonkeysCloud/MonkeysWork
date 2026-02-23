@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Milestone, Deliverable, formatDate, styles, API, FILE_HOST } from "./types";
+import { Milestone, Deliverable, formatDate, styles, API } from "./types";
+import { fileUrl } from "@/lib/fileUrl";
 
 interface Props {
     milestones: Milestone[];
@@ -74,7 +75,7 @@ export default function DeliverablesList({ milestones, token }: Props) {
                                 <span style={{ fontSize: "1.25rem" }}>📎</span>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <a
-                                        href={`${FILE_HOST}${d.file_url ?? d.url ?? ""}`}
+                                        href={fileUrl(d.file_url ?? d.url ?? "")}
                                         target="_blank"
                                         rel="noreferrer"
                                         style={{ color: "#6366f1", fontWeight: 600, textDecoration: "none" }}
@@ -91,7 +92,7 @@ export default function DeliverablesList({ milestones, token }: Props) {
                                     )}
                                 </div>
                                 <a
-                                    href={`${FILE_HOST}${d.file_url ?? d.url ?? ""}`}
+                                    href={fileUrl(d.file_url ?? d.url ?? "")}
                                     download
                                     style={{ ...styles.btnOutline, padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
                                 >

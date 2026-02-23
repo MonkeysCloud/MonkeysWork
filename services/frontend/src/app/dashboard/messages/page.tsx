@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useSocket } from "@/hooks/useSocket";
+import { fileUrl } from "@/lib/fileUrl";
 
 const API =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
@@ -443,7 +444,7 @@ export default function MessagesPage() {
                                 sentAt: serverReply.created_at,
                                 fileName: serverReply.attachment?.file_name,
                                 fileUrl: serverReply.attachment?.file_url
-                                    ? `${API.replace("/api/v1", "")}${serverReply.attachment.file_url}`
+                                    ? fileUrl(serverReply.attachment.file_url)
                                     : optimisticReply.fileUrl,
                             }
                             : r
@@ -475,7 +476,7 @@ export default function MessagesPage() {
                 sentAt: r.created_at,
                 fileName: r.attachment?.file_name,
                 fileUrl: r.attachment?.file_url
-                    ? `${API.replace("/api/v1", "")}${r.attachment.file_url}`
+                    ? fileUrl(r.attachment.file_url)
                     : undefined,
             }));
             setReplies((prev) => ({ ...prev, [notifId]: serverReplies }));

@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import AdminTable, { type Column } from "@/components/admin/AdminTable";
 import StatusBadge from "@/components/admin/StatusBadge";
 import ActionModal from "@/components/admin/ActionModal";
+import { fileUrl } from "@/lib/fileUrl";
 
 const API =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
@@ -798,7 +799,7 @@ export default function AdminVerificationsPage() {
                                                 <p className="whitespace-pre-wrap break-words">{msg.message}</p>
                                                 {msg.attachment && (
                                                     <a
-                                                        href={`${API.replace("/api/v1", "")}${msg.attachment.file_url}`}
+                                                        href={fileUrl(msg.attachment.file_url)}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className={`inline-flex items-center gap-1.5 mt-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${msg.sender === "admin"
