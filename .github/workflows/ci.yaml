@@ -95,14 +95,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build Docker image
         run: |
-          if [[ "${{ matrix.service }}" == "ai-scope-assistant" ]]; then
-            docker build -t ${{ matrix.service }}:test \
-              -f services/${{ matrix.service }}/Dockerfile \
-              services/
-          else
-            docker build -t ${{ matrix.service }}:test \
-              services/${{ matrix.service }}/
-          fi
+          case "${{ matrix.service }}" in
+            ai-scope-assistant|ai-match-v1|ai-fraud-v1|verification-automation)
+              docker build -t ${{ matrix.service }}:test \
+                -f services/${{ matrix.service }}/Dockerfile \
+                services/
+              ;;
+            *)
+              docker build -t ${{ matrix.service }}:test \
+                services/${{ matrix.service }}/
+              ;;
+          esac
 
   terraform-validate:
     runs-on: ubuntu-latest

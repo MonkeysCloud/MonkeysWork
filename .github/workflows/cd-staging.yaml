@@ -46,17 +46,20 @@ jobs:
           TAG="${{ github.sha }}"
           REGISTRY="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/mw-${{ env.ENV }}-services"
 
-          # Services that need shared/ module use services/ as build context
-          if [[ "${{ matrix.service }}" == "ai-scope-assistant" ]]; then
-            docker build \
-              -t "$REGISTRY/${{ matrix.service }}:$TAG" \
-              -f services/${{ matrix.service }}/Dockerfile \
-              services/
-          else
-            docker build \
-              -t "$REGISTRY/${{ matrix.service }}:$TAG" \
-              services/${{ matrix.service }}/
-          fi
+          # Python services that need shared/ module use services/ as build context
+          case "${{ matrix.service }}" in
+            ai-scope-assistant|ai-match-v1|ai-fraud-v1|verification-automation)
+              docker build \
+                -t "$REGISTRY/${{ matrix.service }}:$TAG" \
+                -f services/${{ matrix.service }}/Dockerfile \
+                services/
+              ;;
+            *)
+              docker build \
+                -t "$REGISTRY/${{ matrix.service }}:$TAG" \
+                services/${{ matrix.service }}/
+              ;;
+          esac
 
           docker push "$REGISTRY/${{ matrix.service }}:$TAG"
 

@@ -15,7 +15,7 @@ spec:
       labels:
         app: ai-match-v1
     spec:
-      serviceAccountName: ai-match-v1
+      serviceAccountName: api-core
       containers:
         - name: ai-match-v1
           image: IMAGE_PLACEHOLDER

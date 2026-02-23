@@ -4,10 +4,13 @@ RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY verification-automation/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/ ./src/
+COPY verification-automation/src/ ./src/
+
+# Shared libraries (pubsub, callback)
+COPY shared/ ./shared/
 
 USER appuser
 

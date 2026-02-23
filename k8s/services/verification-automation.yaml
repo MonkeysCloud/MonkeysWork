@@ -15,7 +15,7 @@ spec:
       labels:
         app: verification-automation
     spec:
-      serviceAccountName: verification-automation
+      serviceAccountName: api-core
       containers:
         - name: verification-automation
           image: IMAGE_PLACEHOLDER
