@@ -4,10 +4,13 @@ RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY ai-scope-assistant/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/ ./src/
+COPY ai-scope-assistant/src/ ./src/
+
+# Shared libraries (pubsub, callback)
+COPY shared/ ./shared/
 
 USER appuser
 

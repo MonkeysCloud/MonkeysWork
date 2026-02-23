@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ai-scope-assistant
-  namespace: monkeyswork-ai
+  namespace: monkeyswork
   labels:
     app: ai-scope-assistant
 spec:
@@ -15,17 +15,17 @@ spec:
       labels:
         app: ai-scope-assistant
     spec:
-      serviceAccountName: ai-scope-assistant
+      serviceAccountName: api-core
       containers:
         - name: ai-scope-assistant
-          image: IMAGE_PLACEHOLDER
+          image: us-central1-docker.pkg.dev/monkeyswork/mw-prod-services/ai-scope-assistant:latest
           ports:
             - containerPort: 8080
           env:
             - name: ENVIRONMENT
               value: "prod"
             - name: GCP_PROJECT_ID
-              value: "monkeyswork-prod"
+              value: "monkeyswork"
             - name: REGION
               value: "us-central1"
             - name: VERTEX_MODEL
@@ -45,11 +45,11 @@ spec:
               value: "info"
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: 250m
+              memory: 512Mi
             limits:
-              cpu: "2"
-              memory: 4Gi
+              cpu: "1"
+              memory: 2Gi
           readinessProbe:
             httpGet:
               path: /healthz
@@ -67,11 +67,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ai-scope-assistant
-  namespace: monkeyswork-ai
+  namespace: monkeyswork
 spec:
   selector:
     app: ai-scope-assistant
   ports:
-    - port: 80
+    - port: 8080
       targetPort: 8080
   type: ClusterIP
