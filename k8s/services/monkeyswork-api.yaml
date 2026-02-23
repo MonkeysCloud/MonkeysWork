@@ -126,6 +126,28 @@ spec:
                 secretKeyRef:
                   name: paypal-credentials
                   key: webhook-id
+            - name: GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-oauth
+                  key: client-id
+            - name: GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: github-oauth
+                  key: client-secret
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: client-id
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: client-secret
+            - name: FRONTEND_URL
+              value: "https://monkeysworks.com"
           resources:
             requests:
               cpu: 250m

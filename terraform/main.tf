@@ -870,6 +870,26 @@ resource "google_secret_manager_secret_version" "internal_api_token" {
   secret_data = var.internal_api_token
 }
 
+resource "google_secret_manager_secret" "github_oauth" {
+  secret_id = "mw-${var.environment}-github-oauth"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret" "google_oauth" {
+  secret_id = "mw-${var.environment}-google-oauth"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
 # ─────────────────────────────────────────────────────
 # 10. MONITORING — Alert Policies
 # ─────────────────────────────────────────────────────
@@ -1027,6 +1047,34 @@ resource "kubernetes_secret_v1" "internal_api_token_main" {
 
   data = {
     token = var.internal_api_token
+  }
+
+  depends_on = [google_container_cluster.primary]
+}
+
+resource "kubernetes_secret_v1" "github_oauth" {
+  metadata {
+    name      = "github-oauth"
+    namespace = "monkeyswork"
+  }
+
+  data = {
+    client-id     = var.github_client_id
+    client-secret = var.github_client_secret
+  }
+
+  depends_on = [google_container_cluster.primary]
+}
+
+resource "kubernetes_secret_v1" "google_oauth" {
+  metadata {
+    name      = "google-oauth"
+    namespace = "monkeyswork"
+  }
+
+  data = {
+    client-id     = var.google_client_id
+    client-secret = var.google_client_secret
   }
 
   depends_on = [google_container_cluster.primary]

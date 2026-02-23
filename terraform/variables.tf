@@ -101,3 +101,25 @@ variable "internal_api_token" {
   type        = string
   sensitive   = true
 }
+
+variable "github_client_id" {
+  description = "GitHub OAuth App Client ID"
+  type        = string
+}
+
+variable "github_client_secret" {
+  description = "GitHub OAuth App Client Secret"
+  type        = string
+  sensitive   = true
+}
+
+variable "google_client_id" {
+  description = "Google OAuth Client ID"
+  type        = string
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth Client Secret"
+  type        = string
+  sensitive   = true
+}

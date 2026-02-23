@@ -63,7 +63,7 @@ export default function TrustSafety() {
 
                 <div className="mt-10 text-center">
                     <Link
-                        href="/trust-safety"
+                        href="/trust"
                         className="inline-flex items-center gap-2 text-sm font-semibold text-brand-orange hover:text-brand-orange-hover transition-colors"
                     >
                         Learn more about trust &amp; safety

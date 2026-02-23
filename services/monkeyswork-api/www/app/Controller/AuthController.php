@@ -449,15 +449,200 @@ final class AuthController
     #[Route('POST', '/oauth/{provider}', name: 'auth.oauth', summary: 'OAuth login', tags: ['Auth'])]
     public function oauthCallback(ServerRequestInterface $request, string $provider): JsonResponse
     {
-        $allowed = ['google', 'github', 'linkedin'];
+        $allowed = ['google', 'github'];
         if (!in_array($provider, $allowed, true)) {
             return $this->error("Unsupported provider: {$provider}");
         }
 
         $data = $this->body($request);
 
-        // TODO: exchange code for token, upsert user, issue JWT
-        return $this->json(['data' => ['provider' => $provider, 'token' => 'JWT_PLACEHOLDER']]);
+        if (empty($data['code'])) {
+            return $this->error('Authorization code is required');
+        }
+
+        try {
+            // ── 1. Exchange code & fetch user info per provider ──
+            if ($provider === 'github') {
+                $svc = new \App\Service\GitHubOAuthService();
+                $tokens = $svc->exchangeCode($data['code']);
+                $ghUser = $svc->fetchUser($tokens['access_token']);
+                $email = $svc->fetchPrimaryEmail($tokens['access_token']);
+                $provId = (string) $ghUser['id'];
+                $name = $ghUser['name'] ?? $ghUser['login'] ?? '';
+                $avatar = $ghUser['avatar_url'] ?? null;
+                $firstName = explode(' ', $name)[0] ?? null;
+                $lastName = count(explode(' ', $name)) > 1 ? explode(' ', $name, 2)[1] : null;
+                $accessTk = $tokens['access_token'];
+                $refreshTk = null;
+                $expiresAt = null;
+            } else { // google
+                $svc = new \App\Service\GoogleOAuthService();
+                $tokens = $svc->exchangeCode($data['code']);
+                $gUser = $svc->fetchUser($tokens['access_token']);
+                $email = $gUser['email'] ?? '';
+                $provId = (string) $gUser['id'];
+                $name = $gUser['name'] ?? '';
+                $avatar = $gUser['picture'] ?? null;
+                $firstName = $gUser['given_name'] ?? null;
+                $lastName = $gUser['family_name'] ?? null;
+                $accessTk = $tokens['access_token'];
+                $refreshTk = $tokens['refresh_token'] ?? null;
+                $expiresAt = isset($tokens['expires_in'])
+                    ? (new \DateTimeImmutable("+{$tokens['expires_in']} seconds"))->format('Y-m-d H:i:s')
+                    : null;
+            }
+
+            if (!$email) {
+                return $this->error('Could not retrieve email from provider', 400);
+            }
+
+            $email = strtolower(trim($email));
+            $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+            $pdo = $this->db->pdo();
+            $role = $data['role'] ?? 'freelancer'; // default role for new OAuth users
+
+            // ── 2. Check if OAuth link already exists ──
+            $stmt = $pdo->prepare(
+                'SELECT user_id FROM "user_oauth" WHERE provider = :provider AND provider_user_id = :pid'
+            );
+            $stmt->execute(['provider' => $provider, 'pid' => $provId]);
+            $oauthRow = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if ($oauthRow) {
+                // Existing OAuth link — fetch user
+                $userId = $oauthRow['user_id'];
+            } else {
+                // Check if user with this email exists
+                $stmt = $pdo->prepare('SELECT id FROM "user" WHERE email = :email AND deleted_at IS NULL');
+                $stmt->execute(['email' => $email]);
+                $existingUser = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+                if ($existingUser) {
+                    $userId = $existingUser['id'];
+                } else {
+                    // ── 3. Create new user ──
+                    $userId = $this->uuid();
+                    $pdo->prepare(
+                        'INSERT INTO "user" (id, email, password_hash, role, status, display_name,
+                                             first_name, last_name, avatar_url, timezone, locale,
+                                             token_version, email_verified_at, metadata, created_at, updated_at)
+                         VALUES (:id, :email, :password_hash, :role, :status, :display_name,
+                                 :first_name, :last_name, :avatar_url, :timezone, :locale, 1,
+                                 :verified_at, :metadata, :created_at, :updated_at)'
+                    )->execute([
+                                'id' => $userId,
+                                'email' => $email,
+                                'password_hash' => '', // OAuth users have no password
+                                'role' => $role,
+                                'status' => 'active',
+                                'display_name' => $name ?: explode('@', $email)[0],
+                                'first_name' => $firstName,
+                                'last_name' => $lastName,
+                                'avatar_url' => $avatar,
+                                'timezone' => 'UTC',
+                                'locale' => 'en',
+                                'verified_at' => $now,
+                                'metadata' => json_encode(['oauth_provider' => $provider]),
+                                'created_at' => $now,
+                                'updated_at' => $now,
+                            ]);
+
+                    // Create empty profile based on role
+                    if ($role === 'client') {
+                        $pdo->prepare(
+                            'INSERT INTO "clientprofile" (user_id, created_at, updated_at) VALUES (:uid, :now, :now)'
+                        )->execute(['uid' => $userId, 'now' => $now]);
+                    } elseif ($role === 'freelancer') {
+                        $pdo->prepare(
+                            'INSERT INTO "freelancerprofile" (user_id, created_at, updated_at) VALUES (:uid, :now, :now)'
+                        )->execute(['uid' => $userId, 'now' => $now]);
+                    }
+                }
+
+                // ── 4. Create OAuth link ──
+                $oauthId = $this->uuid();
+                $pdo->prepare(
+                    'INSERT INTO "user_oauth" (id, user_id, provider, provider_user_id, access_token, refresh_token, expires_at, created_at)
+                     VALUES (:id, :user_id, :provider, :pid, :at, :rt, :ea, :now)'
+                )->execute([
+                            'id' => $oauthId,
+                            'user_id' => $userId,
+                            'provider' => $provider,
+                            'pid' => $provId,
+                            'at' => $accessTk,
+                            'rt' => $refreshTk,
+                            'ea' => $expiresAt,
+                            'now' => $now,
+                        ]);
+            }
+
+            // ── 5. Update OAuth tokens (always keep fresh) ──
+            $pdo->prepare(
+                'UPDATE "user_oauth" SET access_token = :at, refresh_token = :rt, expires_at = :ea
+                 WHERE provider = :provider AND provider_user_id = :pid'
+            )->execute([
+                        'at' => $accessTk,
+                        'rt' => $refreshTk,
+                        'ea' => $expiresAt,
+                        'provider' => $provider,
+                        'pid' => $provId,
+                    ]);
+
+            // ── 6. Fetch user for JWT ──
+            $stmt = $pdo->prepare(
+                'SELECT id, email, role, status, display_name, token_version, profile_completed, avatar_url
+                 FROM "user" WHERE id = :id AND deleted_at IS NULL'
+            );
+            $stmt->execute(['id' => $userId]);
+            $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$user) {
+                return $this->error('User account not found', 404);
+            }
+
+            if ($user['status'] === 'suspended') {
+                return $this->error('Account suspended', 403);
+            }
+
+            // ── 7. Generate JWT ──
+            $jwtSecret = getenv('JWT_SECRET') ?: 'changeme-use-at-least-32-characters-of-randomness';
+            $nowTs = time();
+            $header = self::base64UrlEncode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
+
+            $accessPayload = self::base64UrlEncode(json_encode([
+                'sub' => $user['id'],
+                'role' => $user['role'],
+                'email' => $user['email'],
+                'iat' => $nowTs,
+                'exp' => $nowTs + 1800,
+            ]));
+            $accessSig = self::base64UrlEncode(hash_hmac('sha256', "{$header}.{$accessPayload}", $jwtSecret, true));
+            $accessToken = "{$header}.{$accessPayload}.{$accessSig}";
+
+            $refreshPayload = self::base64UrlEncode(json_encode([
+                'sub' => $user['id'],
+                'type' => 'refresh',
+                'iat' => $nowTs,
+                'exp' => $nowTs + 604800,
+            ]));
+            $refreshSig = self::base64UrlEncode(hash_hmac('sha256', "{$header}.{$refreshPayload}", $jwtSecret, true));
+            $refreshToken = "{$header}.{$refreshPayload}.{$refreshSig}";
+
+            return $this->json([
+                'data' => [
+                    'user_id' => $user['id'],
+                    'role' => $user['role'],
+                    'display_name' => $user['display_name'] ?? null,
+                    'profile_completed' => (bool) $user['profile_completed'],
+                    'avatar_url' => $user['avatar_url'] ?? null,
+                    'token' => $accessToken,
+                    'refresh' => $refreshToken,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            error_log("[OAuth] {$provider} error: " . $e->getMessage());
+            return $this->error('OAuth authentication failed: ' . $e->getMessage(), 400);
+        }
     }
 
     /* ------------------------------------------------------------------ */

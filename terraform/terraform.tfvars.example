@@ -13,3 +13,9 @@ authorized_networks = []
 domain              = "monkeysworks.com"
 enable_vertex_ai    = true
 github_repo         = "MonkeysCloud/MonkeysWork"
+
+# OAuth
+github_client_id     = ""
+github_client_secret = ""
+google_client_id     = ""
+google_client_secret = ""

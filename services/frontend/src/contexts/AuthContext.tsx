@@ -30,6 +30,7 @@ interface AuthContextValue {
     isAuthenticated: boolean;
     isLoading: boolean;
     login: (email: string, password: string) => Promise<AuthUser>;
+    loginWithOAuth: (provider: string, code: string) => Promise<AuthUser>;
     logout: () => void;
     refreshUser: () => Promise<void>;
     setProfileCompleted: () => void;
@@ -121,6 +122,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return authUser;
     }, []);
 
+    const loginWithOAuth = useCallback(
+        async (provider: string, code: string) => {
+            const res = await fetch(`${API_BASE}/auth/oauth/${provider}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code }),
+            });
+
+            const body = await res.json();
+
+            if (!res.ok) {
+                throw new Error(
+                    body.message || `OAuth login with ${provider} failed.`
+                );
+            }
+
+            const authUser: AuthUser = {
+                id: body.data.user_id,
+                email: body.data.email ?? "",
+                role: body.data.role as UserRole,
+                display_name:
+                    body.data.display_name ?? body.data.email?.split("@")[0] ?? "User",
+                profile_completed: !!body.data.profile_completed,
+                avatar_url: body.data.avatar_url ?? null,
+            };
+            const authToken = body.data.token as string;
+
+            setUser(authUser);
+            setToken(authToken);
+            saveAuth(authUser, authToken);
+
+            return authUser;
+        },
+        []
+    );
+
     const logout = useCallback(() => {
         setUser(null);
         setToken(null);
@@ -170,6 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 isAuthenticated: !!user,
                 isLoading,
                 login,
+                loginWithOAuth,
                 logout,
                 refreshUser,
                 setProfileCompleted,
