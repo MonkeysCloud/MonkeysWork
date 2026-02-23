@@ -737,7 +737,7 @@ resource "google_storage_bucket" "ml_artifacts" {
 }
 
 resource "google_storage_bucket" "uploads" {
-  name          = "mw-${var.environment}-uploads-${var.project_id}"
+  name          = "mw-${var.environment}-uploads-monkeyswork"
   location      = var.region
   force_destroy = var.environment != "prod"
 
@@ -764,6 +764,13 @@ resource "google_storage_bucket_iam_member" "api_core_uploads" {
   bucket = google_storage_bucket.uploads.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.services["api-core"].email}"
+}
+
+# Public read access so files can be served as CDN URLs
+resource "google_storage_bucket_iam_member" "uploads_public_read" {
+  bucket = google_storage_bucket.uploads.name
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
 }
 
 resource "google_storage_bucket_iam_member" "vertex_ml_artifacts" {

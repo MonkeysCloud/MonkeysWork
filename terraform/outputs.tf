@@ -27,6 +27,11 @@ output "uploads_bucket" {
   value = google_storage_bucket.uploads.name
 }
 
+output "uploads_bucket_url" {
+  description = "Public base URL for uploaded files"
+  value       = "https://storage.googleapis.com/${google_storage_bucket.uploads.name}"
+}
+
 output "vpc_network_id" {
   value = google_compute_network.main.id
 }
