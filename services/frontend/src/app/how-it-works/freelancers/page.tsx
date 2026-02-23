@@ -125,8 +125,8 @@ export default function HowItWorksFreelancersPage() {
         <main className="bg-brand-surface">
             {/* ── Hero ─────────────────────────────────── */}
             <section className="relative overflow-hidden bg-gradient-to-br from-brand-dark via-brand-dark-light to-brand-dark pt-32 pb-20">
-                <div className="absolute top-[-120px] left-[-80px] w-[400px] h-[400px] rounded-full bg-brand-orange/10 blur-3xl" />
-                <div className="absolute bottom-[-60px] right-[-60px] w-[300px] h-[300px] rounded-full bg-brand-orange/5 blur-3xl" />
+                <div className="absolute top-[-120px] left-[-80px] w-[400px] h-[400px] rounded-full bg-brand-orange/10 blur-3xl transform-gpu" />
+                <div className="absolute bottom-[-60px] right-[-60px] w-[300px] h-[300px] rounded-full bg-brand-orange/5 blur-3xl transform-gpu" />
 
                 <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 text-center">
                     <span className="inline-block px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-brand-orange bg-brand-orange/10 rounded-full mb-6">
@@ -305,8 +305,8 @@ export default function HowItWorksFreelancersPage() {
 
             {/* ── AI-Powered ────────────────────────────── */}
             <section className="py-20 bg-gradient-to-br from-[#0f172a] to-[#1e293b] text-white relative overflow-hidden">
-                <div className="absolute top-[-100px] right-[-60px] w-[350px] h-[350px] rounded-full bg-purple-500/10 blur-3xl" />
-                <div className="absolute bottom-[-80px] left-[-40px] w-[300px] h-[300px] rounded-full bg-brand-orange/10 blur-3xl" />
+                <div className="absolute top-[-100px] right-[-60px] w-[350px] h-[350px] rounded-full bg-purple-500/10 blur-3xl transform-gpu" />
+                <div className="absolute bottom-[-80px] left-[-40px] w-[300px] h-[300px] rounded-full bg-brand-orange/10 blur-3xl transform-gpu" />
                 <div className="relative mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
                     <span className="inline-block px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-purple-300 bg-purple-500/15 rounded-full mb-6 border border-purple-500/25">
                         AI-Powered
@@ -342,7 +342,7 @@ export default function HowItWorksFreelancersPage() {
 
             {/* ── Final CTA ────────────────────────────── */}
             <section className="relative overflow-hidden bg-gradient-to-br from-brand-dark via-brand-dark-light to-brand-dark py-24">
-                <div className="absolute top-[-100px] left-[-50px] w-[350px] h-[350px] rounded-full bg-brand-orange/8 blur-3xl" />
+                <div className="absolute top-[-100px] left-[-50px] w-[350px] h-[350px] rounded-full bg-brand-orange/8 blur-3xl transform-gpu" />
                 <div className="relative mx-auto max-w-3xl px-4 text-center">
                     <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
                         Your Next Project Is Waiting

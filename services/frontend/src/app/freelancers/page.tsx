@@ -95,8 +95,8 @@ export default function FreelancersPage() {
         <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
             {/* ── Hero Section ────────────────────────────── */}
             <section className="relative overflow-hidden bg-gradient-to-br from-indigo-950 via-purple-950 to-indigo-950 pt-32 pb-20">
-                <div className="absolute top-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
-                <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-brand-orange/10 rounded-full blur-3xl" />
+                <div className="absolute top-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl transform-gpu" />
+                <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-brand-orange/10 rounded-full blur-3xl transform-gpu" />
 
                 <div className="relative max-w-6xl mx-auto px-4 text-center">
                     <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-400/20 text-purple-300 text-xs font-bold mb-6">
@@ -286,7 +286,7 @@ export default function FreelancersPage() {
             <section className="py-20">
                 <div className="max-w-4xl mx-auto px-4 text-center">
                     <div className="bg-gradient-to-br from-indigo-950 to-purple-950 rounded-3xl p-12 sm:p-16 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-brand-orange/10 rounded-full blur-3xl" />
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-brand-orange/10 rounded-full blur-3xl transform-gpu" />
                         <div className="relative">
                             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
                                 Ready to Build Your Dream Team?

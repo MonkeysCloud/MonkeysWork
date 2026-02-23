@@ -343,8 +343,8 @@ export default function PricingClient() {
             <section className="py-16 sm:py-20">
                 <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
                     <div className="rounded-3xl bg-gradient-to-r from-brand-dark to-[#2a2b3d] p-8 sm:p-12 lg:p-16 text-center relative overflow-hidden">
-                        <div className="absolute -top-20 -right-20 w-60 h-60 bg-brand-orange/10 rounded-full blur-3xl" />
-                        <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl" />
+                        <div className="absolute -top-20 -right-20 w-60 h-60 bg-brand-orange/10 rounded-full blur-3xl transform-gpu" />
+                        <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl transform-gpu" />
                         <div className="relative">
                             <h2 className="text-2xl sm:text-3xl font-bold text-white">
                                 Need more than self-serve?

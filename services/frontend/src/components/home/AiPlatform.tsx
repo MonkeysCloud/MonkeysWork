@@ -80,8 +80,8 @@ export default function AiPlatform() {
                             </div>
 
                             {/* glow effect */}
-                            <div className="absolute -top-20 -right-20 w-60 h-60 bg-brand-orange/10 rounded-full blur-3xl" />
-                            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl" />
+                            <div className="absolute -top-20 -right-20 w-60 h-60 bg-brand-orange/10 rounded-full blur-3xl transform-gpu" />
+                            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl transform-gpu" />
                         </div>
                     </div>
 

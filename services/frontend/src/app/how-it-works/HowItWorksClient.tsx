@@ -297,7 +297,7 @@ function StepVisual({ type, isClient }: { type: string; isClient: boolean }) {
     return (
         <div className="bg-gradient-to-br from-brand-dark to-[#2a2b3d] rounded-2xl p-6 sm:p-8 relative overflow-hidden">
             {visuals[type] || null}
-            <div className="absolute -top-16 -right-16 w-40 h-40 bg-brand-orange/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -top-16 -right-16 w-40 h-40 bg-brand-orange/5 rounded-full blur-3xl transform-gpu pointer-events-none" />
         </div>
     );
 }

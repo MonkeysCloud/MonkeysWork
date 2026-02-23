@@ -94,8 +94,8 @@ export default function JobsPage() {
             {/* ── Hero Section ────────────────────────────── */}
             <section className="relative overflow-hidden bg-gradient-to-br from-brand-dark via-gray-900 to-brand-dark pt-32 pb-20">
                 {/* Decorative blobs */}
-                <div className="absolute top-0 left-1/4 w-96 h-96 bg-brand-orange/10 rounded-full blur-3xl" />
-                <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl" />
+                <div className="absolute top-0 left-1/4 w-96 h-96 bg-brand-orange/10 rounded-full blur-3xl transform-gpu" />
+                <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl transform-gpu" />
 
                 <div className="relative max-w-6xl mx-auto px-4 text-center">
                     <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-orange/10 border border-brand-orange/20 text-brand-orange text-xs font-bold mb-6">
@@ -247,7 +247,7 @@ export default function JobsPage() {
             <section className="py-20">
                 <div className="max-w-4xl mx-auto px-4 text-center">
                     <div className="bg-gradient-to-br from-brand-dark to-gray-900 rounded-3xl p-12 sm:p-16 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-brand-orange/10 rounded-full blur-3xl" />
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-brand-orange/10 rounded-full blur-3xl transform-gpu" />
                         <div className="relative">
                             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
                                 Ready to Start Freelancing?
