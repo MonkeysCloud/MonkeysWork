@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Suspense } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import CookieBanner from "@/components/CookieBanner";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 import { AuthProvider } from "@/contexts/AuthContext";
 import "./globals.css";
 
@@ -50,10 +53,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        <Suspense>
+          <GoogleAnalytics />
+        </Suspense>
         <AuthProvider>
           <Header />
           <main className="min-h-[calc(100vh-72px)]">{children}</main>
           <Footer />
+          <CookieBanner />
         </AuthProvider>
       </body>
     </html>

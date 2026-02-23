@@ -62,8 +62,11 @@ COPY --from=builder /build/www /app/www
 # Copy local overrides (if any exist during build)
 COPY . /app/
 
-# Set permissions
-RUN chown -R appuser:www-data /app/www && chmod -R 755 /app/www
+# Set permissions — www-data (PHP-FPM group) needs write access to var/
+RUN chown -R appuser:www-data /app/www \
+    && chmod -R 755 /app/www \
+    && mkdir -p /app/www/var/logs /app/www/var/cache/mlc /app/www/var/cache/rate_limit /app/www/var/cache/views \
+    && chmod -R 775 /app/www/var
 
 EXPOSE 8080
 
