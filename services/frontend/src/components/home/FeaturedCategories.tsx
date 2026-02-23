@@ -23,7 +23,7 @@ export default function FeaturedCategories() {
                         Explore by category
                     </h2>
                     <Link
-                        href="/categories"
+                        href="/register"
                         className="hidden sm:inline-flex items-center gap-1 text-sm font-semibold text-brand-orange hover:text-brand-orange-hover transition-colors"
                     >
                         Browse all categories
@@ -38,7 +38,7 @@ export default function FeaturedCategories() {
                     {CATEGORIES.map((cat) => (
                         <Link
                             key={cat.slug}
-                            href={`/categories/${cat.slug}`}
+                            href="/register"
                             className="flex-shrink-0 snap-start w-[200px] group bg-white rounded-2xl p-6 border border-brand-border/60 hover:border-brand-orange/30 shadow-sm hover:shadow-[0_8px_32px_rgba(240,138,17,0.1)] transition-all duration-300"
                         >
                             <span className="text-3xl block mb-4">{cat.icon}</span>
@@ -55,7 +55,7 @@ export default function FeaturedCategories() {
                 {/* mobile browse all */}
                 <div className="mt-6 text-center sm:hidden">
                     <Link
-                        href="/categories"
+                        href="/register"
                         className="inline-flex items-center gap-1 text-sm font-semibold text-brand-orange"
                     >
                         Browse all categories →

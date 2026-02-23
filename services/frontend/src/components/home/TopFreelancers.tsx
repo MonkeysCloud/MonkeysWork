@@ -7,7 +7,8 @@ const API_BASE =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
 
 type Freelancer = {
-    id: string;
+    id?: string;
+    user_id?: string;
     display_name: string;
     headline: string | null;
     avatar_url: string | null;
@@ -100,7 +101,7 @@ export default function TopFreelancers() {
 
                         return (
                             <Link
-                                key={f.id}
+                                key={f.user_id || f.id || idx}
                                 href="/register"
                                 className="flex-shrink-0 snap-start w-[260px] group bg-white rounded-2xl p-6 border border-brand-border/60 hover:border-brand-orange/30 shadow-sm hover:shadow-[0_8px_32px_rgba(240,138,17,0.1)] transition-all duration-300"
                             >
