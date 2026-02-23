@@ -146,7 +146,7 @@ services:
       PORT: "3001"
       REDIS_URL: redis://redis:6379
       CORS_ORIGIN: http://localhost:3000
-      JWT_SECRET: dev-secret-change-me
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
     depends_on:
       redis:
         condition: service_healthy

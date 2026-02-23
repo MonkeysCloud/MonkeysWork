@@ -66,12 +66,14 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
         });
 
         socket.on("connect_error", (err) => {
-            console.error(`[socket] Connection error on ${namespace}:`, err.message);
-            setIsConnected(false);
-            // Stop reconnecting on auth errors — user needs to re-login
-            if (err.message?.toLowerCase().includes("token") || err.message?.toLowerCase().includes("auth")) {
+            const isAuthError = err.message?.toLowerCase().includes("token") || err.message?.toLowerCase().includes("auth");
+            if (isAuthError) {
+                console.warn(`[socket] Auth failed on ${namespace} — will reconnect on next login`);
                 socket.disconnect();
+            } else {
+                console.warn(`[socket] Connection error on ${namespace}:`, err.message);
             }
+            setIsConnected(false);
         });
 
         socketRef.current = socket;

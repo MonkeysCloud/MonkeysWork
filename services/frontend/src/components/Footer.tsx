@@ -185,6 +185,19 @@ export default function Footer() {
                 </div>
             </div>
 
+            {/* Powered by */}
+            <div className="bg-white/95 mt-8 py-3 flex items-center justify-center gap-2 rounded-t-xl">
+                <span className="text-xs text-gray-400">Powered by</span>
+                <a
+                    href="https://monkeyslegion.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 opacity-60 hover:opacity-100 transition-opacity"
+                >
+                    <img src="/MonkeysLegion.svg" alt="MonkeysLegion" className="h-5 w-auto" />
+                </a>
+            </div>
+
             {/* bottom safe area for mobile CTA bar */}
             <div className="h-16 md:h-0" />
         </footer>
