@@ -76,7 +76,7 @@ export default function ClientRegisterForm() {
         if (!form.email.trim()) errs.email = "Email is required";
         if (!form.password || form.password.length < 8)
             errs.password = "Password must be at least 8 characters";
-        if (!agreed) errs.terms = "You must accept the terms";
+        if (!agreed) errs.terms = "You must accept the legal agreements to continue";
         if (Object.keys(errs).length) {
             setFieldErrors(errs);
             return;
@@ -103,6 +103,9 @@ export default function ClientRegisterForm() {
                         Intl.DateTimeFormat().resolvedOptions().timeZone ??
                         "UTC",
                     locale: navigator.language?.slice(0, 2) ?? "en",
+                    accepted_terms: agreed,
+                    accepted_fees: agreed,
+                    accepted_contractor: agreed,
                     metadata: JSON.stringify({
                         company_name: form.companyName || null,
                         company_size: form.companySize || null,
@@ -347,26 +350,28 @@ export default function ClientRegisterForm() {
                             </select>
                         </div>
 
-                        {/* terms */}
+                        {/* ── Legal acceptance ── */}
                         <label className="flex items-start gap-3 cursor-pointer">
                             <input
                                 type="checkbox"
                                 checked={agreed}
                                 onChange={(e) => {
                                     setAgreed(e.target.checked);
-                                    setFieldErrors((prev) => {
-                                        const next = { ...prev };
-                                        delete next.terms;
-                                        return next;
-                                    });
+                                    setFieldErrors((prev) => { const n = { ...prev }; delete n.terms; return n; });
                                 }}
                                 className="mt-0.5 w-4 h-4 rounded border-brand-border/60 text-brand-orange focus:ring-brand-orange/30"
                             />
                             <span className={`text-xs leading-relaxed ${fieldErrors.terms ? "text-red-500" : "text-brand-muted"}`}>
                                 I agree to the{" "}
-                                <Link href="/terms" className="text-brand-orange hover:text-brand-orange-hover font-medium">Terms of Service</Link>
-                                {" "}and{" "}
-                                <Link href="/privacy" className="text-brand-orange hover:text-brand-orange-hover font-medium">Privacy Policy</Link>
+                                <Link href="/terms" className="text-brand-orange hover:text-brand-orange-hover font-medium">Terms of Service</Link>,{" "}
+                                <Link href="/privacy" className="text-brand-orange hover:text-brand-orange-hover font-medium">Privacy Policy</Link>, and{" "}
+                                <Link href="/cookies" className="text-brand-orange hover:text-brand-orange-hover font-medium">Cookie Policy</Link>.
+                                I acknowledge the{" "}
+                                <Link href="/terms#fees" className="text-brand-orange hover:text-brand-orange-hover font-medium">platform fees</Link>,{" "}
+                                <Link href="/terms#disputes" className="text-brand-orange hover:text-brand-orange-hover font-medium">dispute resolution process</Link>,
+                                and that MonkeysWork is a marketplace —{" "}
+                                <Link href="/terms#relationship" className="text-brand-orange hover:text-brand-orange-hover font-medium">no employer-employee relationship</Link>{" "}
+                                is created.
                             </span>
                         </label>
 

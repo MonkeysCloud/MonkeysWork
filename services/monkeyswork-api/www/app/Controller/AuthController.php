@@ -43,6 +43,11 @@ final class AuthController
             return $validationError;
         }
 
+        // ── Require legal acceptance ──
+        if (empty($data['accepted_terms']) || empty($data['accepted_fees']) || empty($data['accepted_contractor'])) {
+            return $this->error('You must accept all legal agreements to register', 422);
+        }
+
         $email = strtolower(trim($data['email']));
 
         // Check duplicate
@@ -63,20 +68,29 @@ final class AuthController
                      :first_name, :last_name, :timezone, :locale, 1,
                      :metadata, :created_at, :updated_at)'
         )->execute([
-            'id'            => $id,
-            'email'         => $email,
-            'password_hash' => password_hash($data['password'], PASSWORD_BCRYPT),
-            'role'          => $data['role'],
-            'status'        => 'pending_verification',
-            'display_name'  => $data['display_name'],
-            'first_name'    => $data['first_name'] ?? null,
-            'last_name'     => $data['last_name'] ?? null,
-            'timezone'      => $data['timezone'] ?? 'UTC',
-            'locale'        => $data['locale'] ?? 'en',
-            'metadata'      => json_encode($data['metadata'] ?? []),
-            'created_at'    => $now,
-            'updated_at'    => $now,
-        ]);
+                    'id' => $id,
+                    'email' => $email,
+                    'password_hash' => password_hash($data['password'], PASSWORD_BCRYPT),
+                    'role' => $data['role'],
+                    'status' => 'pending_verification',
+                    'display_name' => $data['display_name'],
+                    'first_name' => $data['first_name'] ?? null,
+                    'last_name' => $data['last_name'] ?? null,
+                    'timezone' => $data['timezone'] ?? 'UTC',
+                    'locale' => $data['locale'] ?? 'en',
+                    'metadata' => json_encode(array_merge(
+                        $data['metadata'] ?? [],
+                        [
+                            'legal_accepted_at' => $now,
+                            'terms_version' => '2026-02-23',
+                            'accepted_terms' => true,
+                            'accepted_fees' => true,
+                            'accepted_contractor' => true,
+                        ]
+                    )),
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
 
         // Create empty profile row based on role
         $role = $data['role'];
@@ -162,11 +176,11 @@ final class AuthController
         $header = self::base64UrlEncode(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
 
         $accessPayload = self::base64UrlEncode(json_encode([
-            'sub'   => $user['id'],
-            'role'  => $user['role'],
+            'sub' => $user['id'],
+            'role' => $user['role'],
             'email' => strtolower(trim($data['email'])),
-            'iat'   => $now,
-            'exp'   => $now + 1800, // 30 minutes
+            'iat' => $now,
+            'exp' => $now + 1800, // 30 minutes
         ]));
         $accessSig = self::base64UrlEncode(
             hash_hmac('sha256', "{$header}.{$accessPayload}", $jwtSecret, true)
@@ -174,10 +188,10 @@ final class AuthController
         $accessToken = "{$header}.{$accessPayload}.{$accessSig}";
 
         $refreshPayload = self::base64UrlEncode(json_encode([
-            'sub'  => $user['id'],
+            'sub' => $user['id'],
             'type' => 'refresh',
-            'iat'  => $now,
-            'exp'  => $now + 604800, // 7 days
+            'iat' => $now,
+            'exp' => $now + 604800, // 7 days
         ]));
         $refreshSig = self::base64UrlEncode(
             hash_hmac('sha256', "{$header}.{$refreshPayload}", $jwtSecret, true)
@@ -186,13 +200,13 @@ final class AuthController
 
         return $this->json([
             'data' => [
-                'user_id'            => $user['id'],
-                'role'               => $user['role'],
-                'display_name'       => $user['display_name'] ?? null,
-                'profile_completed'  => (bool) $user['profile_completed'],
-                'avatar_url'         => $user['avatar_url'] ?? null,
-                'token'              => $accessToken,
-                'refresh'            => $refreshToken,
+                'user_id' => $user['id'],
+                'role' => $user['role'],
+                'display_name' => $user['display_name'] ?? null,
+                'profile_completed' => (bool) $user['profile_completed'],
+                'avatar_url' => $user['avatar_url'] ?? null,
+                'token' => $accessToken,
+                'refresh' => $refreshToken,
             ],
         ]);
     }
@@ -254,8 +268,8 @@ final class AuthController
         if ($user) {
             // Generate reset token with 1-hour expiry
             $resetToken = bin2hex(random_bytes(32));
-            $expiresAt  = (new \DateTimeImmutable('+1 hour'))->format('Y-m-d H:i:s');
-            $now        = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+            $expiresAt = (new \DateTimeImmutable('+1 hour'))->format('Y-m-d H:i:s');
+            $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
             $this->db->pdo()->prepare(
                 'UPDATE "user" SET
@@ -330,10 +344,10 @@ final class AuthController
                 updated_at = :now
              WHERE id = :id'
         )->execute([
-            'hash' => password_hash($data['password'], PASSWORD_BCRYPT),
-            'now'  => $now,
-            'id'   => $user['id'],
-        ]);
+                    'hash' => password_hash($data['password'], PASSWORD_BCRYPT),
+                    'now' => $now,
+                    'id' => $user['id'],
+                ]);
 
         return $this->json(['message' => 'Password has been reset successfully']);
     }
@@ -440,11 +454,14 @@ final class AuthController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
             mt_rand(0, 0xffff),
             mt_rand(0, 0x0fff) | 0x4000,
             mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 }
