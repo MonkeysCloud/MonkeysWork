@@ -73,6 +73,13 @@ jobs:
                 -f services/${{ matrix.service }}/Dockerfile \
                 services/
               ;;
+            frontend)
+              docker build \
+                --build-arg NEXT_PUBLIC_GITHUB_CLIENT_ID=${{ secrets.GH_OAUTH_CLIENT_ID }} \
+                --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
+                -t "$REGISTRY/${{ matrix.service }}:$TAG" \
+                services/${{ matrix.service }}/
+              ;;
             *)
               docker build \
                 -t "$REGISTRY/${{ matrix.service }}:$TAG" \
