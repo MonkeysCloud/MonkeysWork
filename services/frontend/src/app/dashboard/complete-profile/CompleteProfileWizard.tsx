@@ -573,6 +573,7 @@ export default function CompleteProfileWizard() {
     const [aiGenerating, setAiGenerating] = useState(false);
     const [aiSuggestingSkills, setAiSuggestingSkills] = useState(false);
     const [aiSuggestedSkills, setAiSuggestedSkills] = useState<{ name: string; reason: string }[]>([]);
+    const [aiPreview, setAiPreview] = useState<{ headline: string; bio: string } | null>(null);
 
     const isClient = user?.role === "client";
     const [verifEvidence, setVerifEvidence] = useState<VerificationEvidence>(EMPTY_VERIFICATION);
@@ -742,6 +743,7 @@ export default function CompleteProfileWizard() {
     const aiEnhanceProfile = async () => {
         setAiGenerating(true);
         setError("");
+        setAiPreview(null);
         try {
             const authToken = token || localStorage.getItem("mw_token");
             const res = await fetch(`${API_BASE}/ai/profile/enhance`, {
@@ -761,8 +763,10 @@ export default function CompleteProfileWizard() {
             if (res.ok) {
                 const body = await res.json();
                 const d = body.data || {};
-                if (d.headline) set("headline", d.headline);
-                if (d.bio) set("bio", d.bio);
+                setAiPreview({
+                    headline: d.headline || "",
+                    bio: d.bio || "",
+                });
             } else {
                 setError("AI service is temporarily unavailable. Try again later.");
             }
@@ -1254,6 +1258,77 @@ export default function CompleteProfileWizard() {
                 AI will use your skills and experience to craft a professional profile.
                 {form.selected_skills.length === 0 && " Tip: Add skills first for better results."}
             </p>
+
+            {/* AI Preview Modal */}
+            {aiPreview && (
+                <div className="bg-white border-2 border-purple-200 rounded-2xl p-5 shadow-[0_8px_30px_rgba(139,92,246,0.12)] space-y-4 animate-in slide-in-from-top-2">
+                    <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                            ✨ AI-Generated Preview
+                        </h4>
+                        <button
+                            type="button"
+                            onClick={() => setAiPreview(null)}
+                            className="text-brand-muted hover:text-brand-dark text-xs"
+                        >
+                            ✕ Dismiss
+                        </button>
+                    </div>
+
+                    {aiPreview.headline && (
+                        <div>
+                            <label className="block text-[11px] font-semibold text-brand-muted uppercase tracking-wide mb-1">Headline</label>
+                            <div className="bg-purple-50 border border-purple-100 rounded-xl px-4 py-3 text-sm text-brand-dark">
+                                {aiPreview.headline}
+                            </div>
+                            {form.headline && form.headline !== aiPreview.headline && (
+                                <p className="text-[10px] text-brand-muted mt-1">Current: <span className="italic">{form.headline}</span></p>
+                            )}
+                        </div>
+                    )}
+
+                    {aiPreview.bio && (
+                        <div>
+                            <label className="block text-[11px] font-semibold text-brand-muted uppercase tracking-wide mb-1">Bio</label>
+                            <div className="bg-purple-50 border border-purple-100 rounded-xl px-4 py-3 text-sm text-brand-dark whitespace-pre-wrap">
+                                {aiPreview.bio}
+                            </div>
+                            {form.bio && form.bio !== aiPreview.bio && (
+                                <p className="text-[10px] text-brand-muted mt-1">Current: <span className="italic line-clamp-2">{form.bio}</span></p>
+                            )}
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-3 pt-1">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (aiPreview.headline) set("headline", aiPreview.headline);
+                                if (aiPreview.bio) set("bio", aiPreview.bio);
+                                setAiPreview(null);
+                            }}
+                            className="px-5 py-2 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                        >
+                            ✓ Apply Changes
+                        </button>
+                        <button
+                            type="button"
+                            onClick={aiEnhanceProfile}
+                            disabled={aiGenerating}
+                            className="px-4 py-2 text-purple-600 text-xs font-semibold border border-purple-200 rounded-lg hover:bg-purple-50 transition-colors disabled:opacity-50"
+                        >
+                            🔄 Regenerate
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setAiPreview(null)}
+                            className="px-4 py-2 text-brand-muted text-xs font-semibold rounded-lg hover:text-brand-dark transition-colors"
+                        >
+                            Discard
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                 <Field label="Hourly Rate ($)">
