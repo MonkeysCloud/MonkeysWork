@@ -22,7 +22,7 @@ const pillars = [
     {
         icon: "🤖",
         title: "AI Content Moderation",
-        description: "Our Vertex AI-powered moderation system reviews all job posts, proposals, and content in real-time. It detects spam, fraudulent listings, inappropriate content, and policy violations — escalating edge cases to our human review team.",
+        description: "Our AI-powered moderation system reviews all job posts, proposals, and content in real-time. It detects spam, fraudulent listings, inappropriate content, and policy violations — escalating edge cases to our human review team.",
         highlights: ["Real-time AI content scanning", "Spam and scam detection", "Human review for edge cases", "Continuous model improvement"],
     },
     {

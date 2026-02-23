@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
     title: "AI Features — MonkeysWork",
-    description: "Discover how MonkeysWork uses Vertex AI for smart job matching, proposal assistance, content moderation, and scope analysis.",
+    description: "Discover how MonkeysWork uses advanced AI for smart job matching, proposal assistance, content moderation, and scope analysis.",
 };
 
 const features = [
@@ -18,7 +18,7 @@ const features = [
         icon: "✍️",
         title: "AI Proposal Assistant",
         color: "#8b5cf6",
-        description: "Freelancers can generate tailored proposal drafts powered by Vertex AI. The assistant analyzes the job description, highlights relevant experience, and crafts a compelling pitch — giving freelancers a competitive edge.",
+        description: "Freelancers can generate tailored proposal drafts powered by our AI engine. The assistant analyzes the job description, highlights relevant experience, and crafts a compelling pitch — giving freelancers a competitive edge.",
         details: ["Job-aware proposal generation", "Tone & length customization", "Highlights relevant portfolio work", "Budget & timeline suggestions"],
     },
     {
@@ -51,11 +51,11 @@ const features = [
     },
 ];
 
-const techStack = [
-    { name: "Google Vertex AI", role: "Foundation model inference" },
-    { name: "Gemini Pro", role: "Text generation & analysis" },
-    { name: "Custom ML Models", role: "Matching & scoring" },
-    { name: "pgvector", role: "Vector similarity search" },
+const aiCapabilities = [
+    { icon: "🧠", name: "Intelligent Matching", desc: "Multi-signal algorithms that learn from every hire to surface better talent over time" },
+    { icon: "⚡", name: "Real-Time Analysis", desc: "Instant scoring, moderation, and recommendations — no waiting around" },
+    { icon: "🔮", name: "Predictive Insights", desc: "Budget estimates, timeline forecasting, and success probability for every project" },
+    { icon: "🔒", name: "Privacy-First Design", desc: "Anonymized, aggregated data powers our models — your personal info stays private" },
 ];
 
 export default function AiPage() {
@@ -90,7 +90,7 @@ export default function AiPage() {
                         marginBottom: 20,
                         border: "1px solid rgba(139, 92, 246, 0.25)",
                     }}>
-                        Powered by Vertex AI
+                        AI-Powered Platform
                     </span>
                     <h1 style={{ fontSize: "2.5rem", fontWeight: 800, margin: "0 0 16px", lineHeight: 1.2 }}>
                         AI That Makes Freelancing <span style={{ color: "#f08a11" }}>Smarter</span>
@@ -152,28 +152,29 @@ export default function AiPage() {
                 </div>
             </section>
 
-            {/* Tech stack */}
+            {/* AI Capabilities */}
             <section style={{ background: "#f8fafc", padding: "3rem 1.5rem" }}>
                 <div style={{ maxWidth: 700, margin: "0 auto", textAlign: "center" }}>
                     <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#0f172a", margin: "0 0 8px" }}>
-                        Built on Industry-Leading AI
+                        Built for Performance at Scale
                     </h2>
                     <p style={{ fontSize: "0.875rem", color: "#64748b", margin: "0 0 24px" }}>
-                        Our AI stack is powered by cutting-edge technologies
+                        Our AI infrastructure is designed to handle millions of matches, proposals, and decisions — reliably and fast
                     </p>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-                        {techStack.map((t, i) => (
+                        {aiCapabilities.map((c, i) => (
                             <div key={i} style={{
                                 background: "#fff",
                                 borderRadius: 12,
-                                padding: "16px 12px",
+                                padding: "20px 12px",
                                 border: "1px solid #e2e8f0",
                             }}>
-                                <div style={{ fontSize: "0.8125rem", fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>
-                                    {t.name}
+                                <div style={{ fontSize: 28, marginBottom: 8 }}>{c.icon}</div>
+                                <div style={{ fontSize: "0.8125rem", fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>
+                                    {c.name}
                                 </div>
-                                <div style={{ fontSize: "0.6875rem", color: "#94a3b8" }}>
-                                    {t.role}
+                                <div style={{ fontSize: "0.6875rem", color: "#94a3b8", lineHeight: 1.5 }}>
+                                    {c.desc}
                                 </div>
                             </div>
                         ))}

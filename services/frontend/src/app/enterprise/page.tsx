@@ -40,7 +40,7 @@ const features = [
     {
         icon: "🤖",
         title: "AI Talent Matching",
-        description: "Our Vertex AI engine analyzes your requirements and matches you with pre-vetted freelancers who have proven track records in your industry.",
+        description: "Our AI engine analyzes your requirements and matches you with pre-vetted freelancers who have proven track records in your industry.",
     },
     {
         icon: "⚖️",

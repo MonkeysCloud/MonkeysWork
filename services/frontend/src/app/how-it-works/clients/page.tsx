@@ -284,6 +284,43 @@ export default function HowItWorksClientsPage() {
                 </div>
             </section>
 
+            {/* ── AI-Powered ────────────────────────────── */}
+            <section className="py-20 bg-gradient-to-br from-[#0f172a] to-[#1e293b] text-white relative overflow-hidden">
+                <div className="absolute top-[-100px] left-[-60px] w-[350px] h-[350px] rounded-full bg-purple-500/10 blur-3xl" />
+                <div className="absolute bottom-[-80px] right-[-40px] w-[300px] h-[300px] rounded-full bg-brand-orange/10 blur-3xl" />
+                <div className="relative mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
+                    <span className="inline-block px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-purple-300 bg-purple-500/15 rounded-full mb-6 border border-purple-500/25">
+                        AI-Powered
+                    </span>
+                    <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">
+                        Smarter Hiring with <span className="text-brand-orange">AI</span>
+                    </h2>
+                    <p className="text-white/60 max-w-lg mx-auto mb-8 leading-relaxed">
+                        From intelligent matching to scope analysis, our AI helps you find the right freelancer faster and manage projects more efficiently.
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+                        {[
+                            { icon: "🎯", label: "Smart Matching" },
+                            { icon: "🔬", label: "Scope Analysis" },
+                            { icon: "🛡️", label: "AI Moderation" },
+                            { icon: "🔍", label: "Smart Search" },
+                        ].map((item) => (
+                            <div key={item.label} className="bg-white/5 rounded-xl border border-white/10 p-4">
+                                <span className="text-2xl block mb-2">{item.icon}</span>
+                                <span className="text-xs font-semibold text-white/70">{item.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <a
+                        href="/ai"
+                        className="inline-flex items-center gap-2 px-8 py-3.5 text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-[0_4px_20px_rgba(139,92,246,0.35)] transition-all duration-300 hover:-translate-y-0.5"
+                    >
+                        Explore AI Features
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                    </a>
+                </div>
+            </section>
+
             {/* ── Final CTA ────────────────────────────── */}
             <section className="relative overflow-hidden bg-gradient-to-br from-brand-dark via-brand-dark-light to-brand-dark py-24">
                 <div className="absolute top-[-100px] right-[-50px] w-[350px] h-[350px] rounded-full bg-brand-orange/8 blur-3xl" />
