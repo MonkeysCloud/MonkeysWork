@@ -94,7 +94,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
-        run: docker build -t ${{ matrix.service }}:test services/${{ matrix.service }}/
+        run: |
+          if [[ "${{ matrix.service }}" == "ai-scope-assistant" ]]; then
+            docker build -t ${{ matrix.service }}:test \
+              -f services/${{ matrix.service }}/Dockerfile \
+              services/
+          else
+            docker build -t ${{ matrix.service }}:test \
+              services/${{ matrix.service }}/
+          fi
 
   terraform-validate:
     runs-on: ubuntu-latest
