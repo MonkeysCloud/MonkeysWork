@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useNotifications";
 import { getMenuForRole, type MenuItem } from "./sidebarMenus";
@@ -15,14 +15,19 @@ const API =
 function NavItem({
     item,
     pathname,
+    searchParams,
     collapsed,
     badgeCounts = {},
 }: {
     item: MenuItem;
     pathname: string;
+    searchParams: string;
     collapsed: boolean;
     badgeCounts?: Record<string, number>;
 }) {
+    /* Build a full current URL for comparison */
+    const currentUrl = searchParams ? `${pathname}?${searchParams}` : pathname;
+
     const isActive =
         pathname === item.href ||
         (item.children?.some((c) => pathname.startsWith(c.href.split("?")[0])) ??
@@ -82,8 +87,26 @@ function NavItem({
             {item.children && open && !collapsed && (
                 <div className="ml-9 mt-1 space-y-0.5 border-l border-white/10 pl-3">
                     {item.children.map((child) => {
+                        const childHasQuery = child.href.includes("?");
                         const childBase = child.href.split("?")[0];
-                        const childActive = pathname === childBase || (pathname.startsWith(childBase + "/") && !item.children?.some((s) => s.href !== child.href && pathname.startsWith(s.href.split("?")[0])));
+                        let childActive: boolean;
+
+                        if (childHasQuery) {
+                            // Link with query params — match decoded URL to handle %2C vs commas
+                            childActive = decodeURIComponent(currentUrl) === child.href;
+                        } else {
+                            // Link without query params — match pathname exactly (no query in URL)
+                            // OR match pathname + starts with sub-path (for nested routes like /create)
+                            childActive =
+                                (pathname === childBase && !searchParams) ||
+                                (pathname.startsWith(childBase + "/") &&
+                                    !item.children?.some(
+                                        (s) =>
+                                            s.href !== child.href &&
+                                            pathname.startsWith(s.href.split("?")[0] + "/")
+                                    ));
+                        }
+
                         return (
                             <Link
                                 key={child.href}
@@ -115,6 +138,8 @@ export default function DashboardShell({
     const { user, token, logout } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
+    const rawSearchParams = useSearchParams();
+    const searchParamsStr = rawSearchParams.toString();
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -166,11 +191,11 @@ export default function DashboardShell({
                 {!collapsed && (
                     <Link href="/" className="flex-shrink-0">
                         <Image
-                            src="/monkeyswork.svg"
+                            src="/monkeyswork-dark.svg"
                             alt="MonkeysWork"
-                            width={140}
-                            height={40}
-                            className="h-9 w-auto brightness-0 invert"
+                            width={180}
+                            height={52}
+                            className="h-11 w-auto"
                         />
                     </Link>
                 )}
@@ -205,6 +230,7 @@ export default function DashboardShell({
                         key={item.label}
                         item={item}
                         pathname={pathname}
+                        searchParams={searchParamsStr}
                         collapsed={collapsed}
                         badgeCounts={badgeCounts}
                     />
@@ -221,6 +247,7 @@ export default function DashboardShell({
                         key={item.label}
                         item={item}
                         pathname={pathname}
+                        searchParams={searchParamsStr}
                         collapsed={collapsed}
                         badgeCounts={badgeCounts}
                     />

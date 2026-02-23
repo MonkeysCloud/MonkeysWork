@@ -121,6 +121,8 @@ services:
       AI_FRAUD_URL: http://ai-fraud-v1:8080/api/v1/fraud/check
       AI_MATCH_URL: http://ai-match-v1:8080/api/v1/match/rank
       AI_SCOPE_URL: http://ai-scope-assistant:8080/api/v1/scope/analyze
+      AI_JOB_ENHANCE_URL: http://ai-scope-assistant:8080/api/v1/job/enhance
+      AI_PROPOSAL_URL: http://ai-scope-assistant:8080/api/v1/proposal/generate
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}

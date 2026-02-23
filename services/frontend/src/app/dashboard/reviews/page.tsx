@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { API } from "@/components/contracts";
+import { API, FILE_HOST } from "@/components/contracts";
 
 /* ── Types ── */
 interface Review {
@@ -102,9 +102,10 @@ function ReviewCard({
     const [showReply, setShowReply] = useState(false);
     const [replyText, setReplyText] = useState("");
 
-    const name = isReceived ? review.reviewer_name : review.reviewee_name;
-    const avatar = isReceived ? review.reviewer_avatar : review.reviewee_avatar;
-    const direction = isReceived ? "From" : "To";
+    /* Always show the reviewer (author) as the main avatar */
+    const authorName = review.reviewer_name;
+    const authorAvatar = review.reviewer_avatar;
+    const otherName = isReceived ? review.reviewer_name : review.reviewee_name;
     const date = new Date(review.created_at).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
@@ -117,16 +118,16 @@ function ReviewCard({
             <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-brand-orange-light flex items-center justify-center text-brand-orange font-bold text-sm">
-                        {avatar ? (
-                            <img src={avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
+                        {authorAvatar ? (
+                            <img src={authorAvatar.startsWith("http") ? authorAvatar : `${FILE_HOST}${authorAvatar}`} alt="" className="w-10 h-10 rounded-full object-cover" />
                         ) : (
-                            name?.charAt(0)?.toUpperCase() || "?"
+                            authorName?.charAt(0)?.toUpperCase() || "?"
                         )}
                     </div>
                     <div>
-                        <div className="text-sm font-bold text-brand-dark">{name}</div>
+                        <div className="text-sm font-bold text-brand-dark">{authorName}</div>
                         <div className="text-xs text-brand-muted">
-                            {direction} · {date}
+                            {isReceived ? `From ${otherName}` : `To ${review.reviewee_name}`} · {date}
                         </div>
                     </div>
                 </div>

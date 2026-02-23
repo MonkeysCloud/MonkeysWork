@@ -268,13 +268,7 @@ export default function BlogArticlePage() {
 
                     {/* Content */}
                     <div
-                        className="prose prose-lg prose-gray max-w-none
-                            prose-headings:text-brand-text prose-headings:font-bold
-                            prose-a:text-brand-orange prose-a:no-underline hover:prose-a:underline
-                            prose-img:rounded-xl prose-img:shadow-lg
-                            prose-blockquote:border-brand-orange prose-blockquote:bg-brand-orange-light/30 prose-blockquote:rounded-r-xl prose-blockquote:py-1
-                            prose-code:text-brand-orange prose-code:bg-brand-orange-light prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
-                            prose-pre:bg-brand-dark prose-pre:rounded-xl prose-pre:shadow-lg"
+                        className="prose prose-lg max-w-none"
                         dangerouslySetInnerHTML={{
                             __html: processContent(post.content),
                         }}

@@ -237,3 +237,199 @@ async def moderate_job_with_vertex(
     except Exception as e:
         logger.exception("vertex_moderation_failed", error=str(e))
         return None
+
+
+# ── Job Enhancement ──────────────────────────────────────────────────
+
+JOB_ENHANCE_PROMPT = """You are a hiring expert for MonkeysWork, a freelance marketplace.
+Improve this job posting to attract better freelancers.
+
+CURRENT JOB POSTING:
+- Title: {title}
+- Description: {description}
+- Category: {category}
+- Skills Listed: {skills}
+- Budget Range: ${budget_min} – ${budget_max}
+
+PROVIDE:
+1. An improved, SEO-friendly title
+2. An enhanced, well-structured description (use paragraph text, not HTML/markdown)
+3. Up to 5 additional suggested skills that would be relevant
+4. Suggested milestone breakdown (3-5 milestones with titles and estimated amounts)
+5. Tips to improve the posting
+
+Respond in STRICT JSON only, no markdown fences:
+{{
+  "improved_title": "<string>",
+  "improved_description": "<string, multi-paragraph, plain text with line breaks>",
+  "suggested_skills": ["<skill1>", "<skill2>", ...],
+  "suggested_milestones": [
+    {{"title": "<string>", "description": "<string>", "estimated_amount": <float>}}
+  ],
+  "tips": ["<tip1>", "<tip2>", ...],
+  "estimated_budget_range": {{"min": <float>, "max": <float>}}
+}}"""
+
+
+async def enhance_job_with_vertex(
+    title: str,
+    description: str,
+    category: str = "",
+    skills: list = None,
+    budget_min: float = None,
+    budget_max: float = None,
+) -> Optional[dict]:
+    """Use Vertex AI Gemini to enhance a job posting."""
+    if not is_vertex_enabled():
+        return None
+
+    prompt = JOB_ENHANCE_PROMPT.format(
+        title=title,
+        description=description,
+        category=category or "General",
+        skills=", ".join(skills or []),
+        budget_min=budget_min or "N/A",
+        budget_max=budget_max or "N/A",
+    )
+
+    try:
+        start = time.monotonic()
+        model = _get_model()
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.4,
+                "max_output_tokens": 4096,
+                "response_mime_type": "application/json",
+            },
+        )
+
+        text = response.text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            text = text.rsplit("```", 1)[0].strip()
+
+        result = json.loads(text)
+        result["model"] = VERTEX_MODEL
+        result["latency_ms"] = int((time.monotonic() - start) * 1000)
+
+        logger.info(
+            "vertex_job_enhance_complete",
+            milestones=len(result.get("suggested_milestones", [])),
+            model=VERTEX_MODEL,
+        )
+        return result
+
+    except Exception as e:
+        logger.exception("vertex_job_enhance_failed", error=str(e))
+        return None
+
+
+# ── Proposal Generation ──────────────────────────────────────────────
+
+PROPOSAL_PROMPT = """You are a freelance career coach helping a freelancer write a winning proposal on MonkeysWork.
+
+JOB DETAILS:
+- Title: {job_title}
+- Description: {job_description}
+- Category: {category}
+- Required Skills: {required_skills}
+- Budget: ${budget_min} – ${budget_max}
+- Experience Level: {experience_level}
+
+FREELANCER PROFILE:
+- Name: {freelancer_name}
+- Skills: {freelancer_skills}
+- Bio: {freelancer_bio}
+- Additional highlights: {highlights}
+
+TONE: {tone}
+
+WRITE a compelling proposal cover letter (300-500 words) that:
+1. Acknowledges the client's specific needs
+2. Highlights relevant experience and skills
+3. Proposes a clear approach/methodology
+4. Expresses enthusiasm and professionalism
+5. Ends with a strong call-to-action
+
+Also suggest:
+- A competitive bid amount within the budget range
+- 3-5 milestones with titles, descriptions, and amounts
+- Estimated duration in weeks
+
+Respond in STRICT JSON only, no markdown fences:
+{{
+  "cover_letter": "<string, multi-paragraph, plain text>",
+  "suggested_bid": <float>,
+  "suggested_milestones": [
+    {{"title": "<string>", "description": "<string>", "amount": <float>}}
+  ],
+  "suggested_duration_weeks": <int>,
+  "key_talking_points": ["<point1>", "<point2>", ...]
+}}"""
+
+
+async def generate_proposal_with_vertex(
+    job_title: str,
+    job_description: str,
+    category: str = "",
+    required_skills: list = None,
+    budget_min: float = None,
+    budget_max: float = None,
+    experience_level: str = "",
+    freelancer_name: str = "",
+    freelancer_skills: list = None,
+    freelancer_bio: str = "",
+    highlights: str = "",
+    tone: str = "professional",
+) -> Optional[dict]:
+    """Use Vertex AI Gemini to generate a proposal draft."""
+    if not is_vertex_enabled():
+        return None
+
+    prompt = PROPOSAL_PROMPT.format(
+        job_title=job_title,
+        job_description=job_description,
+        category=category or "General",
+        required_skills=", ".join(required_skills or []),
+        budget_min=budget_min or "N/A",
+        budget_max=budget_max or "N/A",
+        experience_level=experience_level or "Not specified",
+        freelancer_name=freelancer_name or "Freelancer",
+        freelancer_skills=", ".join(freelancer_skills or []),
+        freelancer_bio=freelancer_bio or "Not provided",
+        highlights=highlights or "Not provided",
+        tone=tone,
+    )
+
+    try:
+        start = time.monotonic()
+        model = _get_model()
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.5,
+                "max_output_tokens": 4096,
+                "response_mime_type": "application/json",
+            },
+        )
+
+        text = response.text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            text = text.rsplit("```", 1)[0].strip()
+
+        result = json.loads(text)
+        result["model"] = VERTEX_MODEL
+        result["latency_ms"] = int((time.monotonic() - start) * 1000)
+
+        logger.info(
+            "vertex_proposal_generate_complete",
+            milestones=len(result.get("suggested_milestones", [])),
+            model=VERTEX_MODEL,
+        )
+        return result
+
+    except Exception as e:
+        logger.exception("vertex_proposal_generate_failed", error=str(e))
+        return None

@@ -87,11 +87,11 @@ export default function Footer() {
                     <div className="col-span-2">
                         <Link href="/" className="inline-block">
                             <Image
-                                src="/monkeyswork.svg"
+                                src="/monkeyswork-dark.svg"
                                 alt="MonkeysWork"
-                                width={160}
-                                height={48}
-                                className="h-12 w-auto brightness-0 invert"
+                                width={200}
+                                height={60}
+                                className="h-16 w-auto"
                             />
                         </Link>
                         <p className="mt-4 text-sm text-white/50 max-w-xs leading-relaxed">

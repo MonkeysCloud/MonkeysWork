@@ -45,6 +45,7 @@ export interface Milestone {
     escrow_funded: boolean;
     escrow_released: boolean;
     funded_at?: string;
+    auto_accept_at?: string;
     created_at: string;
 }
 

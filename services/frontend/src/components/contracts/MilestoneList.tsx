@@ -38,13 +38,21 @@ export default function MilestoneList({
 
     // Confirm modal state
     const [confirmModal, setConfirmModal] = useState<{
-        type: "fund" | "complete";
+        type: "fund" | "complete" | "revision" | "submit";
         milestone: Milestone;
     } | null>(null);
 
     // Review fields (for complete modal)
     const [reviewRating, setReviewRating] = useState(0);
     const [reviewComment, setReviewComment] = useState("");
+
+    // Revision feedback (for revision modal)
+    const [revisionFeedback, setRevisionFeedback] = useState("");
+
+    // Submit fields (for submit modal)
+    const [submitMessage, setSubmitMessage] = useState("");
+    const [submitFiles, setSubmitFiles] = useState<File[]>([]);
+    const [uploadingFiles, setUploadingFiles] = useState(false);
 
     // Inline star rating component
     function InlineStar({ value, onChange, size = 24 }: { value: number; onChange: (v: number) => void; size?: number }) {
@@ -311,11 +319,24 @@ export default function MilestoneList({
                                             💰 Fund Escrow
                                         </button>
                                     )}
+                                    {isClient && m.status === "in_progress" && (
+                                        <button
+                                            style={styles.btnSuccess}
+                                            disabled={!!actionLoading}
+                                            onClick={() => setConfirmModal({ type: "complete", milestone: m })}
+                                        >
+                                            ✅ Mark Complete
+                                        </button>
+                                    )}
                                     {!isClient && ["in_progress", "revision_requested"].includes(m.status) && (
                                         <button
                                             style={styles.btnPrimary}
                                             disabled={!!actionLoading}
-                                            onClick={() => onMilestoneAction(m.id, "submit")}
+                                            onClick={() => {
+                                                setSubmitMessage("");
+                                                setSubmitFiles([]);
+                                                setConfirmModal({ type: "submit", milestone: m });
+                                            }}
                                         >
                                             📤 Submit Work
                                         </button>
@@ -332,12 +353,38 @@ export default function MilestoneList({
                                             <button
                                                 style={styles.btnOutline}
                                                 disabled={!!actionLoading}
-                                                onClick={() => onMilestoneAction(m.id, "request-revision")}
+                                                onClick={() => {
+                                                    setRevisionFeedback("");
+                                                    setConfirmModal({ type: "revision", milestone: m });
+                                                }}
                                             >
                                                 🔄 Request Revision
                                             </button>
                                         </>
                                     )}
+                                    {/* Auto-accept countdown */}
+                                    {m.status === "submitted" && m.auto_accept_at && (() => {
+                                        const daysLeft = Math.max(0, Math.ceil(
+                                            (new Date(m.auto_accept_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+                                        ));
+                                        return (
+                                            <span
+                                                style={{
+                                                    fontSize: "0.75rem",
+                                                    background: daysLeft <= 3 ? "#fef2f2" : "#eff6ff",
+                                                    color: daysLeft <= 3 ? "#dc2626" : "#2563eb",
+                                                    padding: "0.25rem 0.75rem",
+                                                    borderRadius: 999,
+                                                    fontWeight: 600,
+                                                    display: "inline-flex",
+                                                    alignItems: "center",
+                                                    alignSelf: "center",
+                                                }}
+                                            >
+                                                ⏱️ Auto-accepted in {daysLeft} day{daysLeft !== 1 ? "s" : ""}
+                                            </span>
+                                        );
+                                    })()}
                                 </div>
 
                                 {/* Deliverables */}
@@ -449,7 +496,7 @@ export default function MilestoneList({
                                     ⚠️ This will charge your default payment method. The funds will be held in escrow until the milestone is completed.
                                 </div>
                             </>
-                        ) : (
+                        ) : confirmModal.type === "complete" ? (
                             <>
                                 <div style={{ textAlign: "center", marginBottom: 20 }}>
                                     <div style={{
@@ -514,12 +561,159 @@ export default function MilestoneList({
                                     ✅ Accepting this milestone will release escrow funds to the freelancer. This action cannot be undone.
                                 </div>
                             </>
-                        )}
+                        ) : confirmModal.type === "revision" ? (
+                            <>
+                                <div style={{ textAlign: "center", marginBottom: 20 }}>
+                                    <div style={{
+                                        width: 56, height: 56, borderRadius: "50%",
+                                        background: "#fff7ed", display: "flex", alignItems: "center",
+                                        justifyContent: "center", margin: "0 auto 12px", fontSize: 28,
+                                    }}>🔄</div>
+                                    <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>
+                                        Request Revision
+                                    </h3>
+                                </div>
+
+                                <div style={{
+                                    background: "#f8fafc", borderRadius: 10, padding: 16,
+                                    marginBottom: 16, border: "1px solid #e2e8f0",
+                                }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                        <span style={{ fontSize: 14, color: "#64748b" }}>Milestone</span>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>
+                                            {confirmModal.milestone.title}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                        <span style={{ fontSize: 14, color: "#64748b" }}>Revision #</span>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>
+                                            {(confirmModal.milestone.revision_count || 0) + 1}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div style={{ marginBottom: 16 }}>
+                                    <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                                        💬 What needs to be changed?
+                                    </label>
+                                    <textarea
+                                        value={revisionFeedback}
+                                        onChange={(e) => setRevisionFeedback(e.target.value)}
+                                        placeholder="Describe what needs to be revised or improved..."
+                                        style={{
+                                            width: "100%", padding: "10px 14px", borderRadius: 8,
+                                            border: "1px solid #e5e7eb", fontSize: 14, background: "#f9fafb",
+                                            outline: "none", boxSizing: "border-box" as const, minHeight: 80, resize: "vertical" as const,
+                                        }}
+                                    />
+                                </div>
+
+                                <div style={{
+                                    padding: "10px 14px", borderRadius: 8, background: "#fff7ed",
+                                    color: "#92400e", fontSize: 13, marginBottom: 16, lineHeight: 1.5,
+                                }}>
+                                    ⚠️ The freelancer will be notified and can resubmit their work. The 14-day auto-accept timer will reset.
+                                </div>
+                            </>
+                        ) : confirmModal.type === "submit" ? (
+                            <>
+                                <div style={{ textAlign: "center", marginBottom: 20 }}>
+                                    <div style={{
+                                        width: 56, height: 56, borderRadius: "50%",
+                                        background: "#eff6ff", display: "flex", alignItems: "center",
+                                        justifyContent: "center", margin: "0 auto 12px", fontSize: 28,
+                                    }}>📤</div>
+                                    <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>
+                                        Submit Work
+                                    </h3>
+                                </div>
+
+                                <div style={{
+                                    background: "#f8fafc", borderRadius: 10, padding: 16,
+                                    marginBottom: 16, border: "1px solid #e2e8f0",
+                                }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                        <span style={{ fontSize: 14, color: "#64748b" }}>Milestone</span>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>
+                                            {confirmModal.milestone.title}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                        <span style={{ fontSize: 14, color: "#64748b" }}>Amount</span>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>
+                                            {formatMoney(confirmModal.milestone.amount, confirmModal.milestone.currency)}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Message */}
+                                <div style={{ marginBottom: 16 }}>
+                                    <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                                        💬 Message to client (optional)
+                                    </label>
+                                    <textarea
+                                        value={submitMessage}
+                                        onChange={(e) => setSubmitMessage(e.target.value)}
+                                        placeholder="Describe what you've done, any notes for the client..."
+                                        style={{
+                                            width: "100%", padding: "10px 14px", borderRadius: 8,
+                                            border: "1px solid #e5e7eb", fontSize: 14, background: "#f9fafb",
+                                            outline: "none", boxSizing: "border-box" as const, minHeight: 80, resize: "vertical" as const,
+                                        }}
+                                    />
+                                </div>
+
+                                {/* File attachment */}
+                                <div style={{ marginBottom: 16 }}>
+                                    <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                                        📎 Attach files (optional)
+                                    </label>
+                                    <label style={{
+                                        display: "block", border: "2px dashed #e5e7eb", borderRadius: 8, padding: "12px 16px",
+                                        textAlign: "center", cursor: "pointer", fontSize: 13, color: "#64748b",
+                                        transition: "border-color 0.2s",
+                                    }}>
+                                        <input
+                                            type="file"
+                                            multiple
+                                            style={{ display: "none" }}
+                                            onChange={(e) => {
+                                                if (e.target.files) setSubmitFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                                            }}
+                                        />
+                                        Click to select files or drag & drop
+                                    </label>
+                                    {submitFiles.length > 0 && (
+                                        <div style={{ marginTop: 8 }}>
+                                            {submitFiles.map((f, i) => (
+                                                <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#374151", padding: "4px 0" }}>
+                                                    <span>📎</span>
+                                                    <span style={{ flex: 1 }}>{f.name}</span>
+                                                    <span style={{ color: "#94a3b8" }}>{(f.size / 1024).toFixed(0)} KB</span>
+                                                    <button
+                                                        type="button"
+                                                        style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14 }}
+                                                        onClick={() => setSubmitFiles(prev => prev.filter((_, j) => j !== i))}
+                                                    >✕</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{
+                                    padding: "10px 14px", borderRadius: 8, background: "#eff6ff",
+                                    color: "#1e40af", fontSize: 13, marginBottom: 16, lineHeight: 1.5,
+                                }}>
+                                    📋 Your work will be submitted for client review. They will have 14 days to accept or request revisions.
+                                </div>
+                            </>
+                        ) : null}
 
                         <div style={{ display: "flex", gap: 10 }}>
                             <button
                                 onClick={() => setConfirmModal(null)}
-                                disabled={!!actionLoading}
+                                disabled={!!actionLoading || uploadingFiles}
                                 style={{
                                     flex: 1, padding: "11px 20px", borderRadius: 10,
                                     border: "1px solid #e5e7eb", background: "#fff",
@@ -529,29 +723,86 @@ export default function MilestoneList({
                             <button
                                 onClick={async () => {
                                     const { type, milestone: ms } = confirmModal;
-                                    const body = type === "complete" && reviewRating > 0
-                                        ? { rating: reviewRating, comment: reviewComment }
-                                        : undefined;
-                                    setConfirmModal(null);
-                                    setReviewRating(0);
-                                    setReviewComment("");
-                                    await onMilestoneAction(ms.id, type === "fund" ? "fund" : "accept", body);
+                                    if (type === "submit") {
+                                        setUploadingFiles(true);
+                                        try {
+                                            // Upload files as deliverables
+                                            for (const file of submitFiles) {
+                                                const fd = new FormData();
+                                                fd.append("entity_type", "milestone");
+                                                fd.append("entity_id", ms.id);
+                                                fd.append("files[]", file);
+                                                const upRes = await fetch(`${API}/attachments/upload`, {
+                                                    method: "POST",
+                                                    headers: { Authorization: `Bearer ${token}` },
+                                                    body: fd,
+                                                });
+                                                if (upRes.ok) {
+                                                    const upJson = await upRes.json();
+                                                    const uploaded = upJson.data?.[0];
+                                                    if (uploaded?.file_url) {
+                                                        await fetch(`${API}/milestones/${ms.id}/deliverables`, {
+                                                            method: "POST",
+                                                            headers: {
+                                                                Authorization: `Bearer ${token}`,
+                                                                "Content-Type": "application/json",
+                                                            },
+                                                            body: JSON.stringify({
+                                                                file_name: file.name,
+                                                                file_url: uploaded.file_url,
+                                                                file_size: file.size,
+                                                                mime_type: file.type || "application/octet-stream",
+                                                                notes: submitMessage || null,
+                                                            }),
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                        } catch (e) {
+                                            console.error("File upload error:", e);
+                                        }
+                                        setUploadingFiles(false);
+                                        setConfirmModal(null);
+                                        await onMilestoneAction(ms.id, "submit", { message: submitMessage });
+                                        setSubmitMessage("");
+                                        setSubmitFiles([]);
+                                    } else if (type === "revision") {
+                                        setConfirmModal(null);
+                                        await onMilestoneAction(ms.id, "request-revision", { feedback: revisionFeedback });
+                                        setRevisionFeedback("");
+                                    } else {
+                                        const body = type === "complete" && reviewRating > 0
+                                            ? { rating: reviewRating, comment: reviewComment }
+                                            : undefined;
+                                        setConfirmModal(null);
+                                        setReviewRating(0);
+                                        setReviewComment("");
+                                        await onMilestoneAction(ms.id, type === "fund" ? "fund" : "accept", body);
+                                    }
                                 }}
-                                disabled={!!actionLoading}
+                                disabled={!!actionLoading || uploadingFiles}
                                 style={{
                                     flex: 1, padding: "11px 20px", borderRadius: 10,
                                     border: "none", color: "#fff", fontSize: 14, fontWeight: 600,
-                                    cursor: actionLoading ? "not-allowed" : "pointer",
+                                    cursor: (actionLoading || uploadingFiles) ? "not-allowed" : "pointer",
                                     background: confirmModal.type === "fund"
                                         ? "linear-gradient(135deg, #3b82f6, #2563eb)"
-                                        : "linear-gradient(135deg, #22c55e, #16a34a)",
+                                        : confirmModal.type === "revision"
+                                            ? "linear-gradient(135deg, #f59e0b, #d97706)"
+                                            : confirmModal.type === "submit"
+                                                ? "linear-gradient(135deg, #6366f1, #4f46e5)"
+                                                : "linear-gradient(135deg, #22c55e, #16a34a)",
                                 }}
                             >
-                                {actionLoading
-                                    ? "Processing..."
+                                {(actionLoading || uploadingFiles)
+                                    ? (uploadingFiles ? "Uploading files..." : "Processing...")
                                     : confirmModal.type === "fund"
                                         ? "💰 Confirm & Fund"
-                                        : "✅ Confirm & Release"}
+                                        : confirmModal.type === "revision"
+                                            ? "🔄 Send Revision Request"
+                                            : confirmModal.type === "submit"
+                                                ? "📤 Submit for Review"
+                                                : "✅ Confirm & Release"}
                             </button>
                         </div>
                     </div>

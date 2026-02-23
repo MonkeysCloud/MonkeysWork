@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import ALL_COUNTRIES from "@/data/countries";
+import AiJobAssistant from "@/components/ai/AiJobAssistant";
 
 const RichTextEditor = dynamic(() => import("@/components/RichTextEditor"), {
     ssr: false,
@@ -625,6 +626,20 @@ export default function CreateJobForm() {
                             </p>
                         )}
                     </div>
+
+                    {/* AI Job Assistant */}
+                    <AiJobAssistant
+                        title={form.title}
+                        description={stripHtml(form.description)}
+                        category={categories.find((c) => c.id === form.category_id)?.name || ""}
+                        skills={selectedSkills.map((s) => s.name)}
+                        budgetMin={form.budget_min ? Number(form.budget_min) : null}
+                        budgetMax={form.budget_max ? Number(form.budget_max) : null}
+                        onApplyTitle={(t) => setForm((p) => ({ ...p, title: t }))}
+                        onApplyDescription={(d) => setForm((p) => ({ ...p, description: d }))}
+                        onApplySkills={() => { /* Skills search required — user can add manually */ }}
+                        onApplyMilestones={(ms) => setMilestones(ms)}
+                    />
 
                     {/* category */}
                     <div>

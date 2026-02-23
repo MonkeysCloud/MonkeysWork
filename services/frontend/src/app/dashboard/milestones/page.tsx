@@ -32,6 +32,8 @@ interface Milestone {
     freelancer_id: string;
     client_name: string;
     freelancer_name: string;
+    auto_accept_at?: string;
+    client_feedback?: string;
 }
 
 interface Summary {
@@ -152,9 +154,13 @@ function MilestoneCard({ ms, isClient, token, onRefresh }: { ms: Milestone; isCl
     }
 
     // Modal state
-    const [modal, setModal] = useState<"fund" | "accept" | null>(null);
+    const [modal, setModal] = useState<"fund" | "accept" | "submit" | "revision" | null>(null);
     const [reviewRating, setReviewRating] = useState(0);
     const [reviewComment, setReviewComment] = useState("");
+    const [revisionFeedback, setRevisionFeedback] = useState("");
+    const [submitMessage, setSubmitMessage] = useState("");
+    const [submitFiles, setSubmitFiles] = useState<File[]>([]);
+    const [uploadingFiles, setUploadingFiles] = useState(false);
 
     return (
         <div style={{
@@ -229,36 +235,68 @@ function MilestoneCard({ ms, isClient, token, onRefresh }: { ms: Milestone; isCl
                 </div>
             )}
 
+            {/* Auto-accept countdown */}
+            {ms.status === "submitted" && ms.auto_accept_at && (() => {
+                const daysLeft = Math.max(0, Math.ceil(
+                    (new Date(ms.auto_accept_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+                ));
+                return (
+                    <span style={{
+                        fontSize: "0.7rem", fontWeight: 600,
+                        background: daysLeft <= 3 ? "#fef2f2" : "#eff6ff",
+                        color: daysLeft <= 3 ? "#dc2626" : "#2563eb",
+                        padding: "4px 10px", borderRadius: 20, marginTop: 6, display: "inline-block",
+                    }}>
+                        ⏱️ Auto-accepted in {daysLeft} day{daysLeft !== 1 ? "s" : ""}
+                    </span>
+                );
+            })()}
+
+            {/* Client feedback on revision */}
+            {ms.status === "revision_requested" && ms.client_feedback && (
+                <div style={{
+                    background: "#fff7ed", borderLeft: "3px solid #f59e0b", borderRadius: 8,
+                    padding: "10px 14px", marginTop: 10, fontSize: 13, color: "#92400e", lineHeight: 1.5,
+                }}>
+                    <strong style={{ display: "block", marginBottom: 2, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Client Feedback</strong>
+                    {ms.client_feedback}
+                </div>
+            )}
+
             {/* Actions */}
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
                 {isClient && ms.status === "pending" && !ms.escrow_funded && (
                     <ActionBtn label="Fund Escrow" color="#2563eb" loading={busy === "Fund Escrow"}
                         onClick={() => setModal("fund")} />
                 )}
-                {!isClient && ms.status === "in_progress" && (
-                    <ActionBtn label="Submit Work" color="#7c3aed" loading={busy === "Submit Work"}
-                        onClick={() => handleAction("submit", "Submit Work")} />
+                {isClient && ms.status === "in_progress" && (
+                    <ActionBtn label="✅ Mark Complete" color="#16a34a" loading={busy === "Accept"}
+                        onClick={() => setModal("accept")} />
+                )}
+                {!isClient && ["in_progress", "revision_requested"].includes(ms.status) && (
+                    <ActionBtn label="📤 Submit Work" color="#7c3aed" loading={busy === "Submit Work"}
+                        onClick={() => {
+                            setSubmitMessage(""); setSubmitFiles([]);
+                            setModal("submit");
+                        }} />
                 )}
                 {isClient && ms.status === "submitted" && (
                     <>
-                        <ActionBtn label="Accept" color="#16a34a" loading={busy === "Accept"}
+                        <ActionBtn label="✅ Accept" color="#16a34a" loading={busy === "Accept"}
                             onClick={() => setModal("accept")} />
-                        <ActionBtn label="Request Revision" color="#ea580c" outline loading={busy === "Request Revision"}
-                            onClick={() => handleAction("request-revision", "Request Revision")} />
+                        <ActionBtn label="🔄 Request Revision" color="#ea580c" outline loading={busy === "Request Revision"}
+                            onClick={() => {
+                                setRevisionFeedback("");
+                                setModal("revision");
+                            }} />
                     </>
                 )}
                 <Link
                     href={`/dashboard/contracts/${ms.contract_id}`}
                     style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        color: "#64748b",
-                        textDecoration: "none",
-                        padding: "6px 14px",
-                        borderRadius: 8,
-                        border: "1px solid #e2e8f0",
-                        background: "#fff",
-                        marginLeft: "auto",
+                        fontSize: "0.75rem", fontWeight: 600, color: "#64748b",
+                        textDecoration: "none", padding: "6px 14px", borderRadius: 8,
+                        border: "1px solid #e2e8f0", background: "#fff", marginLeft: "auto",
                     }}
                 >
                     View Contract →
@@ -383,7 +421,6 @@ function MilestoneCard({ ms, isClient, token, onRefresh }: { ms: Milestone; isCl
                             </div>
                         </div>
 
-                        {/* Star rating */}
                         <div style={{ marginBottom: 16 }}>
                             <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
                                 ⭐ Rate this milestone (optional)
@@ -440,6 +477,254 @@ function MilestoneCard({ ms, isClient, token, onRefresh }: { ms: Milestone; isCl
                                 }}
                             >
                                 {busy === "Accept" ? "Processing..." : "✅ Confirm & Release"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Submit Work Modal ── */}
+            {modal === "submit" && (
+                <div
+                    style={{
+                        position: "fixed", inset: 0, zIndex: 1000,
+                        background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                    onClick={() => setModal(null)}
+                >
+                    <div
+                        style={{
+                            background: "#fff", borderRadius: 16, padding: "28px 24px",
+                            maxWidth: 460, width: "90%", maxHeight: "90vh", overflowY: "auto",
+                            boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ textAlign: "center", marginBottom: 20 }}>
+                            <div style={{
+                                width: 56, height: 56, borderRadius: "50%",
+                                background: "#eff6ff", display: "flex", alignItems: "center",
+                                justifyContent: "center", margin: "0 auto 12px", fontSize: 28,
+                            }}>📤</div>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>Submit Work</h3>
+                        </div>
+
+                        <div style={{
+                            background: "#f8fafc", borderRadius: 10, padding: 16,
+                            marginBottom: 16, border: "1px solid #e2e8f0",
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                <span style={{ fontSize: 14, color: "#64748b" }}>Milestone</span>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{ms.title}</span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <span style={{ fontSize: 14, color: "#64748b" }}>Amount</span>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{fmtMoney(ms.amount, ms.currency)}</span>
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: 16 }}>
+                            <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                                💬 Message to client (optional)
+                            </label>
+                            <textarea
+                                value={submitMessage}
+                                onChange={(e) => setSubmitMessage(e.target.value)}
+                                placeholder="Describe what you've done, any notes for the client..."
+                                style={{
+                                    width: "100%", padding: "10px 14px", borderRadius: 8,
+                                    border: "1px solid #e5e7eb", fontSize: 14, background: "#f9fafb",
+                                    outline: "none", boxSizing: "border-box" as const, minHeight: 80, resize: "vertical" as const,
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: 16 }}>
+                            <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                                📎 Attach files (optional)
+                            </label>
+                            <label style={{
+                                display: "block", border: "2px dashed #e5e7eb", borderRadius: 8, padding: "12px 16px",
+                                textAlign: "center", cursor: "pointer", fontSize: 13, color: "#64748b",
+                            }}>
+                                <input
+                                    type="file" multiple style={{ display: "none" }}
+                                    onChange={(e) => {
+                                        if (e.target.files) setSubmitFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                                    }}
+                                />
+                                Click to select files
+                            </label>
+                            {submitFiles.length > 0 && (
+                                <div style={{ marginTop: 8 }}>
+                                    {submitFiles.map((f, i) => (
+                                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#374151", padding: "4px 0" }}>
+                                            <span>📎</span>
+                                            <span style={{ flex: 1 }}>{f.name}</span>
+                                            <span style={{ color: "#94a3b8" }}>{(f.size / 1024).toFixed(0)} KB</span>
+                                            <button type="button" style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14 }}
+                                                onClick={() => setSubmitFiles(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{
+                            padding: "10px 14px", borderRadius: 8, background: "#eff6ff",
+                            color: "#1e40af", fontSize: 13, marginBottom: 16, lineHeight: 1.5,
+                        }}>
+                            📋 Your work will be submitted for client review. They will have 14 days to accept or request revisions.
+                        </div>
+
+                        <div style={{ display: "flex", gap: 10 }}>
+                            <button onClick={() => setModal(null)}
+                                disabled={uploadingFiles}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "1px solid #e5e7eb", background: "#fff",
+                                    fontSize: 14, fontWeight: 600, cursor: "pointer", color: "#374151",
+                                }}
+                            >Cancel</button>
+                            <button
+                                onClick={async () => {
+                                    setUploadingFiles(true);
+                                    try {
+                                        for (const file of submitFiles) {
+                                            const fd = new FormData();
+                                            fd.append("entity_type", "milestone");
+                                            fd.append("entity_id", ms.id);
+                                            fd.append("files[]", file);
+                                            const upRes = await fetch(`${API}/attachments/upload`, {
+                                                method: "POST",
+                                                headers: { Authorization: `Bearer ${token}` },
+                                                body: fd,
+                                            });
+                                            if (upRes.ok) {
+                                                const upJson = await upRes.json();
+                                                const uploaded = upJson.data?.[0];
+                                                if (uploaded?.file_url) {
+                                                    await fetch(`${API}/milestones/${ms.id}/deliverables`, {
+                                                        method: "POST",
+                                                        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                                                        body: JSON.stringify({
+                                                            file_name: file.name, file_url: uploaded.file_url,
+                                                            file_size: file.size, mime_type: file.type || "application/octet-stream",
+                                                            notes: submitMessage || null,
+                                                        }),
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    } catch (e) { console.error("File upload error:", e); }
+                                    setUploadingFiles(false);
+                                    setModal(null);
+                                    handleAction("submit", "Submit Work", { message: submitMessage });
+                                    setSubmitMessage(""); setSubmitFiles([]);
+                                }}
+                                disabled={!!busy || uploadingFiles}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "none", color: "#fff", fontSize: 14, fontWeight: 600,
+                                    cursor: (busy || uploadingFiles) ? "not-allowed" : "pointer",
+                                    background: "linear-gradient(135deg, #6366f1, #4f46e5)",
+                                }}
+                            >
+                                {uploadingFiles ? "Uploading files..." : busy === "Submit Work" ? "Processing..." : "📤 Submit for Review"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Revision Request Modal ── */}
+            {modal === "revision" && (
+                <div
+                    style={{
+                        position: "fixed", inset: 0, zIndex: 1000,
+                        background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                    onClick={() => setModal(null)}
+                >
+                    <div
+                        style={{
+                            background: "#fff", borderRadius: 16, padding: "28px 24px",
+                            maxWidth: 420, width: "90%", maxHeight: "90vh", overflowY: "auto",
+                            boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ textAlign: "center", marginBottom: 20 }}>
+                            <div style={{
+                                width: 56, height: 56, borderRadius: "50%",
+                                background: "#fff7ed", display: "flex", alignItems: "center",
+                                justifyContent: "center", margin: "0 auto 12px", fontSize: 28,
+                            }}>🔄</div>
+                            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>Request Revision</h3>
+                        </div>
+
+                        <div style={{
+                            background: "#f8fafc", borderRadius: 10, padding: 16,
+                            marginBottom: 16, border: "1px solid #e2e8f0",
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                <span style={{ fontSize: 14, color: "#64748b" }}>Milestone</span>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{ms.title}</span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <span style={{ fontSize: 14, color: "#64748b" }}>Revision #</span>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{(ms.revision_count || 0) + 1}</span>
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: 16 }}>
+                            <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                                💬 What needs to be changed?
+                            </label>
+                            <textarea
+                                value={revisionFeedback}
+                                onChange={(e) => setRevisionFeedback(e.target.value)}
+                                placeholder="Describe what needs to be revised or improved..."
+                                style={{
+                                    width: "100%", padding: "10px 14px", borderRadius: 8,
+                                    border: "1px solid #e5e7eb", fontSize: 14, background: "#f9fafb",
+                                    outline: "none", boxSizing: "border-box" as const, minHeight: 80, resize: "vertical" as const,
+                                }}
+                            />
+                        </div>
+
+                        <div style={{
+                            padding: "10px 14px", borderRadius: 8, background: "#fff7ed",
+                            color: "#92400e", fontSize: 13, marginBottom: 16, lineHeight: 1.5,
+                        }}>
+                            ⚠️ The freelancer will be notified and can resubmit their work. The 14-day auto-accept timer will reset.
+                        </div>
+
+                        <div style={{ display: "flex", gap: 10 }}>
+                            <button onClick={() => setModal(null)}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "1px solid #e5e7eb", background: "#fff",
+                                    fontSize: 14, fontWeight: 600, cursor: "pointer", color: "#374151",
+                                }}
+                            >Cancel</button>
+                            <button
+                                onClick={() => {
+                                    setModal(null);
+                                    handleAction("request-revision", "Request Revision", { feedback: revisionFeedback });
+                                    setRevisionFeedback("");
+                                }}
+                                disabled={!!busy}
+                                style={{
+                                    flex: 1, padding: "11px 20px", borderRadius: 10,
+                                    border: "none", color: "#fff", fontSize: 14, fontWeight: 600,
+                                    cursor: busy ? "not-allowed" : "pointer",
+                                    background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                                }}
+                            >
+                                {busy === "Request Revision" ? "Processing..." : "🔄 Send Revision Request"}
                             </button>
                         </div>
                     </div>

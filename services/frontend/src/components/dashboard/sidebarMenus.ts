@@ -106,6 +106,7 @@ const CLIENT_MENU: MenuConfig = {
         { icon: "🔍", label: "Find Talent", href: "/dashboard/freelancers" },
         { icon: "⭐", label: "Reviews Given", href: "/dashboard/reviews" },
         { icon: "📈", label: "Stats", href: "/dashboard/stats" },
+        { icon: "🎫", label: "Help & Support", href: "/help/contact" },
         {
             icon: "⚙️",
             label: "Settings",
@@ -214,6 +215,7 @@ const FREELANCER_MENU: MenuConfig = {
         { icon: "👤", label: "Public Profile", href: "/freelancers/me" },
         { icon: "⭐", label: "My Reviews", href: "/dashboard/reviews" },
         { icon: "📈", label: "Stats", href: "/dashboard/stats" },
+        { icon: "🎫", label: "Help & Support", href: "/help/contact" },
         {
             icon: "⚙️",
             label: "Settings",
@@ -348,6 +350,17 @@ const ADMIN_MENU: MenuConfig = {
                 { label: "All Posts", href: "/dashboard/admin/blog" },
                 { label: "Create New", href: "/dashboard/admin/blog/new" },
                 { label: "Tags", href: "/dashboard/admin/blog?view=tags" },
+            ],
+        },
+        {
+            icon: "🎫",
+            label: "Support",
+            href: "/dashboard/admin/support",
+            badge: "support",
+            children: [
+                { label: "All Tickets", href: "/dashboard/admin/support" },
+                { label: "Open", href: "/dashboard/admin/support?status=open" },
+                { label: "In Progress", href: "/dashboard/admin/support?status=in_progress" },
             ],
         },
     ],

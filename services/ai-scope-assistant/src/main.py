@@ -18,6 +18,8 @@ import structlog
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.routes import router
+from src.job_enhance_routes import router as job_enhance_router
+from src.proposal_routes import router as proposal_router
 from src.config import settings
 
 logger = structlog.get_logger()
@@ -69,6 +71,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=SERVICE_NAME, version=VERSION, lifespan=lifespan)
 app.include_router(router)
+app.include_router(job_enhance_router)
+app.include_router(proposal_router)
 
 
 @app.get("/healthz")

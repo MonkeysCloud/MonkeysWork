@@ -20,6 +20,7 @@ function stripHtml(html: string): string {
 }
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
+import AiProposalAssistant from "@/components/ai/AiProposalAssistant";
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
@@ -362,6 +363,17 @@ export default function ProposalPage() {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-6">
+                {/* AI Proposal Assistant */}
+                {job && (
+                    <AiProposalAssistant
+                        jobId={jobId!}
+                        onApplyCoverLetter={(text) => setCoverLetter(text)}
+                        onApplyBid={(amount) => setBidAmount(amount)}
+                        onApplyDuration={(weeks) => setDurationWeeks(weeks)}
+                        onApplyMilestones={(ms) => setMilestones(ms.map((m) => ({ title: m.title, amount: m.amount, description: m.description })))}
+                    />
+                )}
+
                 {/* Cover Letter */}
                 <div className="bg-white rounded-2xl border border-brand-border/60 p-5">
                     <label className="block text-xs font-semibold text-brand-muted mb-1.5 uppercase tracking-wide">

@@ -31,9 +31,9 @@ final class ReviewController
     public function mine(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $p      = $this->pagination($request);
-        $qs     = $request->getQueryParams();
-        $tab    = $qs['tab'] ?? 'all'; // received | given | all
+        $p = $this->pagination($request);
+        $qs = $request->getQueryParams();
+        $tab = $qs['tab'] ?? 'all'; // received | given | all
 
         // Build WHERE
         if ($tab === 'received') {
@@ -85,13 +85,13 @@ final class ReviewController
             'data' => $reviews,
             'meta' => [
                 'current_page' => $p['page'],
-                'per_page'     => $p['perPage'],
-                'total'        => $total,
-                'last_page'    => (int) ceil($total / max($p['perPage'], 1)),
+                'per_page' => $p['perPage'],
+                'total' => $total,
+                'last_page' => (int) ceil($total / max($p['perPage'], 1)),
             ],
             'summary' => [
-                'received_count'      => (int) ($stats['received_count'] ?? 0),
-                'given_count'         => (int) ($stats['given_count'] ?? 0),
+                'received_count' => (int) ($stats['received_count'] ?? 0),
+                'given_count' => (int) ($stats['given_count'] ?? 0),
                 'avg_received_rating' => round((float) ($stats['avg_received_rating'] ?? 0), 1),
             ],
         ]);
@@ -126,7 +126,7 @@ final class ReviewController
     public function create(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         $required = ['contract_id', 'rating'];
         foreach ($required as $f) {
@@ -140,7 +140,7 @@ final class ReviewController
             return $this->error('Rating must be between 1 and 5');
         }
 
-        $id  = $this->uuid();
+        $id = $this->uuid();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         // Determine reviewee from contract
@@ -159,22 +159,22 @@ final class ReviewController
             : $contract['client_id'];
 
         $this->db->pdo()->prepare(
-            'INSERT INTO "review" (id, contract_id, reviewer_id, reviewee_id, rating,
+            'INSERT INTO "review" (id, contract_id, reviewer_id, reviewee_id, overall_rating,
                                    communication_rating, quality_rating, timeliness_rating,
                                    comment, is_public, created_at, updated_at)
              VALUES (:id, :cid, :uid, :rid, :rating, :comm, :qual, :time, :comment, true, :now, :now)'
         )->execute([
-            'id'      => $id,
-            'cid'     => $data['contract_id'],
-            'uid'     => $userId,
-            'rid'     => $revieweeId,
-            'rating'  => $rating,
-            'comm'    => $data['communication_rating'] ?? $rating,
-            'qual'    => $data['quality_rating'] ?? $rating,
-            'time'    => $data['timeliness_rating'] ?? $rating,
-            'comment' => $data['comment'] ?? null,
-            'now'     => $now,
-        ]);
+                    'id' => $id,
+                    'cid' => $data['contract_id'],
+                    'uid' => $userId,
+                    'rid' => $revieweeId,
+                    'rating' => $rating,
+                    'comm' => $data['communication_rating'] ?? $rating,
+                    'qual' => $data['quality_rating'] ?? $rating,
+                    'time' => $data['timeliness_rating'] ?? $rating,
+                    'comment' => $data['comment'] ?? null,
+                    'now' => $now,
+                ]);
 
         // Dispatch event
         $this->events?->dispatch(new ReviewCreated($id, $data['contract_id'], $userId, $revieweeId, $rating));
@@ -196,11 +196,11 @@ final class ReviewController
                 'You Received a Review — ' . $contractTitle,
                 'review-received',
                 [
-                    'reviewerName'  => $reviewerName,
+                    'reviewerName' => $reviewerName,
                     'contractTitle' => $contractTitle,
-                    'rating'        => $rating,
-                    'comment'       => $data['comment'] ?? '',
-                    'reviewsUrl'    => "{$frontendUrl}/dashboard/reviews",
+                    'rating' => $rating,
+                    'comment' => $data['comment'] ?? '',
+                    'reviewsUrl' => "{$frontendUrl}/dashboard/reviews",
                 ],
                 ['reviews', 'new-review'],
             );
@@ -233,7 +233,7 @@ final class ReviewController
     public function respond(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         $stmt = $this->db->pdo()->prepare('SELECT reviewee_id FROM "review" WHERE id = :id');
         $stmt->execute(['id' => $id]);
@@ -249,10 +249,10 @@ final class ReviewController
         $this->db->pdo()->prepare(
             'UPDATE "review" SET response = :resp, response_at = :now, updated_at = :now WHERE id = :id'
         )->execute([
-            'resp' => $data['response'] ?? '',
-            'now'  => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-            'id'   => $id,
-        ]);
+                    'resp' => $data['response'] ?? '',
+                    'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+                    'id' => $id,
+                ]);
 
         return $this->json(['message' => 'Response added']);
     }
@@ -286,9 +286,14 @@ final class ReviewController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 }

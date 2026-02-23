@@ -8,6 +8,8 @@ use App\Event\EscrowReleased;
 use App\Event\MilestoneAccepted;
 use App\Event\MilestoneSubmitted;
 use App\Service\FeeCalculator;
+use App\Service\MonkeysMailService;
+use App\Service\SocketEvent;
 use App\Service\StripeService;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
@@ -25,6 +27,7 @@ final class MilestoneController
 
     private ?StripeService $stripe = null;
     private ?FeeCalculator $fees = null;
+    private ?MonkeysMailService $mail = null;
 
     public function __construct(
         private ConnectionInterface $db,
@@ -40,6 +43,16 @@ final class MilestoneController
     private function fees(): FeeCalculator
     {
         return $this->fees ??= new FeeCalculator();
+    }
+
+    private function mail(): MonkeysMailService
+    {
+        return $this->mail ??= new MonkeysMailService();
+    }
+
+    private function siteUrl(): string
+    {
+        return getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
     }
 
     #[Route('GET', '/me', name: 'milestones.mine', summary: 'All my milestones across contracts', tags: ['Milestones'])]
@@ -370,13 +383,49 @@ final class MilestoneController
             return $this->forbidden('Only the freelancer can submit work');
         }
 
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $data = $this->body($request);
+        $submitMessage = $data['message'] ?? $data['notes'] ?? null;
+
+        $now = new \DateTimeImmutable();
+        $nowStr = $now->format('Y-m-d H:i:s');
+        $autoAccept = $now->modify('+14 days')->format('Y-m-d H:i:s');
         $this->db->pdo()->prepare(
-            'UPDATE "milestone" SET status = \'submitted\', submitted_at = :now, updated_at = :now WHERE id = :id'
-        )->execute(['now' => $now, 'id' => $id]);
+            'UPDATE "milestone" SET status = \'submitted\', submitted_at = :now, auto_accept_at = :auto, updated_at = :now WHERE id = :id'
+        )->execute(['now' => $nowStr, 'auto' => $autoAccept, 'id' => $id]);
 
         // Dispatch event
         $this->events?->dispatch(new MilestoneSubmitted($id, $ms['contract_id'], $userId));
+
+        // Email the client
+        try {
+            $this->mail()->sendTemplate(
+                $ms['client_email'],
+                "Milestone Submitted: {$ms['title']}",
+                'milestone-submitted',
+                [
+                    'userName' => $ms['client_name'],
+                    'milestoneTitle' => $ms['title'],
+                    'contractTitle' => $ms['contract_title'],
+                    'freelancerName' => $ms['freelancer_name'],
+                    'amount' => '$' . number_format((float) $ms['amount'], 2),
+                    'message' => $submitMessage,
+                    'milestoneUrl' => $this->siteUrl() . '/dashboard/contracts/' . $ms['contract_id'],
+                ],
+                ['milestone', 'submitted']
+            );
+        } catch (\Throwable $e) {
+            error_log('[MilestoneController] submit email error: ' . $e->getMessage());
+        }
+
+        // In-app notification → client
+        $this->notifyMilestone(
+            $ms['client_id'],
+            'milestone.submitted',
+            "📤 Work Submitted",
+            "{$ms['freelancer_name']} submitted work for \"{$ms['title']}\"" . ($submitMessage ? ": {$submitMessage}" : ''),
+            $ms,
+            'info'
+        );
 
         return $this->json(['message' => 'Work submitted for review']);
     }
@@ -393,6 +442,11 @@ final class MilestoneController
 
         if ($ms['client_id'] !== $userId) {
             return $this->forbidden('Only the client can accept');
+        }
+
+        // Allow accept from in_progress (client marks complete), submitted, or revision_requested
+        if (!in_array($ms['status'], ['in_progress', 'submitted', 'revision_requested'])) {
+            return $this->error('Milestone cannot be accepted in its current status', 409);
         }
 
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
@@ -454,6 +508,38 @@ final class MilestoneController
         $this->events?->dispatch(new MilestoneAccepted($id, $ms['contract_id'], $userId, $amount));
         $this->events?->dispatch(new EscrowReleased($txId, $id, $ms['contract_id'], $netRelease));
 
+        // Email the freelancer
+        try {
+            $this->mail()->sendTemplate(
+                $ms['freelancer_email'],
+                "Milestone Accepted: {$ms['title']} 🎉",
+                'milestone-accepted',
+                [
+                    'userName' => $ms['freelancer_name'],
+                    'milestoneTitle' => $ms['title'],
+                    'contractTitle' => $ms['contract_title'],
+                    'clientName' => $ms['client_name'],
+                    'amount' => '$' . number_format((float) $amount, 2),
+                    'commission' => '$' . number_format((float) $commission, 2),
+                    'netAmount' => '$' . number_format((float) $netRelease, 2),
+                    'milestoneUrl' => $this->siteUrl() . '/dashboard/contracts/' . $ms['contract_id'],
+                ],
+                ['milestone', 'accepted']
+            );
+        } catch (\Throwable $e) {
+            error_log('[MilestoneController] accept email error: ' . $e->getMessage());
+        }
+
+        // In-app notification → freelancer
+        $this->notifyMilestone(
+            $ms['freelancer_id'],
+            'milestone.accepted',
+            "✅ Milestone Accepted",
+            "{$ms['client_name']} accepted \"{$ms['title']}\" — \$" . number_format((float) $netRelease, 2) . " released to your account",
+            $ms,
+            'success'
+        );
+
         return $this->json([
             'message' => 'Milestone accepted, escrow released',
             'data' => [
@@ -479,13 +565,53 @@ final class MilestoneController
             return $this->forbidden();
         }
 
+        $feedback = $data['feedback'] ?? $data['client_feedback'] ?? null;
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
         $this->db->pdo()->prepare(
             'UPDATE "milestone" SET status = \'revision_requested\',
-                    revision_count = revision_count + 1, updated_at = :now WHERE id = :id'
-        )->execute(['now' => $now, 'id' => $id]);
+                    revision_count = revision_count + 1, client_feedback = :fb,
+                    auto_accept_at = NULL, updated_at = :now WHERE id = :id'
+        )->execute(['now' => $now, 'id' => $id, 'fb' => $feedback]);
+
+        $this->sendRevisionEmail($ms, $feedback, ((int) ($ms['revision_count'] ?? 0)) + 1);
+
+        // In-app notification → freelancer
+        $this->notifyMilestone(
+            $ms['freelancer_id'],
+            'milestone.revision_requested',
+            "🔄 Revision Requested",
+            "{$ms['client_name']} requested a revision for \"{$ms['title']}\"" . ($feedback ? ": {$feedback}" : ''),
+            $ms,
+            'warning'
+        );
 
         return $this->json(['message' => 'Revision requested']);
+    }
+
+    /**
+     * Send revision email to freelancer.
+     */
+    private function sendRevisionEmail(array $ms, ?string $feedback, int $revisionNumber): void
+    {
+        try {
+            $this->mail()->sendTemplate(
+                $ms['freelancer_email'],
+                "Revision Requested: {$ms['title']}",
+                'milestone-revision',
+                [
+                    'userName' => $ms['freelancer_name'],
+                    'milestoneTitle' => $ms['title'],
+                    'contractTitle' => $ms['contract_title'],
+                    'clientName' => $ms['client_name'],
+                    'feedback' => $feedback,
+                    'revisionNumber' => $revisionNumber,
+                    'milestoneUrl' => $this->siteUrl() . '/dashboard/contracts/' . $ms['contract_id'],
+                ],
+                ['milestone', 'revision']
+            );
+        } catch (\Throwable $e) {
+            error_log('[MilestoneController] revision email error: ' . $e->getMessage());
+        }
     }
 
     #[Route('POST', '/{id}/deliverables', name: 'milestones.deliverables.upload', summary: 'Upload file', tags: ['Milestones'])]
@@ -503,18 +629,17 @@ final class MilestoneController
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $this->db->pdo()->prepare(
-            'INSERT INTO "deliverable" (id, milestone_id, uploaded_by, filename, url, file_size,
-                                        mime_type, description, version, created_at)
-             VALUES (:id, :mid, :uid, :fn, :url, :fs, :mt, :desc, :ver, :now)'
+            'INSERT INTO "deliverables" (id, milestone_id, file_name, file_url, file_size,
+                                        mime_type, notes, version, created_at)
+             VALUES (:id, :mid, :fn, :url, :fs, :mt, :desc, :ver, :now)'
         )->execute([
                     'id' => $dId,
                     'mid' => $id,
-                    'uid' => $userId,
-                    'fn' => $data['filename'] ?? 'file',
-                    'url' => $data['url'] ?? '',
+                    'fn' => $data['filename'] ?? $data['file_name'] ?? 'file',
+                    'url' => $data['url'] ?? $data['file_url'] ?? '',
                     'fs' => $data['file_size'] ?? 0,
                     'mt' => $data['mime_type'] ?? 'application/octet-stream',
-                    'desc' => $data['description'] ?? null,
+                    'desc' => $data['description'] ?? $data['notes'] ?? null,
                     'ver' => $data['version'] ?? 1,
                     'now' => $now,
                 ]);
@@ -535,7 +660,7 @@ final class MilestoneController
 
             $stmt = $this->db->pdo()->prepare(
                 'SELECT d.*
-                 FROM "deliverable" d
+                 FROM "deliverables" d
                  WHERE d.milestone_id = :mid ORDER BY d.version DESC, d.created_at DESC'
             );
             $stmt->execute(['mid' => $id]);
@@ -552,8 +677,13 @@ final class MilestoneController
     private function findOrFail(string $id, ?string $userId): array|JsonResponse
     {
         $stmt = $this->db->pdo()->prepare(
-            'SELECT m.*, c.client_id, c.freelancer_id
-             FROM "milestone" m JOIN "contract" c ON c.id = m.contract_id
+            'SELECT m.*, c.client_id, c.freelancer_id, c.title AS contract_title,
+                    u_client.display_name AS client_name, u_client.email AS client_email,
+                    u_free.display_name AS freelancer_name, u_free.email AS freelancer_email
+             FROM "milestone" m
+             JOIN "contract" c ON c.id = m.contract_id
+             JOIN "user" u_client ON u_client.id = c.client_id
+             JOIN "user" u_free ON u_free.id = c.freelancer_id
              WHERE m.id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -582,5 +712,71 @@ final class MilestoneController
             mt_rand(0, 0xffff),
             mt_rand(0, 0xffff)
         );
+    }
+
+    /**
+     * Create an in-app notification + real-time push via Redis/Socket.IO.
+     */
+    private function notifyMilestone(
+        string $recipientId,
+        string $type,
+        string $title,
+        string $body,
+        array $ms,
+        string $priority = 'info',
+    ): void {
+        $notifId = $this->uuid();
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $link = "/dashboard/contracts/{$ms['contract_id']}";
+
+        // DB insert
+        try {
+            $this->db->pdo()->prepare(
+                'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
+                 VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
+            )->execute([
+                        'id' => $notifId,
+                        'uid' => $recipientId,
+                        'type' => $type,
+                        'title' => $title,
+                        'body' => mb_substr($body, 0, 500),
+                        'data' => json_encode([
+                            'milestone_id' => $ms['id'],
+                            'contract_id' => $ms['contract_id'],
+                            'link' => $link,
+                        ]),
+                        'prio' => $priority,
+                        'chan' => 'in_app',
+                        'now' => $now,
+                    ]);
+        } catch (\Throwable $e) {
+            error_log('[MilestoneController] notification insert: ' . $e->getMessage());
+        }
+
+        // Real-time push via Redis → Socket.IO
+        try {
+            $redisHost = getenv('REDIS_HOST') ?: 'redis';
+            $redisPort = (int) (getenv('REDIS_PORT') ?: 6379);
+            $redis = new \Redis();
+            $redis->connect($redisHost, $redisPort, 2.0);
+
+            $socket = new SocketEvent($redis);
+            $socket->toUser($recipientId, 'notification:new', [
+                'id' => $notifId,
+                'type' => $type,
+                'title' => $title,
+                'body' => mb_substr($body, 0, 500),
+                'data' => [
+                    'milestone_id' => $ms['id'],
+                    'contract_id' => $ms['contract_id'],
+                    'link' => $link,
+                ],
+                'priority' => $priority,
+                'created_at' => $now,
+            ]);
+            $redis->close();
+        } catch (\Throwable $e) {
+            error_log('[MilestoneController] socket emit: ' . $e->getMessage());
+        }
     }
 }
