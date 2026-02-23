@@ -1,5 +1,18 @@
 cors {
-    allow_origin  ["*"]
-    allow_methods ["GET","POST","PUT","OPTIONS","DELETE","PATCH"]
-    allow_headers ["Content-Type","Authorization"]
+    allow_origin  [
+        "https://monkeysworks.com",
+        "https://www.monkeysworks.com",
+        "https://app.monkeysworks.com",
+        "/^https:\\/\\/monkeyswork[\\w-]*\\.web\\.app$/",
+        "/^https:\\/\\/monkeyswork[\\w-]*\\.firebaseapp\\.com$/",
+        "/^http:\\/\\/localhost(:\\d+)?$/",
+        "/^https?:\\/\\/127\\.0\\.0\\.1(:\\d+)?$/",
+        "/^tauri:\\/\\//",
+        "file://"
+    ]
+    allow_methods     ["GET","POST","PUT","OPTIONS","DELETE","PATCH"]
+    allow_headers     ["Content-Type","Authorization","X-Requested-With","X-CSRF-Token"]
+    expose_headers    ["X-Total-Count","X-Pagination-Total"]
+    allow_credentials true
+    max_age           86400
 }
