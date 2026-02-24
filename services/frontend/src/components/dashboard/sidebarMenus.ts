@@ -120,10 +120,6 @@ const CLIENT_MENU: MenuConfig = {
                     label: "Notifications",
                     href: "/dashboard/settings/notifications",
                 },
-                {
-                    label: "Verification",
-                    href: "/dashboard/settings/verification",
-                },
             ],
         },
     ],

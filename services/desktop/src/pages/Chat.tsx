@@ -157,9 +157,13 @@ export default function Chat() {
                 `/conversations/${conv.id}`
             );
             setMessageHistory((res.data.messages || []).reverse());
-            // Update participants
+            // Update participants on active conv AND on conversations list
             if (res.data.participants) {
                 setActiveConv((prev) => prev ? { ...prev, participants: res.data.participants } : null);
+                // Cache participants in the sidebar list so avatars persist
+                setConversations((prev) =>
+                    prev.map((c) => c.id === conv.id ? { ...c, participants: res.data.participants } : c)
+                );
             }
         } catch { /* silent */ }
         setLoadingMessages(false);
@@ -277,12 +281,12 @@ export default function Chat() {
                                                 src={other.avatar_url.startsWith("http") ? other.avatar_url : `${apiOrigin}${other.avatar_url}`}
                                                 alt={other.display_name}
                                                 className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
                                             />
-                                        ) : (
-                                            <div className="w-9 h-9 rounded-full bg-[#f08a11]/20 flex items-center justify-center text-xs font-bold text-[#f08a11] flex-shrink-0">
-                                                {other?.display_name?.[0]?.toUpperCase() ?? "?"}
-                                            </div>
-                                        )}
+                                        ) : null}
+                                        <div className={`w-9 h-9 rounded-full bg-[#f08a11]/20 flex items-center justify-center text-sm font-bold text-[#f08a11] flex-shrink-0 ${other?.avatar_url ? 'hidden' : ''}`}>
+                                            {(other?.display_name?.[0] || conv.title?.replace(/^Re:\s*/i, "")?.[0] || "C").toUpperCase()}
+                                        </div>
                                         <div className="min-w-0 flex-1">
                                             <p className="text-sm font-semibold text-white truncate">
                                                 {other?.display_name || conv.title || "Conversation"}
@@ -324,12 +328,12 @@ export default function Chat() {
                                     src={otherParticipant.avatar_url.startsWith("http") ? otherParticipant.avatar_url : `${apiOrigin}${otherParticipant.avatar_url}`}
                                     alt={otherParticipant.display_name}
                                     className="w-8 h-8 rounded-full object-cover"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
                                 />
-                            ) : (
-                                <div className="w-8 h-8 rounded-full bg-[#f08a11]/20 flex items-center justify-center text-xs font-bold text-[#f08a11]">
-                                    {otherParticipant?.display_name?.[0]?.toUpperCase() ?? "?"}
-                                </div>
-                            )}
+                            ) : null}
+                            <div className={`w-8 h-8 rounded-full bg-[#f08a11]/20 flex items-center justify-center text-sm font-bold text-[#f08a11] ${otherParticipant?.avatar_url ? 'hidden' : ''}`}>
+                                {(otherParticipant?.display_name?.[0] || activeConv?.title?.[0] || "C").toUpperCase()}
+                            </div>
                             <div>
                                 <p className="text-sm font-semibold text-white">
                                     {otherParticipant?.display_name || activeConv.title}

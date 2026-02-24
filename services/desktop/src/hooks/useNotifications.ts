@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSocket } from "./useSocket";
+import { systemNotify } from "@/lib/systemNotify";
 
 interface Notification {
     id: string;
@@ -32,6 +33,8 @@ export function useNotifications(token?: string): UseNotificationsReturn {
 
         const handleNew = (data: Omit<Notification, "read">) => {
             setNotifications((prev) => [{ ...data, read: false }, ...prev]);
+            // Fire native OS notification
+            systemNotify(data.title, data.body);
         };
 
         socket.on("notification:new", handleNew);

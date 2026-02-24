@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSocket } from "./useSocket";
+import { systemNotify } from "@/lib/systemNotify";
 
 export interface Message {
     id: string;
@@ -40,6 +41,12 @@ export function useMessages(token?: string): UseMessagesReturn {
 
         const handleNewMessage = (data: Message) => {
             setMessages((prev) => [...prev, data]);
+            // Fire native OS notification for new messages
+            const sender = data.sender_name || "Someone";
+            const body = data.content?.length > 80
+                ? data.content.slice(0, 80) + "…"
+                : data.content;
+            systemNotify(`💬 ${sender}`, body || "Sent a message");
         };
 
         const handleTypingStart = (data: TypingUser & { conversation_id: string }) => {

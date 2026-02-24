@@ -499,7 +499,7 @@ final class AuthController
             $email = strtolower(trim($email));
             $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
             $pdo = $this->db->pdo();
-            $role = $data['role'] ?? 'freelancer'; // default role for new OAuth users
+            $role = 'pending'; // role selected after OAuth registration
 
             // ── 2. Check if OAuth link already exists ──
             $stmt = $pdo->prepare(
@@ -547,16 +547,7 @@ final class AuthController
                                 'updated_at' => $now,
                             ]);
 
-                    // Create empty profile based on role
-                    if ($role === 'client') {
-                        $pdo->prepare(
-                            'INSERT INTO "clientprofile" (user_id, created_at, updated_at) VALUES (:uid, :now, :now)'
-                        )->execute(['uid' => $userId, 'now' => $now]);
-                    } elseif ($role === 'freelancer') {
-                        $pdo->prepare(
-                            'INSERT INTO "freelancerprofile" (user_id, created_at, updated_at) VALUES (:uid, :now, :now)'
-                        )->execute(['uid' => $userId, 'now' => $now]);
-                    }
+                    // Profile creation deferred until user selects role
                 }
 
                 // ── 4. Create OAuth link ──
@@ -643,6 +634,58 @@ final class AuthController
             error_log("[OAuth] {$provider} error: " . $e->getMessage());
             return $this->error('OAuth authentication failed: ' . $e->getMessage(), 400);
         }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  POST /auth/set-role                                                */
+    /* ------------------------------------------------------------------ */
+    #[Route('POST', '/set-role', name: 'auth.setRole', summary: 'Set role for pending user', tags: ['Auth'], middleware: ['auth'])]
+    public function setRole(ServerRequestInterface $request): JsonResponse
+    {
+        $userId = $this->userId($request);
+        $data = $this->body($request);
+        $role = $data['role'] ?? null;
+
+        if (!in_array($role, ['client', 'freelancer'], true)) {
+            return $this->error('Role must be "client" or "freelancer"');
+        }
+
+        // Verify user is actually pending
+        $stmt = $this->db->pdo()->prepare('SELECT role FROM "user" WHERE id = :id');
+        $stmt->execute(['id' => $userId]);
+        $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            return $this->notFound('User');
+        }
+
+        if ($user['role'] !== 'pending') {
+            return $this->error('Role has already been set', 409);
+        }
+
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $pdo = $this->db->pdo();
+
+        // Update user role
+        $pdo->prepare(
+            'UPDATE "user" SET role = :role, updated_at = :now WHERE id = :id'
+        )->execute(['role' => $role, 'now' => $now, 'id' => $userId]);
+
+        // Create empty profile
+        if ($role === 'client') {
+            $pdo->prepare(
+                'INSERT INTO "clientprofile" (user_id, created_at, updated_at) VALUES (:uid, :now, :now)'
+            )->execute(['uid' => $userId, 'now' => $now]);
+        } else {
+            $pdo->prepare(
+                'INSERT INTO "freelancerprofile" (user_id, created_at, updated_at) VALUES (:uid, :now, :now)'
+            )->execute(['uid' => $userId, 'now' => $now]);
+        }
+
+        return $this->json([
+            'message' => 'Role set successfully',
+            'data' => ['role' => $role],
+        ]);
     }
 
     /* ------------------------------------------------------------------ */

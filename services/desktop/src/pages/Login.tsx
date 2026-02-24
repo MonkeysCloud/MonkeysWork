@@ -13,7 +13,7 @@ export default function Login() {
 
     // Redirect if already logged in
     if (isAuthenticated) {
-        navigate("/dashboard", { replace: true });
+        navigate("/app", { replace: true });
         return null;
     }
 

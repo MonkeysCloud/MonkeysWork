@@ -293,6 +293,7 @@ fn encode_image(img: &image::RgbaImage) -> Result<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             capture_screenshot,
             start_activity_listener,

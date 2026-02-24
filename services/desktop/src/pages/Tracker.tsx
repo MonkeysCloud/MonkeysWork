@@ -183,15 +183,15 @@ export default function Tracker() {
                             classNames={{
                                 trigger:
                                     "bg-white/[0.07] backdrop-blur border border-white/10 shadow-sm hover:border-[#f08a11]/40 transition-colors data-[open=true]:border-[#f08a11]/60",
-                                value: "text-white text-xs",
-                                label: "text-white/60 text-xs font-semibold uppercase tracking-wider",
+                                value: "text-white text-sm",
+                                label: "text-white/70 text-sm font-semibold uppercase tracking-wider",
                             }}
                         >
                             {contracts.map((c) => (
                                 <SelectItem key={c.id} textValue={c.job_title || c.title || c.id}>
                                     <div className="py-0.5">
-                                        <p className="text-xs font-semibold truncate">{c.job_title || c.title}</p>
-                                        <p className="text-xs opacity-60">
+                                        <p className="text-sm font-semibold truncate">{c.job_title || c.title}</p>
+                                        <p className="text-sm opacity-60">
                                             {c.client_name} · ${c.hourly_rate}/hr
                                             {c.weekly_hour_limit ? ` · ${c.weekly_hour_limit}h/wk` : ""}
                                         </p>
@@ -209,7 +209,7 @@ export default function Tracker() {
                             classNames={{
                                 inputWrapper:
                                     "bg-white/[0.07] backdrop-blur border border-white/10 shadow-sm hover:border-[#f08a11]/40",
-                                input: "text-xs text-white placeholder:text-white/50",
+                                input: "text-sm text-white placeholder:text-white/50",
                             }}
                         />
                     </div>
@@ -221,7 +221,7 @@ export default function Tracker() {
                         className="text-center mb-3 px-6"
                         style={{ animation: "mw-fade-in 0.35s ease-out" }}
                     >
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm text-white/80 text-xs font-semibold uppercase tracking-wider">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm text-white/80 text-sm font-semibold uppercase tracking-wider">
                             <span className="w-1.5 h-1.5 rounded-full bg-[#f08a11]" style={{ animation: "mw-tick 1.5s ease-in-out infinite" }} />
                             {activeEntry.contract_title || activeEntry.task_label || "Tracking"}
                         </span>
@@ -264,7 +264,7 @@ export default function Tracker() {
                             {pad(seconds)}
                         </span>
                         {isRunning && (
-                            <span className="text-xs text-white/30 mt-1 font-medium">
+                            <span className="text-sm text-white/50 mt-1 font-medium">
                                 ${selectedContractObj?.hourly_rate ?? "—"}/hr
                             </span>
                         )}
@@ -289,19 +289,19 @@ export default function Tracker() {
                     </Button>
 
                     {error && (
-                        <p className="text-red-400 text-xs mt-2 font-medium">{error}</p>
+                        <p className="text-red-400 text-sm mt-2 font-medium">{error}</p>
                     )}
 
                     {isRunning && (
                         <div className="mt-3 flex items-center justify-center gap-4">
-                            <span className="text-white/40 text-xs font-medium flex items-center gap-1">
+                            <span className="text-white/50 text-sm font-medium flex items-center gap-1">
                                 🖱 <span className="text-white/70 tabular-nums">{counters.clicks}</span> clicks
                             </span>
-                            <span className="text-white/40 text-xs font-medium flex items-center gap-1">
+                            <span className="text-white/50 text-sm font-medium flex items-center gap-1">
                                 ⌨ <span className="text-white/70 tabular-nums">{counters.keys}</span> keys
                             </span>
                             {screenshots.length > 0 && (
-                                <span className="text-white/25 text-xs">
+                                <span className="text-white/40 text-sm">
                                     📸 {screenshots.length}
                                 </span>
                             )}
@@ -317,11 +317,11 @@ export default function Tracker() {
                     >
                         <div className="bg-white/[0.07] backdrop-blur rounded-xl border border-white/10 px-3 py-2.5">
                             <div className="flex justify-between items-center mb-1.5">
-                                <span className="text-[11px] font-bold text-white/40 uppercase tracking-widest">
+                                <span className="text-xs font-bold text-white/60 uppercase tracking-widest">
                                     Weekly Hours
                                 </span>
-                                <span className={`text-[11px] font-bold ${limitReached ? "text-red-400" : "text-white"}`}>
-                                    {weekHrs} <span className="text-white/40 font-normal">/ {weeklyLimit}h</span>
+                                <span className={`text-xs font-bold ${limitReached ? "text-red-400" : "text-white"}`}>
+                                    {weekHrs} <span className="text-white/50 font-normal">/ {weeklyLimit}h</span>
                                 </span>
                             </div>
                             <Progress
@@ -334,7 +334,7 @@ export default function Tracker() {
                                 }}
                             />
                             {limitReached && (
-                                <p className="text-[11px] text-red-400 font-semibold mt-1.5 flex items-center gap-1">
+                                <p className="text-xs text-red-400 font-semibold mt-1.5 flex items-center gap-1">
                                     <span>⚠️</span> Weekly limit reached — timer disabled
                                 </p>
                             )}
@@ -344,7 +344,7 @@ export default function Tracker() {
             </div>
 
             {/* ═══ Bottom Panel ═══ */}
-            <div className="flex-1 overflow-y-auto px-5 py-4">
+            <div className="flex-1 overflow-y-auto px-5 py-4 bg-gradient-to-b from-[#1e1f30] to-[#161723]">
                 {/* Stats Row */}
                 <div className="grid grid-cols-3 gap-2 mb-4">
                     {/* Idle Alert */}
@@ -355,10 +355,10 @@ export default function Tracker() {
                         >
                             <span className="text-lg">⚠️</span>
                             <div>
-                                <p className="text-xs font-semibold text-amber-300">
+                                <p className="text-sm font-semibold text-amber-300">
                                     Timer stopped — no activity detected
                                 </p>
-                                <p className="text-xs text-amber-300/60 mt-0.5">
+                                <p className="text-sm text-amber-300/60 mt-0.5">
                                     2 consecutive screenshots showed no keyboard or mouse activity. Click to dismiss.
                                 </p>
                             </div>
@@ -381,14 +381,14 @@ export default function Tracker() {
                 </div>
 
                 {/* Today Activity */}
-                <h3 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-2">
+                <h3 className="text-xs font-bold text-white/70 uppercase tracking-widest mb-2">
                     Today&apos;s Activity
                 </h3>
 
                 {todayEntries.filter((e) => e.status !== "running").length === 0 ? (
                     <div className="text-center py-8">
-                        <p className="text-white/40 text-xs">No entries yet today.</p>
-                        <p className="text-white/20 text-xs mt-0.5">Start the timer above to begin.</p>
+                        <p className="text-white/50 text-sm">No entries yet today.</p>
+                        <p className="text-white/40 text-sm mt-0.5">Start the timer above to begin.</p>
                     </div>
                 ) : (
                     <div className="space-y-1.5">
@@ -397,37 +397,37 @@ export default function Tracker() {
                             .map((entry, i) => (
                                 <div key={entry.id}>
                                     <div
-                                        className="bg-white/[0.07] rounded-xl border border-white/10 px-3.5 py-2.5 hover:bg-white/[0.10] transition-colors"
+                                        className="bg-white/[0.10] rounded-xl border border-white/20 px-3.5 py-2.5 hover:bg-white/[0.14] transition-colors"
                                         style={{ animation: `mw-fade-in ${0.15 + i * 0.05}s ease-out` }}
                                     >
                                         <div className="flex items-center justify-between">
                                             <div className="min-w-0 flex-1">
-                                                <p className="text-xs font-semibold text-white truncate">
+                                                <p className="text-sm font-semibold text-white truncate">
                                                     {entry.contract_title || entry.task_label || "Time Entry"}
                                                 </p>
                                                 {entry.task_label && entry.contract_title && (
-                                                    <p className="text-xs text-white/50 truncate mt-0.5">
+                                                    <p className="text-sm text-white/50 truncate mt-0.5">
                                                         {entry.task_label}
                                                     </p>
                                                 )}
                                             </div>
                                             <div className="text-right ml-3 flex-shrink-0">
-                                                <p className="text-xs font-bold text-white tabular-nums">
+                                                <p className="text-sm font-bold text-white tabular-nums">
                                                     {entry.duration_minutes ? fmtDuration(entry.duration_minutes) : "—"}
                                                 </p>
-                                                <p className="text-xs font-semibold text-[#f08a11] tabular-nums">
+                                                <p className="text-sm font-semibold text-[#f08a11] tabular-nums">
                                                     ${parseFloat(entry.amount || "0").toFixed(2)}
                                                 </p>
                                             </div>
                                         </div>
                                         <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-white/[0.06]">
-                                            <span className="text-[11px] text-white/30 tabular-nums">
+                                            <span className="text-xs text-white/55 tabular-nums">
                                                 {fmtTime(entry.started_at)} → {entry.ended_at ? fmtTime(entry.ended_at) : "—"}
                                             </span>
                                             <div className="flex items-center gap-2">
                                                 <button
                                                     onClick={() => setScreenshotEntryId(screenshotEntryId === entry.id ? null : entry.id)}
-                                                    className={`text-[11px] px-1.5 py-0.5 rounded transition-colors ${
+                                                    className={`text-xs px-1.5 py-0.5 rounded transition-colors ${
                                                         screenshotEntryId === entry.id
                                                             ? "bg-[#f08a11]/20 text-[#f08a11]"
                                                             : "text-white/30 hover:text-white/60 hover:bg-white/[0.06]"
@@ -467,7 +467,7 @@ export default function Tracker() {
                                 fetchRecentEntries({ from, to });
                             }
                         }}
-                        className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-widest hover:text-white/60 transition-colors mb-3"
+                        className="flex items-center gap-2 text-xs font-bold text-white/70 uppercase tracking-widest hover:text-white/90 transition-colors mb-3"
                     >
                         <span
                             className="inline-block transition-transform duration-200"
@@ -484,28 +484,26 @@ export default function Tracker() {
                             <div className="grid grid-cols-2 gap-2 mb-3">
                                 <Input
                                     type="date"
-                                    label="From"
+                                    placeholder="From"
                                     value={historyFrom}
                                     onValueChange={setHistoryFrom}
                                     size="sm"
-                                    variant="flat"
+                                    variant="bordered"
                                     classNames={{
-                                        inputWrapper: "bg-white/[0.07] border border-white/10 h-8",
-                                        input: "text-xs text-white",
-                                        label: "text-[10px] text-white/40",
+                                        inputWrapper: "bg-white/[0.06] border-white/20",
+                                        input: "text-sm text-white/90",
                                     }}
                                 />
                                 <Input
                                     type="date"
-                                    label="To"
+                                    placeholder="To"
                                     value={historyTo}
                                     onValueChange={setHistoryTo}
                                     size="sm"
-                                    variant="flat"
+                                    variant="bordered"
                                     classNames={{
-                                        inputWrapper: "bg-white/[0.07] border border-white/10 h-8",
-                                        input: "text-xs text-white",
-                                        label: "text-[10px] text-white/40",
+                                        inputWrapper: "bg-white/[0.06] border-white/20",
+                                        input: "text-sm text-white/90",
                                     }}
                                 />
                                 <Select
@@ -516,14 +514,14 @@ export default function Tracker() {
                                     variant="flat"
                                     size="sm"
                                     classNames={{
-                                        trigger: "bg-white/[0.07] border border-white/10 h-8",
-                                        value: "text-white text-xs",
-                                        label: "text-[10px] text-white/40",
+                                        trigger: "bg-white/[0.06] border-white/20",
+                                        value: "text-white/90 text-sm",
+                                        label: "text-xs text-white/70",
                                     }}
                                 >
                                     {contracts.map((c) => (
                                         <SelectItem key={c.id} textValue={c.job_title || c.title || c.id}>
-                                            <span className="text-xs">{c.job_title || c.title}</span>
+                                            <span className="text-sm">{c.job_title || c.title}</span>
                                         </SelectItem>
                                     ))}
                                 </Select>
@@ -535,14 +533,14 @@ export default function Tracker() {
                                     variant="flat"
                                     size="sm"
                                     classNames={{
-                                        trigger: "bg-white/[0.07] border border-white/10 h-8",
-                                        value: "text-white text-xs",
-                                        label: "text-[10px] text-white/40",
+                                        trigger: "bg-white/[0.06] border-white/20",
+                                        value: "text-white/90 text-sm",
+                                        label: "text-xs text-white/70",
                                     }}
                                 >
                                     {["logged", "approved", "rejected"].map((s) => (
                                         <SelectItem key={s} textValue={s}>
-                                            <span className="text-xs capitalize">{s}</span>
+                                            <span className="text-sm capitalize">{s}</span>
                                         </SelectItem>
                                     ))}
                                 </Select>
@@ -557,7 +555,7 @@ export default function Tracker() {
                                     if (historyStatus) filters.status = historyStatus;
                                     fetchRecentEntries(filters);
                                 }}
-                                className="w-full mb-3 h-8 text-xs font-semibold bg-[#f08a11]/20 text-[#f08a11] hover:bg-[#f08a11]/30"
+                                className="w-full mb-3 text-sm font-semibold bg-[#f08a11]/20 text-[#f08a11] hover:bg-[#f08a11]/30"
                             >
                                 🔍 Search
                             </Button>
@@ -570,7 +568,7 @@ export default function Tracker() {
                             )}
 
                             {!recentLoading && recentEntries.length === 0 && (
-                                <p className="text-white/30 text-xs text-center py-4">No entries found.</p>
+                                <p className="text-white/50 text-sm text-center py-4">No entries found.</p>
                             )}
 
                             {!recentLoading && recentEntries.length > 0 && (
@@ -578,37 +576,37 @@ export default function Tracker() {
                                     {recentEntries.map((entry, i) => (
                                         <div key={entry.id}>
                                             <div
-                                                className="bg-white/[0.07] rounded-xl border border-white/10 px-3.5 py-2.5 hover:bg-white/[0.10] transition-colors"
+                                                className="bg-white/[0.10] rounded-xl border border-white/20 px-3.5 py-2.5 hover:bg-white/[0.14] transition-colors"
                                                 style={{ animation: `mw-fade-in ${0.1 + i * 0.03}s ease-out` }}
                                             >
                                                 <div className="flex items-center justify-between">
                                                     <div className="min-w-0 flex-1">
-                                                        <p className="text-xs font-semibold text-white truncate">
+                                                        <p className="text-sm font-semibold text-white truncate">
                                                             {entry.contract_title || entry.task_label || "Time Entry"}
                                                         </p>
                                                         {entry.task_label && entry.contract_title && (
-                                                            <p className="text-xs text-white/50 truncate mt-0.5">
+                                                            <p className="text-sm text-white/50 truncate mt-0.5">
                                                                 {entry.task_label}
                                                             </p>
                                                         )}
                                                     </div>
                                                     <div className="text-right ml-3 flex-shrink-0">
-                                                        <p className="text-xs font-bold text-white tabular-nums">
+                                                        <p className="text-sm font-bold text-white tabular-nums">
                                                             {entry.duration_minutes ? fmtDuration(entry.duration_minutes) : "—"}
                                                         </p>
-                                                        <p className="text-xs font-semibold text-[#f08a11] tabular-nums">
+                                                        <p className="text-sm font-semibold text-[#f08a11] tabular-nums">
                                                             ${parseFloat(entry.amount || "0").toFixed(2)}
                                                         </p>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-white/[0.06]">
-                                                    <span className="text-[11px] text-white/30 tabular-nums">
+                                                    <span className="text-xs text-white/55 tabular-nums">
                                                         {fmtDate(entry.started_at)} {fmtTime(entry.started_at)} → {entry.ended_at ? fmtTime(entry.ended_at) : "—"}
                                                     </span>
                                                     <div className="flex items-center gap-2">
                                                         <button
                                                             onClick={() => setScreenshotEntryId(screenshotEntryId === entry.id ? null : entry.id)}
-                                                            className={`text-[11px] px-1.5 py-0.5 rounded transition-colors ${
+                                                            className={`text-xs px-1.5 py-0.5 rounded transition-colors ${
                                                                 screenshotEntryId === entry.id
                                                                     ? "bg-[#f08a11]/20 text-[#f08a11]"
                                                                     : "text-white/30 hover:text-white/60 hover:bg-white/[0.06]"
@@ -653,8 +651,8 @@ export default function Tracker() {
 
 function StatCard({ label, value, accent }: { label: string; value: string; accent?: string }) {
     return (
-        <div className="bg-white/[0.07] rounded-xl border border-white/10 px-3 py-2.5 text-center">
-            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{label}</p>
+        <div className="bg-white/[0.10] rounded-xl border border-white/20 px-3 py-2.5 text-center">
+            <p className="text-xs font-bold text-white/70 uppercase tracking-widest">{label}</p>
             <p
                 className="text-base font-extrabold mt-0.5 tabular-nums"
                 style={{ color: accent || "#ffffff" }}
@@ -674,7 +672,7 @@ function StatusPill({ status }: { status: string }) {
     const s = map[status] ?? { bg: "rgba(255,255,255,0.07)", fg: "rgba(255,255,255,0.5)" };
     return (
         <span
-            className="text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wide"
+            className="text-xs px-2 py-0.5 rounded-md font-bold uppercase tracking-wide"
             style={{ background: s.bg, color: s.fg }}
         >
             {status}

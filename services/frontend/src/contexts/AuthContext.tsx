@@ -13,7 +13,7 @@ const API_BASE =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
 
 /* ── Types ──────────────────────────────────────────── */
-export type UserRole = "client" | "freelancer" | "admin";
+export type UserRole = "client" | "freelancer" | "admin" | "pending";
 
 export interface AuthUser {
     id: string;
@@ -30,7 +30,7 @@ interface AuthContextValue {
     isAuthenticated: boolean;
     isLoading: boolean;
     login: (email: string, password: string) => Promise<AuthUser>;
-    loginWithOAuth: (provider: string, code: string) => Promise<AuthUser>;
+    loginWithOAuth: (provider: string, code: string, role?: string) => Promise<AuthUser>;
     logout: () => void;
     refreshUser: () => Promise<void>;
     setProfileCompleted: () => void;
@@ -123,11 +123,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const loginWithOAuth = useCallback(
-        async (provider: string, code: string) => {
+        async (provider: string, code: string, role?: string) => {
             const res = await fetch(`${API_BASE}/auth/oauth/${provider}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ code }),
+                body: JSON.stringify({ code, ...(role ? { role } : {}) }),
             });
 
             const body = await res.json();

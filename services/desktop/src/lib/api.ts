@@ -4,6 +4,7 @@
  */
 
 const API_BASE = "http://localhost:8086/api/v1";
+export const FRONTEND_URL = "http://localhost:3000";
 
 let _token: string | null = null;
 

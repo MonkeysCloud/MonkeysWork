@@ -128,7 +128,7 @@ export default function Contracts() {
                             key={tab.key}
                             onClick={() => setActiveTab(tab.key)}
                             className={`
-                                flex-1 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all duration-150
+                                flex-1 px-3 py-1.5 rounded-md text-sm font-semibold transition-all duration-150
                                 ${activeTab === tab.key
                                     ? "bg-white/10 text-[#f08a11]"
                                     : "text-white/50 hover:text-white/80"
@@ -152,7 +152,7 @@ export default function Contracts() {
                 {!loading && filtered.length === 0 && (
                     <div className="text-center py-16">
                         <span className="text-3xl block mb-2">📄</span>
-                        <p className="text-white/40 text-xs">
+                        <p className="text-white/50 text-sm">
                             {activeTab === "all"
                                 ? "No contracts yet."
                                 : `No ${activeTab} contracts.`}
@@ -187,11 +187,11 @@ export default function Contracts() {
                                     >
                                         {/* Row 1: title + status */}
                                         <div className="flex items-start justify-between gap-2 mb-1.5">
-                                            <h3 className="text-xs font-bold text-white truncate flex-1">
+                                            <h3 className="text-sm font-bold text-white truncate flex-1">
                                                 {c.title || c.job_title || "Contract"}
                                             </h3>
                                             <span
-                                                className="text-[11px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide flex-shrink-0"
+                                                className="text-xs px-2 py-0.5 rounded-full font-bold uppercase tracking-wide flex-shrink-0"
                                                 style={{ background: st.bg, color: st.fg }}
                                             >
                                                 {st.icon} {st.label}
@@ -199,7 +199,7 @@ export default function Contracts() {
                                         </div>
 
                                         {/* Row 2: meta */}
-                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/50">
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/50">
                                             {counterparty && (
                                                 <span>
                                                     👤 {counterLabel}: <strong className="text-white/70">{counterparty}</strong>
@@ -221,7 +221,7 @@ export default function Contracts() {
                                         {/* Expand chevron */}
                                         <div className="text-center mt-1">
                                             <span
-                                                className="text-white/20 text-xs inline-block transition-transform duration-200"
+                                                className="text-white/30 text-sm inline-block transition-transform duration-200"
                                                 style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
                                             >
                                                 ▼
@@ -235,7 +235,7 @@ export default function Contracts() {
                                             className="ml-3 mt-1 pl-3 border-l-2 border-[#f08a11]/30 space-y-1.5"
                                             style={{ animation: "mw-fade-in 0.2s ease-out" }}
                                         >
-                                            <p className="text-[11px] font-bold text-white/40 uppercase tracking-widest pt-1">
+                                            <p className="text-xs font-bold text-white/60 uppercase tracking-widest pt-1">
                                                 Milestones
                                             </p>
 
@@ -246,7 +246,7 @@ export default function Contracts() {
                                             )}
 
                                             {ms && ms.length === 0 && (
-                                                <p className="text-white/30 text-xs py-2">No milestones defined.</p>
+                                                <p className="text-white/50 text-sm py-2">No milestones defined.</p>
                                             )}
 
                                             {ms && ms.map((m) => {
@@ -257,24 +257,24 @@ export default function Contracts() {
                                                         className="bg-white/[0.05] rounded-lg border border-white/[0.06] px-3 py-2"
                                                     >
                                                         <div className="flex items-center justify-between gap-2">
-                                                            <span className="text-[11px] font-semibold text-white truncate flex-1">
+                                                            <span className="text-sm font-semibold text-white truncate flex-1">
                                                                 {m.title}
                                                             </span>
                                                             <span
-                                                                className="text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wide flex-shrink-0"
+                                                                className="text-xs px-2 py-0.5 rounded-md font-bold uppercase tracking-wide flex-shrink-0"
                                                                 style={{ background: mst.bg, color: mst.fg }}
                                                             >
                                                                 {m.status.replace(/_/g, " ")}
                                                             </span>
                                                         </div>
-                                                        <div className="flex gap-3 mt-1 text-[9px] text-white/40">
+                                                        <div className="flex gap-3 mt-1 text-xs text-white/50">
                                                             <span className="font-semibold text-white/60">
                                                                 {formatMoney(m.amount, m.currency)}
                                                             </span>
                                                             {m.due_date && <span>Due: {formatDate(m.due_date)}</span>}
                                                         </div>
                                                         {m.description && (
-                                                            <p className="text-[9px] text-white/35 mt-1 line-clamp-2">
+                                                            <p className="text-xs text-white/50 mt-1 line-clamp-2">
                                                                 {m.description}
                                                             </p>
                                                         )}

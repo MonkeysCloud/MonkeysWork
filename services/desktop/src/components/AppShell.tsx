@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useNotifications";
-import { getApiBase } from "@/lib/api";
+import { getApiBase, FRONTEND_URL } from "@/lib/api";
 import Tracker from "@/pages/Tracker";
 import Chat from "@/pages/Chat";
 import Contracts from "@/pages/Contracts";
@@ -12,6 +13,13 @@ import NotificationsPanel from "@/components/NotificationsPanel";
 
 type Tab = "timer" | "chat" | "contracts";
 
+const DASHBOARD_LINKS = [
+    { label: "📊 Dashboard", path: "/dashboard" },
+    { label: "💼 Jobs", path: "/dashboard/jobs" },
+    { label: "💰 Billing", path: "/dashboard/billing" },
+    { label: "⚙️ Settings", path: "/dashboard/settings" },
+];
+
 export default function AppShell() {
     const { user, token, logout } = useAuth();
     const navigate = useNavigate();
@@ -19,6 +27,8 @@ export default function AppShell() {
     const [activeTab, setActiveTab] = useState<Tab>("timer");
     const [showPermSetup, setShowPermSetup] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
+    const [showDashMenu, setShowDashMenu] = useState(false);
+    const dashMenuRef = useRef<HTMLDivElement>(null);
 
     // Check accessibility permission on mount
     useEffect(() => {
@@ -29,6 +39,17 @@ export default function AppShell() {
             })
             .catch(() => { }); // non-Tauri env
     }, []);
+
+    // Close dashboard menu on outside click
+    useEffect(() => {
+        function handleClick(e: MouseEvent) {
+            if (dashMenuRef.current && !dashMenuRef.current.contains(e.target as Node)) {
+                setShowDashMenu(false);
+            }
+        }
+        if (showDashMenu) document.addEventListener("mousedown", handleClick);
+        return () => document.removeEventListener("mousedown", handleClick);
+    }, [showDashMenu]);
 
     function dismissPermSetup() {
         setShowPermSetup(false);
@@ -42,6 +63,16 @@ export default function AppShell() {
     function handleLogout() {
         logout();
         navigate("/login");
+    }
+
+    async function openDashboard(path: string) {
+        try {
+            await openUrl(`${FRONTEND_URL}${path}`);
+        } catch {
+            // Fallback for non-Tauri environments
+            window.open(`${FRONTEND_URL}${path}`, "_blank");
+        }
+        setShowDashMenu(false);
     }
 
     return (
@@ -82,6 +113,45 @@ export default function AppShell() {
                         icon="📄"
                         label="Contracts"
                     />
+
+                    {/* Dashboard dropdown */}
+                    <div className="relative" ref={dashMenuRef}>
+                        <button
+                            onClick={() => setShowDashMenu((v) => !v)}
+                            className={`
+                                flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150
+                                ${showDashMenu
+                                    ? "bg-white/10 text-[#f08a11]"
+                                    : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
+                                }
+                            `}
+                        >
+                            <span className="text-sm">🌐</span>
+                            <span>Dashboard</span>
+                            <span className="text-[10px] opacity-60">▼</span>
+                        </button>
+
+                        {showDashMenu && (
+                            <div
+                                className="absolute left-0 top-full mt-1 w-48 bg-[#2e2f42] border border-white/15 rounded-xl shadow-2xl overflow-hidden z-50"
+                                style={{ animation: "mw-fade-in 0.15s ease-out" }}
+                            >
+                                {DASHBOARD_LINKS.map((link) => (
+                                    <button
+                                        key={link.path}
+                                        onClick={() => openDashboard(link.path)}
+                                        className="w-full text-left px-4 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors flex items-center gap-2"
+                                    >
+                                        {link.label}
+                                    </button>
+                                ))}
+                                <div className="border-t border-white/10" />
+                                <p className="px-4 py-2 text-xs text-white/30">
+                                    Opens in your browser
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Right: Notifications + User */}
@@ -102,8 +172,12 @@ export default function AppShell() {
                         )}
                     </button>
 
-                    {/* User avatar */}
-                    <div className="flex items-center gap-2">
+                    {/* User avatar + name → opens Settings */}
+                    <button
+                        onClick={() => openDashboard("/dashboard/settings")}
+                        className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+                        title="Open Settings"
+                    >
                         {user.avatar_url ? (
                             <img
                                 src={user.avatar_url.startsWith("http") ? user.avatar_url : `${apiOrigin}${user.avatar_url}`}
@@ -118,7 +192,7 @@ export default function AppShell() {
                         <span className="text-xs font-medium text-white/70 hidden sm:block">
                             {user.display_name?.split(" ")[0]}
                         </span>
-                    </div>
+                    </button>
 
                     {/* Logout */}
                     <button

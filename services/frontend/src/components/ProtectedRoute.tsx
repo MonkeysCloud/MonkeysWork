@@ -24,6 +24,11 @@ export default function ProtectedRoute({ children, allowedRoles }: Props) {
             router.replace("/dashboard");
             return;
         }
+        // Redirect pending users to role selection
+        if (user && user.role === "pending") {
+            router.replace("/onboarding/select-role");
+            return;
+        }
         // Redirect to profile completion wizard if profile not completed (skip for admins)
         if (
             user &&

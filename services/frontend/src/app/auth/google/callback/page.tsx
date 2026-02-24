@@ -24,9 +24,13 @@ function GoogleCallbackInner() {
 
         (async () => {
             try {
-                await loginWithOAuth("google", code);
+                const user = await loginWithOAuth("google", code);
                 if (!cancelled) {
-                    router.push("/dashboard");
+                    if (user.role === "pending") {
+                        router.push("/onboarding/select-role");
+                    } else {
+                        router.push("/dashboard");
+                    }
                 }
             } catch (err: unknown) {
                 if (!cancelled) {
