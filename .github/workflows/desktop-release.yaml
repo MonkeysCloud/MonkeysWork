@@ -75,6 +75,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_API_BASE: "https://api.monkeysworks.com/api/v1"
+          VITE_FRONTEND_URL: "https://monkeysworks.com"
+          VITE_SOCKET_URL: "https://api.monkeysworks.com"
         with:
           projectPath: services/desktop
           tagName: ${{ github.event.inputs.tag_name || github.ref_name }}

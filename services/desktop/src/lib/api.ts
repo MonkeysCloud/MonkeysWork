@@ -3,8 +3,8 @@
  * All requests go through this helper to ensure consistent auth headers.
  */
 
-const API_BASE = "http://localhost:8086/api/v1";
-export const FRONTEND_URL = "http://localhost:3000";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8086/api/v1";
+export const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL || "http://localhost:3000";
 
 let _token: string | null = null;
 
