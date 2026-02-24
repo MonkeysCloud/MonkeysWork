@@ -23,14 +23,15 @@ final class VerificationController
     public function __construct(
         private ConnectionInterface $db,
         private ?PubSubPublisher $pubsub = null,
-    ) {}
+    ) {
+    }
 
     #[Route('POST', '', name: 'verif.create', summary: 'Submit verification', tags: ['Verification'])]
     public function submit(ServerRequestInterface $request): JsonResponse
     {
         try {
             $userId = $this->userId($request);
-            $data   = $this->body($request);
+            $data = $this->body($request);
 
             error_log("[VerificationController] submit called. userId={$userId}, type=" . ($data['type'] ?? 'null'));
 
@@ -38,18 +39,18 @@ final class VerificationController
                 return $this->error('Verification type is required');
             }
 
-            $id  = $this->uuid();
+            $id = $this->uuid();
             $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
             $params = [
-                'id'   => $id,
-                'uid'  => $userId,
+                'id' => $id,
+                'uid' => $userId,
                 'type' => $data['type'],
                 'data' => json_encode([
                     'document_urls' => $data['document_urls'] ?? [],
-                    'metadata'      => $data['metadata'] ?? [],
+                    'metadata' => $data['metadata'] ?? [],
                 ]),
-                'now'  => $now,
+                'now' => $now,
             ];
 
             error_log("[VerificationController] INSERT params: " . json_encode($params));
@@ -82,7 +83,7 @@ final class VerificationController
     {
         try {
             $userId = $this->userId($request);
-            $pdo    = $this->db->pdo();
+            $pdo = $this->db->pdo();
 
             // 1. Fetch freelancer profile
             $stmt = $pdo->prepare(
@@ -108,9 +109,9 @@ final class VerificationController
             $skillCount = count($skills);
 
             // 3. Parse JSON fields
-            $portfolioUrls  = json_decode($profile['portfolio_urls'] ?: '[]', true);
+            $portfolioUrls = json_decode($profile['portfolio_urls'] ?: '[]', true);
             $certifications = json_decode($profile['certifications'] ?: '[]', true);
-            $education      = json_decode($profile['education'] ?: '[]', true);
+            $education = json_decode($profile['education'] ?: '[]', true);
             $experienceYears = (int) $profile['experience_years'];
 
             // 4. Determine applicable verification types
@@ -191,7 +192,7 @@ final class VerificationController
             ];
 
             // 7. Create new verification rows for applicable types
-            $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+            $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
             $pubsub = $this->pubsub ?? new PubSubPublisher();
             $created = [];
             $skipped = [];
@@ -199,7 +200,7 @@ final class VerificationController
             foreach ($applicable as $type) {
                 if (isset($existingMap[$type])) {
                     $skipped[] = [
-                        'type'   => $type,
+                        'type' => $type,
                         'status' => $existingMap[$type],
                         'reason' => 'Already has active verification',
                     ];
@@ -214,12 +215,12 @@ final class VerificationController
                     'INSERT INTO "verification" (id, user_id, type, status, data, created_at, updated_at)
                      VALUES (:id, :uid, :type, \'pending\', :data, :now, :now)'
                 )->execute([
-                    'id'   => $id,
-                    'uid'  => $userId,
-                    'type' => $type,
-                    'data' => json_encode($payload),
-                    'now'  => $now,
-                ]);
+                            'id' => $id,
+                            'uid' => $userId,
+                            'type' => $type,
+                            'data' => json_encode($payload),
+                            'now' => $now,
+                        ]);
 
                 // Publish to PubSub for AI processing
                 try {
@@ -232,71 +233,70 @@ final class VerificationController
             }
 
             // 7. Auto-process verifications
-            $env = getenv('APP_ENV') ?: 'prod';
+            // ── Inline AI scoring (works in both dev and prod) ──
+            $scorer = new VertexAiScorer();
+            foreach ($created as &$item) {
+                try {
+                    $confidence = $scorer->scoreVerification(
+                        $item['type'],
+                        $typeData[$item['type']] ?? []
+                    );
 
-            if ($env === 'dev') {
-                // ── DEV — inline simulated scoring for instant feedback ──
-                $scorer = new VertexAiScorer();
-                foreach ($created as &$item) {
-                    try {
-                        $confidence = $scorer->scoreVerification(
-                            $item['type'],
-                            $typeData[$item['type']] ?? []
-                        );
-
-                        if ($confidence >= 0.85) {
-                            $newStatus = 'approved';
-                            $decision = 'auto_approved';
-                        } elseif ($confidence >= 0.50) {
-                            $newStatus = 'in_review';
-                            $decision = 'human_review';
-                        } else {
-                            $newStatus = 'rejected';
-                            $decision = 'auto_rejected';
-                        }
-
-                        $modelName = 'simulated-dev-v1.0';
-
-                        $pdo->prepare(
-                            'UPDATE "verification" SET status = :status, ai_confidence = :conf,
-                                    ai_model_version = :model, ai_result = :result,
-                                    data = :data, updated_at = :now
-                             WHERE id = :id'
-                        )->execute([
-                            'status' => $newStatus,
-                            'conf'   => round($confidence, 4),
-                            'model'  => $modelName,
-                            'result' => json_encode([
-                                'decision'   => $decision,
-                                'confidence' => $confidence,
-                                'checks'     => [],
-                            ]),
-                            'data'   => json_encode(
-                            array_merge(
-                                $typeData[$item['type']] ?? ['reason' => $reasons[$item['type']] ?? ''],
-                                ['auto_evaluated' => true]
-                            )
-                        ),
-                            'now'    => $now,
-                            'id'     => $item['id'],
-                        ]);
-
-                        $item['status'] = $newStatus;
-                        $item['confidence'] = round($confidence, 4);
-
-                        // Send notification + socket event
-                        $this->notifyVerificationStatus(
-                            $userId, $item['id'], $item['type'], $newStatus, round($confidence, 4), $pdo, $now
-                        );
-                    } catch (\Throwable $e) {
-                        error_log("[VerificationController] auto-process {$item['type']}: " . $e->getMessage());
+                    if ($confidence >= 0.85) {
+                        $newStatus = 'approved';
+                        $decision = 'auto_approved';
+                    } elseif ($confidence >= 0.50) {
+                        $newStatus = 'in_review';
+                        $decision = 'human_review';
+                    } else {
+                        $newStatus = 'rejected';
+                        $decision = 'auto_rejected';
                     }
+
+                    $modelName = $scorer->isSimulated() ? 'simulated-dev-v1.0' : 'vertex-ai-gemini';
+
+                    $pdo->prepare(
+                        'UPDATE "verification" SET status = :status, ai_confidence = :conf,
+                                ai_model_version = :model, ai_result = :result,
+                                data = :data, updated_at = :now
+                         WHERE id = :id'
+                    )->execute([
+                                'status' => $newStatus,
+                                'conf' => round($confidence, 4),
+                                'model' => $modelName,
+                                'result' => json_encode([
+                                    'decision' => $decision,
+                                    'confidence' => $confidence,
+                                    'checks' => [],
+                                ]),
+                                'data' => json_encode(
+                                    array_merge(
+                                        $typeData[$item['type']] ?? ['reason' => $reasons[$item['type']] ?? ''],
+                                        ['auto_evaluated' => true]
+                                    )
+                                ),
+                                'now' => $now,
+                                'id' => $item['id'],
+                            ]);
+
+                    $item['status'] = $newStatus;
+                    $item['confidence'] = round($confidence, 4);
+
+                    // Send notification + socket event
+                    $this->notifyVerificationStatus(
+                        $userId,
+                        $item['id'],
+                        $item['type'],
+                        $newStatus,
+                        round($confidence, 4),
+                        $pdo,
+                        $now
+                    );
+                } catch (\Throwable $e) {
+                    error_log("[VerificationController] auto-process {$item['type']}: " . $e->getMessage());
                 }
-                unset($item);
             }
-            // ── PROD — Verifications stay "pending", Pub/Sub already published above.
-            //    The verification-automation Python service processes them asynchronously
-            //    via Vertex AI and calls back to PATCH /internal/verifications/{id}.
+            unset($item);
 
             // 8. Return summary
             $allTypes = ['identity', 'skill_assessment', 'portfolio', 'work_history', 'payment_method'];
@@ -304,11 +304,11 @@ final class VerificationController
 
             return $this->json([
                 'data' => [
-                    'evaluated'      => count($applicable),
-                    'created'        => $created,
-                    'skipped'        => $skipped,
+                    'evaluated' => count($applicable),
+                    'created' => $created,
+                    'skipped' => $skipped,
                     'not_applicable' => array_values($notApplicable),
-                    'reasons'        => $reasons,
+                    'reasons' => $reasons,
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -353,9 +353,14 @@ final class VerificationController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 
@@ -365,41 +370,47 @@ final class VerificationController
      * Create a notification record and push real-time event via Socket.IO/Redis.
      */
     private function notifyVerificationStatus(
-        string $userId, string $verificationId, string $type, string $status,
-        float $confidence, \PDO $pdo, string $now
+        string $userId,
+        string $verificationId,
+        string $type,
+        string $status,
+        float $confidence,
+        \PDO $pdo,
+        string $now
     ): void {
         $typeLabels = [
-            'identity'         => 'Identity',
+            'identity' => 'Identity',
             'skill_assessment' => 'Skill Assessment',
-            'portfolio'        => 'Portfolio',
-            'work_history'     => 'Work History',
-            'payment_method'   => 'Payment Method',
+            'portfolio' => 'Portfolio',
+            'work_history' => 'Work History',
+            'payment_method' => 'Payment Method',
         ];
         $label = $typeLabels[$type] ?? ucfirst(str_replace('_', ' ', $type));
 
         $meta = match ($status) {
             'approved' => [
-                'icon'     => '✅',
-                'title'    => "{$label} Verified",
-                'body'     => "Your {$label} verification has been approved with " . round($confidence * 100) . "% confidence.",
+                'icon' => '✅',
+                'title' => "{$label} Verified",
+                'body' => "Your {$label} verification has been approved with " . round($confidence * 100) . "% confidence.",
                 'priority' => 'success',
             ],
             'in_review' => [
-                'icon'     => '🔄',
-                'title'    => "{$label} Under Review",
-                'body'     => "Your {$label} verification is being reviewed by our team.",
+                'icon' => '🔄',
+                'title' => "{$label} Under Review",
+                'body' => "Your {$label} verification is being reviewed by our team.",
                 'priority' => 'info',
             ],
             'rejected' => [
-                'icon'     => '❌',
-                'title'    => "{$label} Verification Failed",
-                'body'     => "Your {$label} verification could not be approved. Please review and resubmit.",
+                'icon' => '❌',
+                'title' => "{$label} Verification Failed",
+                'body' => "Your {$label} verification could not be approved. Please review and resubmit.",
                 'priority' => 'warning',
             ],
             default => null,
         };
 
-        if (!$meta) return;
+        if (!$meta)
+            return;
 
         $notifId = $this->uuid();
 
@@ -409,22 +420,22 @@ final class VerificationController
                 'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
                  VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
             )->execute([
-                'id'    => $notifId,
-                'uid'   => $userId,
-                'type'  => "verification.{$status}",
-                'title' => "{$meta['icon']} {$meta['title']}",
-                'body'  => $meta['body'],
-                'data'  => json_encode([
-                    'verification_id' => $verificationId,
-                    'verification_type' => $type,
-                    'status' => $status,
-                    'confidence' => $confidence,
-                    'link' => '/dashboard/settings/verification',
-                ]),
-                'prio'  => $meta['priority'],
-                'chan'   => 'in_app',
-                'now'   => $now,
-            ]);
+                        'id' => $notifId,
+                        'uid' => $userId,
+                        'type' => "verification.{$status}",
+                        'title' => "{$meta['icon']} {$meta['title']}",
+                        'body' => $meta['body'],
+                        'data' => json_encode([
+                            'verification_id' => $verificationId,
+                            'verification_type' => $type,
+                            'status' => $status,
+                            'confidence' => $confidence,
+                            'link' => '/dashboard/settings/verification',
+                        ]),
+                        'prio' => $meta['priority'],
+                        'chan' => 'in_app',
+                        'now' => $now,
+                    ]);
         } catch (\Throwable $e) {
             error_log("[VerificationController] notification insert: " . $e->getMessage());
         }
@@ -438,18 +449,18 @@ final class VerificationController
 
             $socket = new SocketEvent($redis);
             $socket->toUser($userId, 'notification:new', [
-                'id'         => $notifId,
-                'type'       => "verification.{$status}",
-                'title'      => "{$meta['icon']} {$meta['title']}",
-                'body'       => $meta['body'],
-                'data'       => [
-                    'verification_id'   => $verificationId,
+                'id' => $notifId,
+                'type' => "verification.{$status}",
+                'title' => "{$meta['icon']} {$meta['title']}",
+                'body' => $meta['body'],
+                'data' => [
+                    'verification_id' => $verificationId,
                     'verification_type' => $type,
-                    'status'            => $status,
-                    'confidence'        => $confidence,
-                    'link'              => '/dashboard/settings/verification',
+                    'status' => $status,
+                    'confidence' => $confidence,
+                    'link' => '/dashboard/settings/verification',
                 ],
-                'priority'   => $meta['priority'],
+                'priority' => $meta['priority'],
                 'created_at' => $now,
             ]);
 
