@@ -1,8 +1,29 @@
-# ─── Builder stage ───
-FROM php:8.4-fpm-alpine AS builder
+# ─── Base stage (Compile extensions once) ───
+FROM php:8.4-fpm-alpine AS base
 
-RUN apk add --no-cache git unzip curl libzip-dev icu-dev oniguruma-dev postgresql-dev linux-headers \
-    && docker-php-ext-install pdo_pgsql pgsql zip intl mbstring opcache pcntl sockets pdo_mysql
+RUN apk add --no-cache \
+    nginx \
+    supervisor \
+    libzip-dev \
+    icu-dev \
+    oniguruma-dev \
+    postgresql-dev \
+    linux-headers \
+    git \
+    unzip \
+    && docker-php-ext-install -j$(nproc) \
+    pdo_pgsql \
+    pgsql \
+    zip \
+    intl \
+    mbstring \
+    opcache \
+    pcntl \
+    sockets \
+    pdo_mysql
+
+# ─── Builder stage ───
+FROM base AS builder
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -15,28 +36,7 @@ RUN composer create-project monkeyscloud/monkeyslegion-skeleton www --no-interac
     && composer dump-autoload --optimize
 
 # ─── Production image ───
-FROM php:8.4-fpm-alpine
-
-RUN apk add --no-cache \
-    nginx \
-    supervisor \
-    libzip-dev \
-    icu-dev \
-    oniguruma-dev \
-    postgresql-dev \
-    linux-headers \
-    git \
-    unzip \
-    && docker-php-ext-install \
-    pdo_pgsql \
-    pgsql \
-    zip \
-    intl \
-    mbstring \
-    opcache \
-    pcntl \
-    sockets \
-    pdo_mysql
+FROM base
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
