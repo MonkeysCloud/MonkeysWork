@@ -28,6 +28,7 @@ export default function AppShell() {
     const [showPermSetup, setShowPermSetup] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const [showDashMenu, setShowDashMenu] = useState(false);
+    const [chatUnread, setChatUnread] = useState(0);
     const dashMenuRef = useRef<HTMLDivElement>(null);
 
     // Check accessibility permission on mount
@@ -90,9 +91,9 @@ export default function AppShell() {
                     {/* Spacer for macOS traffic lights */}
                     <div className="w-16 flex-shrink-0" />
                     <img
-                        src="/monkeyswork-icon.svg"
-                        alt="MW"
-                        className="h-6 w-6 brightness-0 invert opacity-60 mr-2"
+                        src="/monkeyswork-dark.svg"
+                        alt="MonkeysWork"
+                        className="h-5 mr-2"
                     />
 
                     <TabButton
@@ -106,6 +107,7 @@ export default function AppShell() {
                         onClick={() => setActiveTab("chat")}
                         icon="💬"
                         label="Chat"
+                        badge={chatUnread}
                     />
                     <TabButton
                         active={activeTab === "contracts"}
@@ -212,7 +214,7 @@ export default function AppShell() {
             {/* ── Content ── */}
             <main className="flex-1 overflow-hidden relative">
                 {activeTab === "timer" && <Tracker />}
-                {activeTab === "chat" && <Chat />}
+                {activeTab === "chat" && <Chat onUnreadChange={setChatUnread} />}
                 {activeTab === "contracts" && <Contracts />}
 
                 {/* Notifications dropdown */}
@@ -235,17 +237,19 @@ function TabButton({
     onClick,
     icon,
     label,
+    badge,
 }: {
     active: boolean;
     onClick: () => void;
     icon: string;
     label: string;
+    badge?: number;
 }) {
     return (
         <button
             onClick={onClick}
             className={`
-        flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150
+        relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150
         ${active
                     ? "bg-white/10 text-[#f08a11]"
                     : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
@@ -254,6 +258,11 @@ function TabButton({
         >
             <span className="text-sm">{icon}</span>
             <span>{label}</span>
+            {(badge ?? 0) > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#f08a11] rounded-full text-[8px] font-bold text-white flex items-center justify-center">
+                    {badge! > 9 ? "9+" : badge}
+                </span>
+            )}
         </button>
     );
 }

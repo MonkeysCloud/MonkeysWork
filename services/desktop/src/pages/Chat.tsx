@@ -22,7 +22,15 @@ interface Conversation {
     unread_count?: number;
 }
 
-export default function Chat() {
+export interface ChatHandle {
+    unreadCount: number;
+}
+
+interface ChatProps {
+    onUnreadChange?: (count: number) => void;
+}
+
+export default function Chat({ onUnreadChange }: ChatProps) {
     const { user, token } = useAuth();
     const {
         messages: realtimeMessages,
@@ -84,6 +92,12 @@ export default function Chat() {
     }, []);
 
     useEffect(() => { loadConversations(); }, [loadConversations]);
+
+    // Report total unread count to parent
+    useEffect(() => {
+        const total = conversations.reduce((a, c) => a + (c.unread_count ?? 0), 0);
+        onUnreadChange?.(total);
+    }, [conversations, onUnreadChange]);
 
     // Load contracts for compose
     async function openCompose() {

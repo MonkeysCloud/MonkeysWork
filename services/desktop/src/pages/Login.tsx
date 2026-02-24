@@ -4,7 +4,7 @@ import { Input, Button, Card, CardBody, CardHeader } from "@heroui/react";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Login() {
-    const { login, isAuthenticated } = useAuth();
+    const { login, logout, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -23,7 +23,12 @@ export default function Login() {
         setLoading(true);
 
         try {
-            await login(email, password);
+            const user = await login(email, password);
+            if (user.role !== "freelancer") {
+                logout();
+                setError("The desktop app is available for freelancers only. Please use the web dashboard at monkeyswork.com.");
+                return;
+            }
             navigate("/app", { replace: true });
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Login failed");
@@ -47,9 +52,9 @@ export default function Login() {
                 {/* Logo */}
                 <div className="text-center mb-8">
                     <img
-                        src="/monkeyswork.svg"
+                        src="/monkeyswork-dark.svg"
                         alt="MonkeysWork"
-                        className="h-10 mx-auto brightness-0 invert mb-3"
+                        className="h-14 mx-auto mb-3"
                     />
                     <p className="text-white/50 text-sm">Sign in to your account</p>
                 </div>

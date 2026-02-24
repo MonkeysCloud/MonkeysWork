@@ -138,8 +138,9 @@ export default function Tracker() {
     /* ── SVG ring for the timer ── */
     const RING_R = 98;
     const RING_C = 2 * Math.PI * RING_R;
-    // One full rotation every 60s (seconds hand)
-    const ringOffset = isRunning ? RING_C * (1 - (seconds / 60)) : RING_C;
+    // One full rotation every 60s (seconds hand) — guard against NaN
+    const rawOffset = isRunning ? RING_C * (1 - (seconds / 60)) : RING_C;
+    const ringOffset = isNaN(rawOffset) ? RING_C : rawOffset;
 
     return (
         <div className="h-full flex flex-col bg-transparent">

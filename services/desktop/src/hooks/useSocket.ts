@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, type Socket } from "socket.io-client";
 
-const SOCKET_URL = "http://localhost:3001";
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
 
 interface UseSocketOptions {
     namespace?: string;
@@ -28,9 +28,10 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
             auth: token ? { token: `Bearer ${token}` } : undefined,
             transports: ["websocket", "polling"],
             reconnection: true,
-            reconnectionAttempts: 3,
-            reconnectionDelay: 2000,
-            reconnectionDelayMax: 10000,
+            reconnectionAttempts: 2,
+            reconnectionDelay: 5000,
+            reconnectionDelayMax: 30000,
+            timeout: 5000,
             autoConnect: true,
         });
 
@@ -45,9 +46,15 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
         });
 
         socket.on("connect_error", (err) => {
-            console.warn(`[socket] Connection error on ${namespace}:`, err.message);
+            // Silently handle connection errors — server may not be running
+            console.debug(`[socket] ${namespace}: ${err.message}`);
             setIsConnected(false);
-            if (err.message?.toLowerCase().includes("token") || err.message?.toLowerCase().includes("auth")) {
+            // Stop retrying on auth errors or when server doesn't exist
+            if (
+                err.message?.toLowerCase().includes("token") ||
+                err.message?.toLowerCase().includes("auth") ||
+                err.message?.toLowerCase().includes("websocket is closed")
+            ) {
                 socket.disconnect();
             }
         });

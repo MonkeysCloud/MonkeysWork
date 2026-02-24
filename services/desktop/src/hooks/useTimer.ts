@@ -52,12 +52,14 @@ export function useTimer(): UseTimerReturn {
 
     // Calculate elapsed from started_at
     const calcElapsed = useCallback((startedAt: string) => {
+        if (!startedAt) return 0;
         // Normalize PostgreSQL timestamps: "2026-02-20 18:47:00+00" → "2026-02-20T18:47:00+00"
         let s = startedAt.replace(" ", "T");
         if (!s.includes("Z") && !/[+-]\d{2}(:\d{2})?$/.test(s)) {
             s += "Z";
         }
         const start = new Date(s).getTime();
+        if (isNaN(start)) return 0;
         return Math.max(0, Math.floor((Date.now() - start) / 1000));
     }, []);
 
