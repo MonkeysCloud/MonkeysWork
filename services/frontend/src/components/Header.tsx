@@ -23,6 +23,7 @@ const NAV_LINKS: NavLink[] = [
     },
     { label: "Pricing", href: "/pricing" },
     { label: "Blog", href: "/blog" },
+    { label: "Apps", href: "/apps" },
 ];
 
 /* ── icons (inline SVG to avoid extra deps) ─────────── */
