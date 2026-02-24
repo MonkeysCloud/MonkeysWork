@@ -303,7 +303,6 @@ export default function JobManagePage() {
                 }
                 await fetchJob();
             } else {
-                const body = await res.json();
                 setError(body.message || `Failed to ${action}`);
             }
         } catch {

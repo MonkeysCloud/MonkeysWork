@@ -339,96 +339,77 @@ final class JobController
         $pdo = $this->db->pdo();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-        $env = getenv('APP_ENV') ?: 'prod';
-
-        // ── DEV MODE — Inline simulated scoring for instant feedback ──
-        if ($env === 'dev') {
-            $pdo->prepare(
-                'UPDATE "job" SET status = \'pending_review\', moderation_status = \'pending\', updated_at = :now WHERE id = :id'
-            )->execute(['now' => $now, 'id' => $id]);
-
-            $scorer = new VertexAiScorer();
-            $aiScore = $scorer->scoreJob($job);
-            $aiResult = [
-                'confidence' => $aiScore['confidence'],
-                'flags' => $aiScore['flags'],
-                'quality_score' => $aiScore['quality'],
-                'model' => $aiScore['model'],
-            ];
-            $confidence = number_format($aiScore['confidence'], 4);
-
-            if ($aiScore['confidence'] >= 0.85) {
-                $pdo->prepare(
-                    'UPDATE "job" SET status = \'open\', moderation_status = \'auto_approved\',
-                            moderation_ai_result = :ai, moderation_ai_confidence = :conf,
-                            moderation_ai_model_version = :model,
-                            published_at = :now, updated_at = :now
-                     WHERE id = :id'
-                )->execute([
-                            'ai' => json_encode($aiResult),
-                            'conf' => $confidence,
-                            'model' => $aiScore['model'],
-                            'now' => $now,
-                            'id' => $id,
-                        ]);
-
-                $this->events?->dispatch(new JobPublished($id, $userId));
-                $this->publishToPubSub($id, $pdo);
-                $this->notifyJobModeration($userId, $id, $job['title'], 'approved', $aiScore['confidence'], $pdo, $now);
-
-                return $this->json(['message' => 'Job auto-approved and published', 'moderation_status' => 'auto_approved']);
-
-            } elseif ($aiScore['confidence'] <= 0.3) {
-                $pdo->prepare(
-                    'UPDATE "job" SET status = \'rejected\', moderation_status = \'auto_rejected\',
-                            moderation_ai_result = :ai, moderation_ai_confidence = :conf,
-                            moderation_ai_model_version = :model, updated_at = :now
-                     WHERE id = :id'
-                )->execute([
-                            'ai' => json_encode($aiResult),
-                            'conf' => $confidence,
-                            'model' => $aiScore['model'],
-                            'now' => $now,
-                            'id' => $id,
-                        ]);
-
-                $this->notifyJobModeration($userId, $id, $job['title'], 'rejected', $aiScore['confidence'], $pdo, $now);
-                return $this->json(['message' => 'Job did not pass content moderation', 'moderation_status' => 'auto_rejected', 'flags' => $aiScore['flags']]);
-
-            } else {
-                $pdo->prepare(
-                    'UPDATE "job" SET status = \'pending_review\', moderation_status = \'human_review\',
-                            moderation_ai_result = :ai, moderation_ai_confidence = :conf,
-                            moderation_ai_model_version = :model, updated_at = :now
-                     WHERE id = :id'
-                )->execute([
-                            'ai' => json_encode($aiResult),
-                            'conf' => $confidence,
-                            'model' => $aiScore['model'],
-                            'now' => $now,
-                            'id' => $id,
-                        ]);
-
-                $this->notifyJobModeration($userId, $id, $job['title'], 'in_review', $aiScore['confidence'], $pdo, $now);
-                return $this->json(['message' => 'Job submitted for admin review', 'moderation_status' => 'human_review']);
-            }
-        }
-
-        // ── PRODUCTION — Async via Pub/Sub → Python AI services ──
+        // Set status to pending_review while scoring
         $pdo->prepare(
-            'UPDATE "job" SET status = \'pending_review\', moderation_status = \'pending\',
-                    updated_at = :now WHERE id = :id'
+            'UPDATE "job" SET status = \'pending_review\', moderation_status = \'pending\', updated_at = :now WHERE id = :id'
         )->execute(['now' => $now, 'id' => $id]);
 
-        // Publish to Pub/Sub — triggers moderation, scope analysis, and matching
-        $this->publishToPubSub($id, $pdo);
+        // ── Inline AI scoring (works in both dev and prod) ──
+        $scorer = new VertexAiScorer();
+        $aiScore = $scorer->scoreJob($job);
+        $aiResult = [
+            'confidence' => $aiScore['confidence'],
+            'flags' => $aiScore['flags'],
+            'quality_score' => $aiScore['quality'],
+            'model' => $aiScore['model'],
+        ];
+        $confidence = number_format($aiScore['confidence'], 4);
 
-        $this->notifyJobModeration($userId, $id, $job['title'], 'in_review', 0.0, $pdo, $now);
+        if ($aiScore['confidence'] >= 0.85) {
+            $pdo->prepare(
+                'UPDATE "job" SET status = \'open\', moderation_status = \'auto_approved\',
+                        moderation_ai_result = :ai, moderation_ai_confidence = :conf,
+                        moderation_ai_model_version = :model,
+                        published_at = :now, updated_at = :now
+                 WHERE id = :id'
+            )->execute([
+                        'ai' => json_encode($aiResult),
+                        'conf' => $confidence,
+                        'model' => $aiScore['model'],
+                        'now' => $now,
+                        'id' => $id,
+                    ]);
 
-        return $this->json([
-            'message' => 'Job submitted for AI review',
-            'moderation_status' => 'pending',
-        ]);
+            $this->events?->dispatch(new JobPublished($id, $userId));
+            $this->publishToPubSub($id, $pdo);
+            $this->notifyJobModeration($userId, $id, $job['title'], 'approved', $aiScore['confidence'], $pdo, $now);
+
+            return $this->json(['message' => 'Job auto-approved and published', 'moderation_status' => 'auto_approved']);
+
+        } elseif ($aiScore['confidence'] <= 0.3) {
+            $pdo->prepare(
+                'UPDATE "job" SET status = \'rejected\', moderation_status = \'auto_rejected\',
+                        moderation_ai_result = :ai, moderation_ai_confidence = :conf,
+                        moderation_ai_model_version = :model, updated_at = :now
+                 WHERE id = :id'
+            )->execute([
+                        'ai' => json_encode($aiResult),
+                        'conf' => $confidence,
+                        'model' => $aiScore['model'],
+                        'now' => $now,
+                        'id' => $id,
+                    ]);
+
+            $this->notifyJobModeration($userId, $id, $job['title'], 'rejected', $aiScore['confidence'], $pdo, $now);
+            return $this->json(['message' => 'Job did not pass content moderation', 'moderation_status' => 'auto_rejected', 'flags' => $aiScore['flags']]);
+
+        } else {
+            $pdo->prepare(
+                'UPDATE "job" SET status = \'pending_review\', moderation_status = \'human_review\',
+                        moderation_ai_result = :ai, moderation_ai_confidence = :conf,
+                        moderation_ai_model_version = :model, updated_at = :now
+                 WHERE id = :id'
+            )->execute([
+                        'ai' => json_encode($aiResult),
+                        'conf' => $confidence,
+                        'model' => $aiScore['model'],
+                        'now' => $now,
+                        'id' => $id,
+                    ]);
+
+            $this->notifyJobModeration($userId, $id, $job['title'], 'in_review', $aiScore['confidence'], $pdo, $now);
+            return $this->json(['message' => 'Job submitted for admin review', 'moderation_status' => 'human_review']);
+        }
     }
 
     /**
