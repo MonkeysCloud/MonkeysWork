@@ -127,7 +127,7 @@ export default function Header() {
                         </Link>
 
                         {/* ── Desktop Nav ── */}
-                        <nav className="hidden md:flex items-center gap-1">
+                        <nav className="hidden lg:flex items-center gap-1">
                             {filteredNavLinks.map((link) =>
                                 link.dropdown ? (
                                     /* dropdown trigger */
@@ -187,7 +187,7 @@ export default function Header() {
                         </nav>
 
                         {/* ── Desktop CTAs ── */}
-                        <div className="hidden md:flex items-center gap-3">
+                        <div className="hidden lg:flex items-center gap-3">
                             {isAuthenticated && user ? (
                                 <>
                                     <Link
@@ -227,7 +227,7 @@ export default function Header() {
                         {/* ── Mobile Hamburger ── */}
                         <button
                             onClick={() => setMobileOpen(!mobileOpen)}
-                            className="md:hidden relative z-10 p-2 text-brand-dark hover:text-brand-orange transition-colors"
+                            className="lg:hidden relative z-10 p-2 text-brand-dark hover:text-brand-orange transition-colors"
                             aria-label="Toggle menu"
                         >
                             <HamburgerIcon open={mobileOpen} />
@@ -239,7 +239,7 @@ export default function Header() {
             {/* ────── MOBILE OVERLAY MENU ────── */}
             {mobileOpen && (
                 <div
-                    className="fixed inset-0 z-40 md:hidden"
+                    className="fixed inset-0 z-40 lg:hidden"
                     style={{ animation: "fadeIn 0.2s ease-out" }}
                 >
                     {/* backdrop */}
@@ -329,7 +329,7 @@ export default function Header() {
             {/* ────── MOBILE STICKY BOTTOM CTA ────── */}
             <div
                 className={`
-          fixed bottom-0 left-0 right-0 z-40 md:hidden
+          fixed bottom-0 left-0 right-0 z-40 lg:hidden
           bg-white/90 backdrop-blur-lg border-t border-brand-border/60
           px-4 py-3 transition-transform duration-300
           ${mobileOpen ? "translate-y-full" : "translate-y-0"}
