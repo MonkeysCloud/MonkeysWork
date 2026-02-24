@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'config/theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
+import 'services/version_service.dart';
 
 void main() {
   runApp(const MonkeysWorkApp());
@@ -35,9 +36,14 @@ class _AuthGate extends StatefulWidget {
 class _AuthGateState extends State<_AuthGate> {
   bool _showLogin = true;
 
-  // TODO: Replace with Provider<AuthService> listener
-  // For now, show auth screens (login/register toggle)
-  // Once logged in, navigate to AppShell
+  @override
+  void initState() {
+    super.initState();
+    // Check app version after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      VersionService.showUpdateDialogIfNeeded(context);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
