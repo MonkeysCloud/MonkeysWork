@@ -2,7 +2,7 @@ FROM node:20-alpine AS builder
 
 ARG NEXT_PUBLIC_API_URL=https://api.monkeysworks.com/api/v1
 ARG NEXT_PUBLIC_SITE_URL=https://monkeysworks.com
-ARG NEXT_PUBLIC_SOCKET_URL=https://socket.monkeysworks.com
+ARG NEXT_PUBLIC_SOCKET_URL=https://ws.monkeysworks.com
 ARG NEXT_PUBLIC_GITHUB_CLIENT_ID
 ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
 
