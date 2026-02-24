@@ -33,15 +33,15 @@ final class ContractController
     public function index(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $p      = $this->pagination($request);
+        $p = $this->pagination($request);
         $status = $request->getQueryParams()['status'] ?? null;
 
-        $where  = '(c.client_id = :uid OR c.freelancer_id = :uid)';
+        $where = '(c.client_id = :uid OR c.freelancer_id = :uid)';
         $params = ['uid' => $userId];
 
         if ($status) {
-            $where            .= ' AND c.status = :status';
-            $params['status']  = $status;
+            $where .= ' AND c.status = :status';
+            $params['status'] = $status;
         }
 
         $cnt = $this->db->pdo()->prepare("SELECT COUNT(*) FROM \"contract\" c WHERE {$where}");
@@ -100,7 +100,7 @@ final class ContractController
     public function update(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         $stmt = $this->db->pdo()->prepare(
             'SELECT client_id, freelancer_id, contract_type FROM "contract" WHERE id = :id'
@@ -115,7 +115,7 @@ final class ContractController
             return $this->forbidden('Only the client can update contract settings');
         }
 
-        $sets   = [];
+        $sets = [];
         $params = ['id' => $id];
 
         // weekly_hour_limit — only for hourly contracts
@@ -127,15 +127,15 @@ final class ContractController
             if ($val !== null && (int) $val < 1) {
                 return $this->error('weekly_hour_limit must be at least 1 or null to remove');
             }
-            $sets[]                     = '"weekly_hour_limit" = :whl';
-            $params['whl']              = $val !== null ? (int) $val : null;
+            $sets[] = '"weekly_hour_limit" = :whl';
+            $params['whl'] = $val !== null ? (int) $val : null;
         }
 
         if (empty($sets)) {
             return $this->error('No valid fields to update');
         }
 
-        $sets[]        = '"updated_at" = :now';
+        $sets[] = '"updated_at" = :now';
         $params['now'] = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $this->db->pdo()->prepare(
@@ -185,14 +185,16 @@ final class ContractController
                 $contractUrl = "{$frontendUrl}/dashboard/reviews";
 
                 $this->emailNotifier->notify(
-                    $c['client_id'], 'contract_emails',
+                    $c['client_id'],
+                    'contract_emails',
                     'Contract Completed — ' . $contractTitle,
                     'contract-completed',
                     ['contractTitle' => $contractTitle, 'otherPartyName' => $freelancerName, 'contractUrl' => $contractUrl],
                     ['contracts', 'completed'],
                 );
                 $this->emailNotifier->notify(
-                    $c['freelancer_id'], 'contract_emails',
+                    $c['freelancer_id'],
+                    'contract_emails',
                     'Contract Completed — ' . $contractTitle,
                     'contract-completed',
                     ['contractTitle' => $contractTitle, 'otherPartyName' => $clientName, 'contractUrl' => $contractUrl],
@@ -243,7 +245,7 @@ final class ContractController
     public function addMilestone(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         // Validate milestone input
         $validationError = $this->milestoneValidator->validateOrFail($data);
@@ -260,23 +262,23 @@ final class ContractController
         }
 
         $msId = $this->uuid();
-        $now  = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $this->db->pdo()->prepare(
             'INSERT INTO "milestone" (id, contract_id, title, description, amount, currency,
                                       due_date, sort_order, status, created_at, updated_at)
              VALUES (:id, :cid, :title, :desc, :amt, :cur, :due, :sort, \'pending\', :now, :now)'
         )->execute([
-            'id'    => $msId,
-            'cid'   => $id,
-            'title' => $data['title'] ?? 'Milestone',
-            'desc'  => $data['description'] ?? null,
-            'amt'   => $data['amount'] ?? 0,
-            'cur'   => $data['currency'] ?? 'USD',
-            'due'   => $data['due_date'] ?? null,
-            'sort'  => $data['sort_order'] ?? 0,
-            'now'   => $now,
-        ]);
+                    'id' => $msId,
+                    'cid' => $id,
+                    'title' => $data['title'] ?? 'Milestone',
+                    'desc' => $data['description'] ?? null,
+                    'amt' => $data['amount'] ?? 0,
+                    'cur' => $data['currency'] ?? 'USD',
+                    'due' => $data['due_date'] ?? null,
+                    'sort' => $data['sort_order'] ?? 0,
+                    'now' => $now,
+                ]);
 
         return $this->created(['data' => ['id' => $msId]]);
     }
@@ -314,7 +316,7 @@ final class ContractController
         $userId = $this->userId($request);
 
         $stmt = $this->db->pdo()->prepare(
-            'SELECT client_id, freelancer_id, status FROM "contract" WHERE id = :id'
+            'SELECT client_id, freelancer_id, job_id, status FROM "contract" WHERE id = :id'
         );
         $stmt->execute(['id' => $id]);
         $c = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -341,6 +343,21 @@ final class ContractController
             "UPDATE \"contract\" SET status = :status, updated_at = :now{$extra} WHERE id = :id"
         )->execute($params);
 
+        // ── Sync job status with contract lifecycle ──
+        $jobStatusMap = [
+            'completed' => 'completed',
+            'cancelled' => 'open',      // re-open for hiring
+        ];
+        if (isset($jobStatusMap[$newStatus]) && !empty($c['job_id'])) {
+            $this->db->pdo()->prepare(
+                'UPDATE "job" SET status = :status, updated_at = :now WHERE id = :jid'
+            )->execute([
+                        'status' => $jobStatusMap[$newStatus],
+                        'now' => $now,
+                        'jid' => $c['job_id'],
+                    ]);
+        }
+
         return $this->json(['message' => "Contract {$newStatus}"]);
     }
 
@@ -348,11 +365,14 @@ final class ContractController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
             mt_rand(0, 0xffff),
             mt_rand(0, 0x0fff) | 0x4000,
             mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 }
