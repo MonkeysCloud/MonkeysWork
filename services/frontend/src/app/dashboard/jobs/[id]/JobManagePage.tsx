@@ -144,7 +144,9 @@ function formatDate(iso?: string) {
 }
 
 function fileUrl(relPath: string) {
-    return `${API_ORIGIN}${relPath}`;
+    if (!relPath) return "";
+    if (relPath.startsWith("http")) return relPath;
+    return `${API_ORIGIN}${relPath.startsWith("/") ? "" : "/"}${relPath}`;
 }
 
 export default function JobManagePage() {
