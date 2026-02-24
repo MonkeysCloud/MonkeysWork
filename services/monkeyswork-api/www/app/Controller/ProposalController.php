@@ -38,7 +38,7 @@ final class ProposalController
     public function create(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         // Validate input
         $validationError = $this->proposalValidator->validateOrFail($data);
@@ -55,7 +55,7 @@ final class ProposalController
             return $this->error('You already submitted a proposal for this job', 409);
         }
 
-        $id  = $this->uuid();
+        $id = $this->uuid();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $this->db->pdo()->prepare(
@@ -64,16 +64,16 @@ final class ProposalController
                                      status, created_at, updated_at)
              VALUES (:id, :jid, :fid, :cl, :bid, :bt, :dur, :mb, \'submitted\', :now, :now)'
         )->execute([
-            'id'  => $id,
-            'jid' => $data['job_id'],
-            'fid' => $userId,
-            'cl'  => $data['cover_letter'],
-            'bid' => $data['bid_amount'],
-            'bt'  => $data['bid_type'] ?? 'total',
-            'dur' => isset($data['estimated_duration_weeks']) ? ((int)$data['estimated_duration_weeks'] * 7) : null,
-            'mb'  => json_encode($data['milestones_proposed'] ?? []),
-            'now' => $now,
-        ]);
+                    'id' => $id,
+                    'jid' => $data['job_id'],
+                    'fid' => $userId,
+                    'cl' => $data['cover_letter'],
+                    'bid' => $data['bid_amount'],
+                    'bt' => $data['bid_type'] ?? 'total',
+                    'dur' => isset($data['estimated_duration_weeks']) ? ((int) $data['estimated_duration_weeks'] * 7) : null,
+                    'mb' => json_encode($data['milestones_proposed'] ?? []),
+                    'now' => $now,
+                ]);
 
         // Increment proposals_count on the job
         $this->db->pdo()->prepare(
@@ -94,12 +94,12 @@ final class ProposalController
                             ai_fraud_model_version = :mv, ai_fraud_action = :action,
                             updated_at = :now WHERE id = :id'
                 )->execute([
-                    'score'  => $fraudResult['fraud_score'] ?? 0.0,
-                    'mv'     => $fraudResult['model_version'] ?? null,
-                    'action' => $fraudResult['recommended_action'] ?? 'allow',
-                    'now'    => $now,
-                    'id'     => $id,
-                ]);
+                            'score' => $fraudResult['fraud_score'] ?? 0.0,
+                            'mv' => $fraudResult['model_version'] ?? null,
+                            'action' => $fraudResult['recommended_action'] ?? 'allow',
+                            'now' => $now,
+                            'id' => $id,
+                        ]);
 
                 // Enforcement
                 $mode = $flags->getMode('fraud_enforcement_mode', 'shadow');
@@ -168,7 +168,7 @@ final class ProposalController
     public function mine(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $p      = $this->pagination($request);
+        $p = $this->pagination($request);
 
         $cnt = $this->db->pdo()->prepare('SELECT COUNT(*) FROM "proposal" WHERE freelancer_id = :uid');
         $cnt->execute(['uid' => $userId]);
@@ -192,10 +192,10 @@ final class ProposalController
     public function received(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $p      = $this->pagination($request);
+        $p = $this->pagination($request);
 
         // Optional status filter
-        $qs     = $request->getQueryParams();
+        $qs = $request->getQueryParams();
         $status = isset($qs['status']) ? array_filter(explode(',', $qs['status'])) : [];
 
         $where = 'j.client_id = :uid';
@@ -287,7 +287,7 @@ final class ProposalController
     public function update(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         $stmt = $this->db->pdo()->prepare(
             'SELECT freelancer_id, status FROM "proposal" WHERE id = :id'
@@ -306,13 +306,13 @@ final class ProposalController
         }
 
         $allowed = ['cover_letter', 'bid_amount', 'estimated_duration_days', 'milestones_proposed'];
-        $sets    = [];
-        $params  = ['id' => $id];
+        $sets = [];
+        $params = ['id' => $id];
 
         foreach ($allowed as $field) {
             if (array_key_exists($field, $data)) {
                 $v = $field === 'milestones_breakdown' ? json_encode($data[$field]) : $data[$field];
-                $sets[]         = "\"{$field}\" = :{$field}";
+                $sets[] = "\"{$field}\" = :{$field}";
                 $params[$field] = $v;
             }
         }
@@ -321,7 +321,7 @@ final class ProposalController
             return $this->error('No valid fields to update');
         }
 
-        $sets[]        = '"updated_at" = :now';
+        $sets[] = '"updated_at" = :now';
         $params['now'] = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $this->db->pdo()->prepare('UPDATE "proposal" SET ' . implode(', ', $sets) . ' WHERE id = :id')
@@ -386,7 +386,10 @@ final class ProposalController
 
         // Dispatch event
         $this->events?->dispatch(new ProposalAccepted(
-            $id, $info['job_id'], $info['freelancer_id'], $userId
+            $id,
+            $info['job_id'],
+            $info['freelancer_id'],
+            $userId
         ));
 
         // ── Create contract from accepted proposal ──
@@ -408,24 +411,29 @@ final class ProposalController
                  :hourly_rate, :whl, :currency, :status, :platform_fee,
                  :started_at, :created_at, :updated_at)'
         )->execute([
-            'id'              => $contractId,
-            'job_id'          => $info['job_id'],
-            'proposal_id'     => $id,
-            'client_id'       => $info['client_id'],
-            'freelancer_id'   => $info['freelancer_id'],
-            'title'           => $info['job_title'],
-            'description'     => $info['cover_letter'],
-            'contract_type'   => $info['bid_type'],
-            'total_amount'    => $info['bid_amount'],
-            'hourly_rate'     => $isHourly ? $info['bid_amount'] : null,
-            'whl'             => $isHourly ? ($info['weekly_hours_limit'] ?? null) : null,
-            'currency'        => 'USD',
-            'status'          => 'active',
-            'platform_fee'    => '10.00',
-            'started_at'      => $now,
-            'created_at'      => $now,
-            'updated_at'      => $now,
-        ]);
+                    'id' => $contractId,
+                    'job_id' => $info['job_id'],
+                    'proposal_id' => $id,
+                    'client_id' => $info['client_id'],
+                    'freelancer_id' => $info['freelancer_id'],
+                    'title' => $info['job_title'],
+                    'description' => $info['cover_letter'],
+                    'contract_type' => $info['bid_type'],
+                    'total_amount' => $info['bid_amount'],
+                    'hourly_rate' => $isHourly ? $info['bid_amount'] : null,
+                    'whl' => $isHourly ? ($info['weekly_hours_limit'] ?? null) : null,
+                    'currency' => 'USD',
+                    'status' => 'active',
+                    'platform_fee' => '10.00',
+                    'started_at' => $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+
+        // ── Mark job as in_progress (no longer 'open' for browsing) ──
+        $pdo->prepare(
+            'UPDATE "job" SET status = \'in_progress\', updated_at = :now WHERE id = :jid'
+        )->execute(['now' => $now, 'jid' => $info['job_id']]);
 
         // ── Create milestones from proposal ──
         $milestones = json_decode($info['milestones_proposed'] ?? '[]', true);
@@ -442,14 +450,14 @@ final class ProposalController
             );
             foreach ($milestones as $i => $ms) {
                 $msStmt->execute([
-                    'id'         => $this->uuid(),
-                    'cid'        => $contractId,
-                    'title'      => $ms['title'] ?? ('Milestone ' . ($i + 1)),
-                    'desc'       => $ms['description'] ?? null,
-                    'amount'     => $ms['amount'] ?? '0.00',
-                    'currency'   => 'USD',
-                    'status'     => 'pending',
-                    'sort'       => $i + 1,
+                    'id' => $this->uuid(),
+                    'cid' => $contractId,
+                    'title' => $ms['title'] ?? ('Milestone ' . ($i + 1)),
+                    'desc' => $ms['description'] ?? null,
+                    'amount' => $ms['amount'] ?? '0.00',
+                    'currency' => 'USD',
+                    'status' => 'pending',
+                    'sort' => $i + 1,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
@@ -489,10 +497,10 @@ final class ProposalController
         $this->db->pdo()->prepare(
             "UPDATE \"proposal\" SET status = :status, updated_at = :now WHERE id = :id"
         )->execute([
-            'status' => $newStatus,
-            'now'    => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
-            'id'     => $id,
-        ]);
+                    'status' => $newStatus,
+                    'now' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+                    'id' => $id,
+                ]);
 
         return $this->json(['message' => "Proposal {$newStatus}"]);
     }
@@ -501,11 +509,14 @@ final class ProposalController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
             mt_rand(0, 0xffff),
             mt_rand(0, 0x0fff) | 0x4000,
             mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 
@@ -562,25 +573,25 @@ final class ProposalController
         $accountAgeDays = (int) $ageStmt->fetchColumn();
 
         $payload = [
-            'account_id'          => $userId,
-            'entity_type'         => 'proposal',
-            'entity_id'           => $proposalId,
-            'cover_letter'        => $data['cover_letter'] ?? null,
-            'bid_amount'          => isset($data['bid_amount']) ? (float) $data['bid_amount'] : null,
-            'job_budget_min'      => isset($jobContext['budget_min']) ? (float) $jobContext['budget_min'] : null,
-            'job_budget_max'      => isset($jobContext['budget_max']) ? (float) $jobContext['budget_max'] : null,
+            'account_id' => $userId,
+            'entity_type' => 'proposal',
+            'entity_id' => $proposalId,
+            'cover_letter' => $data['cover_letter'] ?? null,
+            'bid_amount' => isset($data['bid_amount']) ? (float) $data['bid_amount'] : null,
+            'job_budget_min' => isset($jobContext['budget_min']) ? (float) $jobContext['budget_min'] : null,
+            'job_budget_max' => isset($jobContext['budget_max']) ? (float) $jobContext['budget_max'] : null,
             'proposals_last_hour' => $proposalsLastHour,
-            'total_proposals'     => $totalProposals,
-            'account_age_days'    => $accountAgeDays,
+            'total_proposals' => $totalProposals,
+            'account_age_days' => $accountAgeDays,
         ];
 
         $ch = curl_init($fraudUrl);
         curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => json_encode($payload),
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT_MS     => 2000,
+            CURLOPT_TIMEOUT_MS => 2000,
             CURLOPT_CONNECTTIMEOUT_MS => 500,
         ]);
 
