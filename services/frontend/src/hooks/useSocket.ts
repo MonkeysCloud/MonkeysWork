@@ -40,6 +40,7 @@ interface UseSocketReturn {
 export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
     const { namespace = "/", token, autoConnect = true } = options;
     const socketRef = useRef<Socket | null>(null);
+    const mountedRef = useRef(true);
     const [isConnected, setIsConnected] = useState(false);
 
     const connect = useCallback(() => {
@@ -56,17 +57,25 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
         });
 
         socket.on("connect", () => {
+            if (!mountedRef.current) return;
             console.log(`[socket] Connected to ${namespace} (${socket.id})`);
             setIsConnected(true);
         });
 
         socket.on("disconnect", (reason) => {
+            if (!mountedRef.current) return;
             console.log(`[socket] Disconnected from ${namespace}: ${reason}`);
             setIsConnected(false);
         });
 
         socket.on("connect_error", (err) => {
-            const isAuthError = err.message?.toLowerCase().includes("token") || err.message?.toLowerCase().includes("auth");
+            // Ignore errors that arrive after the hook has unmounted
+            // (e.g. navigating away from the dashboard)
+            if (!mountedRef.current) return;
+
+            const isAuthError =
+                err.message?.toLowerCase().includes("token") ||
+                err.message?.toLowerCase().includes("auth");
             if (isAuthError) {
                 console.warn(`[socket] Auth failed on ${namespace} — will reconnect on next login`);
                 socket.disconnect();
@@ -89,11 +98,14 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
     }, []);
 
     useEffect(() => {
+        mountedRef.current = true;
+
         if (autoConnect && token) {
             connect();
         }
 
         return () => {
+            mountedRef.current = false;
             disconnect();
         };
     }, [autoConnect, token, connect, disconnect]);
