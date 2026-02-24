@@ -52,6 +52,9 @@ mod macos_listener {
         fn CGPreflightListenEventAccess() -> bool;
         fn CGRequestListenEventAccess() -> bool;
 
+        fn CGPreflightScreenCaptureAccess() -> bool;
+        fn CGRequestScreenCaptureAccess() -> bool;
+
         fn CGEventTapCreate(
             tap: u32,
             place: u32,
@@ -104,6 +107,14 @@ mod macos_listener {
         unsafe { CGRequestListenEventAccess() }
     }
 
+    pub fn check_screen_recording_permission() -> bool {
+        unsafe { CGPreflightScreenCaptureAccess() }
+    }
+
+    pub fn request_screen_recording_permission() -> bool {
+        unsafe { CGRequestScreenCaptureAccess() }
+    }
+
     /// Start a CGEventTap on the current thread (blocks via CFRunLoopRun).
     pub fn start_listener() -> Result<(), String> {
         let events_of_interest: u64 = (1u64 << KCG_EVENT_KEY_DOWN)
@@ -154,6 +165,14 @@ mod other_listener {
     }
 
     pub fn request_permission() -> bool {
+        true
+    }
+
+    pub fn check_screen_recording_permission() -> bool {
+        true
+    }
+
+    pub fn request_screen_recording_permission() -> bool {
         true
     }
 
@@ -218,6 +237,18 @@ fn check_accessibility_permission() -> bool {
 #[tauri::command]
 fn request_accessibility_permission() -> bool {
     platform::request_permission()
+}
+
+/// Check whether the app has Screen Recording permission (required for screenshots).
+#[tauri::command]
+fn check_screen_recording_permission() -> bool {
+    platform::check_screen_recording_permission()
+}
+
+/// Request Screen Recording permission (opens macOS system dialog).
+#[tauri::command]
+fn request_screen_recording_permission() -> bool {
+    platform::request_screen_recording_permission()
 }
 
 // ── Screenshot capture ──────────────────────────────────────────────────────
@@ -300,6 +331,8 @@ pub fn run() {
             get_activity_counters,
             check_accessibility_permission,
             request_accessibility_permission,
+            check_screen_recording_permission,
+            request_screen_recording_permission,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

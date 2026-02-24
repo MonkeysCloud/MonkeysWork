@@ -31,14 +31,17 @@ export default function AppShell() {
     const [chatUnread, setChatUnread] = useState(0);
     const dashMenuRef = useRef<HTMLDivElement>(null);
 
-    // Check accessibility permission on mount
+    // Check accessibility & screen recording permissions on mount
     useEffect(() => {
         if (localStorage.getItem("permissionDismissed")) return;
-        invoke("check_accessibility_permission")
-            .then((ok) => {
-                if (!ok) setShowPermSetup(true);
-            })
-            .catch(() => { }); // non-Tauri env
+        Promise.all([
+            invoke("check_accessibility_permission"),
+            invoke("check_screen_recording_permission")
+        ])
+        .then(([okAccess, okScreen]) => {
+            if (!okAccess || !okScreen) setShowPermSetup(true);
+        })
+        .catch(() => { }); // non-Tauri env
     }, []);
 
     // Close dashboard menu on outside click

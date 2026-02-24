@@ -14,12 +14,13 @@ function detectOS(): OS {
 
 const instructions: Record<OS, { title: string; steps: string[] }> = {
     macos: {
-        title: "macOS — Accessibility Permission",
+        title: "macOS — Required Permissions",
         steps: [
             "Open System Settings (Apple menu → System Settings)",
             "Go to Privacy & Security → Accessibility",
             'Find "MonkeysWork" in the list and toggle it ON',
-            "If it's not listed, click the + button and add the app",
+            "Go back to Privacy & Security → Screen Recording",
+            'Find "MonkeysWork" and toggle it ON',
             "You may need to restart the app after granting permission",
         ],
     },
@@ -62,9 +63,21 @@ export default function PermissionSetup({ onDismiss }: PermissionSetupProps) {
     async function checkPermission() {
         setChecking(true);
         try {
-            const ok: boolean = await invoke("check_accessibility_permission");
-            setGranted(ok);
-            if (ok) {
+            const okAccess: boolean = await invoke("check_accessibility_permission");
+            const okScreen: boolean = await invoke("check_screen_recording_permission");
+            const allOk = okAccess && okScreen;
+            setGranted(allOk);
+            
+            // Request ones that are missing
+            if (!okAccess) {
+                invoke("request_accessibility_permission").catch(() => {});
+            }
+            // Add a small delay so OS doesn't potentially drop the second prompt
+            if (!okScreen) {
+                setTimeout(() => invoke("request_screen_recording_permission").catch(() => {}), 500);
+            }
+
+            if (allOk) {
                 // small delay so the user sees the success state
                 setTimeout(() => onDismiss(), 800);
             }
