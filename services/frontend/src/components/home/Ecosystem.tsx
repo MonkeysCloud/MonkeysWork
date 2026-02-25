@@ -3,17 +3,17 @@ const PRODUCTS = [
     {
         name: "MonkeysLegion",
         desc: "High-performance PHP framework",
-        href: "https://monkeys.cloud/legion",
+        href: "https://monkeyslegion.com",
     },
     {
         name: "MonkeysMail",
         desc: "Transactional email service",
-        href: "https://monkeys.cloud/mail",
+        href: "https://monkeysmail.com",
     },
     {
         name: "MonkeysCMS",
         desc: "Headless content management",
-        href: "https://monkeys.cloud/cms",
+        href: "https://monkeyscms.com",
     },
 ];
 
