@@ -29,12 +29,21 @@ gcloud container clusters get-credentials "mw-${ENV}-cluster" --zone "$ZONE"
 NAMESPACE="monkeyswork"
 [[ "$SERVICE" == ai-* ]] && NAMESPACE="monkeyswork-ai"
 
-MANIFEST="infra/k8s/$SERVICE/deployment.yaml"
-if [[ -f "$MANIFEST" ]]; then
-    echo "→ Applying deployment manifest: $MANIFEST"
-    # Replace the image tag in the manifest and apply
-    sed "s|image: .*${SERVICE}:.*|image: ${REGISTRY}/${SERVICE}:${IMAGE_TAG}|" "$MANIFEST" \
-      | kubectl apply -n "$NAMESPACE" -f -
+MANIFEST_DIR="infra/k8s/$SERVICE"
+if [[ -d "$MANIFEST_DIR" ]]; then
+    echo "→ Applying all manifests in $MANIFEST_DIR/"
+    for manifest in "$MANIFEST_DIR"/*.yaml; do
+        if [[ "$manifest" == *deployment.yaml ]]; then
+            # Replace the image tag in deployment manifests
+            echo "  • $(basename "$manifest") (with image tag)"
+            sed "s|image: .*${SERVICE}:.*|image: ${REGISTRY}/${SERVICE}:${IMAGE_TAG}|" "$manifest" \
+              | kubectl apply -n "$NAMESPACE" -f -
+        else
+            # Apply other manifests (cronjobs, services, etc.) as-is
+            echo "  • $(basename "$manifest")"
+            kubectl apply -n "$NAMESPACE" -f "$manifest"
+        fi
+    done
 else
     kubectl set image "deployment/$SERVICE" \
       "$SERVICE=$REGISTRY/$SERVICE:$IMAGE_TAG" \

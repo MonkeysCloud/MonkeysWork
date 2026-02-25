@@ -1,0 +1,181 @@
+# ── K8s CronJobs for billing & dispute automation ──────────────────
+# These are applied alongside deployment.yaml on every deploy.
+# They call the internal cron endpoints with X-Internal-Token auth.
+#
+# API base URL inside the cluster:
+#   http://monkeyswork-api.monkeyswork.svc.cluster.local:8080
+# ──────────────────────────────────────────────────────────────────────
+
+---
+# ── Monday 6:00 AM UTC — Charge clients for approved hourly timesheets
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: billing-charge-weekly
+  namespace: monkeyswork
+  labels:
+    app: monkeyswork-api
+    component: cron
+spec:
+  schedule: "0 6 * * 1"          # Every Monday at 06:00 UTC
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app: monkeyswork-api
+            component: cron
+            job: charge-weekly
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: cron-runner
+              image: curlimages/curl:8.5.0
+              command: ["sh", "-c"]
+              args:
+                - |
+                  echo "[$(date -u)] Starting weekly charge..."
+                  HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+                    -X POST \
+                    -H "Content-Type: application/json" \
+                    -H "X-Internal-Token: ${INTERNAL_API_TOKEN}" \
+                    http://monkeyswork-api.monkeyswork.svc.cluster.local:8080/api/v1/cron/charge-weekly)
+                  echo "HTTP ${HTTP_CODE}"
+                  cat /tmp/response.json
+                  echo ""
+                  [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]
+              env:
+                - name: INTERNAL_API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: internal-api-token
+                      key: token
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+
+---
+# ── Friday 6:00 AM UTC — Pay freelancers
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: billing-payout-weekly
+  namespace: monkeyswork
+  labels:
+    app: monkeyswork-api
+    component: cron
+spec:
+  schedule: "0 6 * * 5"          # Every Friday at 06:00 UTC
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app: monkeyswork-api
+            component: cron
+            job: payout-weekly
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: cron-runner
+              image: curlimages/curl:8.5.0
+              command: ["sh", "-c"]
+              args:
+                - |
+                  echo "[$(date -u)] Starting weekly payout..."
+                  HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+                    -X POST \
+                    -H "Content-Type: application/json" \
+                    -H "X-Internal-Token: ${INTERNAL_API_TOKEN}" \
+                    http://monkeyswork-api.monkeyswork.svc.cluster.local:8080/api/v1/cron/payout-weekly)
+                  echo "HTTP ${HTTP_CODE}"
+                  cat /tmp/response.json
+                  echo ""
+                  [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]
+              env:
+                - name: INTERNAL_API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: internal-api-token
+                      key: token
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+
+---
+# ── Daily 2:00 AM UTC — Auto-escalate stale disputes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: disputes-check-deadlines
+  namespace: monkeyswork
+  labels:
+    app: monkeyswork-api
+    component: cron
+spec:
+  schedule: "0 2 * * *"          # Every day at 02:00 UTC
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      template:
+        metadata:
+          labels:
+            app: monkeyswork-api
+            component: cron
+            job: check-deadlines
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: cron-runner
+              image: curlimages/curl:8.5.0
+              command: ["sh", "-c"]
+              args:
+                - |
+                  echo "[$(date -u)] Checking dispute deadlines..."
+                  HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+                    -X POST \
+                    -H "Content-Type: application/json" \
+                    -H "X-Internal-Token: ${INTERNAL_API_TOKEN}" \
+                    http://monkeyswork-api.monkeyswork.svc.cluster.local:8080/api/v1/cron/check-deadlines)
+                  echo "HTTP ${HTTP_CODE}"
+                  cat /tmp/response.json
+                  echo ""
+                  [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]
+              env:
+                - name: INTERNAL_API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: internal-api-token
+                      key: token
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
