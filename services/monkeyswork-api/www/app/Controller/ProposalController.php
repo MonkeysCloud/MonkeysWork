@@ -16,13 +16,13 @@ use MonkeysLegion\Router\Attributes\Route;
 use MonkeysLegion\Router\Attributes\RoutePrefix;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use App\Enum\RegionEnum;
 
 #[RoutePrefix('/api/v1/proposals')]
 #[Middleware('auth')]
 final class ProposalController
 {
     use ApiController;
-
     public function __construct(
         private ConnectionInterface $db,
         private ProposalValidator $proposalValidator = new ProposalValidator(),
@@ -57,6 +57,32 @@ final class ProposalController
 
         $id = $this->uuid();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        // Check if freelancer meets job location requirements
+        $jobLocStmt = $this->db->pdo()->prepare(
+            'SELECT location_type, location_regions, location_countries FROM "job" WHERE id = :jid'
+        );
+        $jobLocStmt->execute(['jid' => $data['job_id']]);
+        $jobLoc = $jobLocStmt->fetch(\PDO::FETCH_ASSOC);
+
+        if ($jobLoc && $jobLoc['location_type'] !== 'worldwide') {
+            $userStmt = $this->db->pdo()->prepare('SELECT country FROM "user" WHERE id = :uid');
+            $userStmt->execute(['uid' => $userId]);
+            $userCountry = strtoupper(trim($userStmt->fetchColumn() ?: ''));
+
+            if ($jobLoc['location_type'] === 'countries') {
+                $allowedCountries = json_decode($jobLoc['location_countries'] ?? '[]', true) ?: [];
+                if (!in_array($userCountry, $allowedCountries, true)) {
+                    return $this->error('This job is restricted to freelancers in specific countries.', 403);
+                }
+            } elseif ($jobLoc['location_type'] === 'regions') {
+                $allowedRegions = json_decode($jobLoc['location_regions'] ?? '[]', true) ?: [];
+                $userRegion = RegionEnum::COUNTRY_TO_REGION[$userCountry] ?? '';
+                if (!in_array($userRegion, $allowedRegions, true)) {
+                    return $this->error('This job is restricted to freelancers in specific regions.', 403);
+                }
+            }
+        }
 
         $this->db->pdo()->prepare(
             'INSERT INTO "proposal" (id, job_id, freelancer_id, cover_letter, bid_amount,

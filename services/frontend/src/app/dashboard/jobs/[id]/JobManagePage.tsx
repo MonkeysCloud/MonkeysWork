@@ -170,6 +170,9 @@ export default function JobManagePage() {
         cover_letter: string; created_at: string;
     } | null>(null);
 
+    // Freelancer data for location checks
+    const [userCountry, setUserCountry] = useState<string | null>(null);
+
     // Confirmation modal state
     const [confirmModal, setConfirmModal] = useState<{
         open: boolean;
@@ -221,6 +224,18 @@ export default function JobManagePage() {
                     (p: { job_id: string }) => p.job_id === id
                 );
                 if (existing) setMyProposal(existing);
+            })
+            .catch(() => { });
+
+        // Fetch freelancer profile for location data
+        fetch(`${API_BASE}/users/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then((r) => r.json())
+            .then((b) => {
+                if (b.data?.country) {
+                    setUserCountry(b.data.country);
+                }
             })
             .catch(() => { });
     }, [job, isOwner, id, token]);
@@ -607,33 +622,78 @@ export default function JobManagePage() {
                                     </div>
                                 )}
                             </div>
-                        ) : (
-                            /* ── Submit proposal CTA ── */
-                            <div className="flex items-center justify-between gap-4">
+                        ) : (() => {
+                            let canApply = true;
+                            let restrictionMessage = "";
+
+                            if (job.location_type === "countries") {
+                                const allowedCountries = toArr(job.location_countries);
+                                if (!allowedCountries.includes(userCountry || "")) {
+                                    canApply = false;
+                                    const allowedNames = allowedCountries.map(cc => ALL_COUNTRIES.find(c => c.code === cc)?.name || cc).join(", ");
+                                    restrictionMessage = `This job is restricted to freelancers in specific countries: ${allowedNames}. Your profile indicates you are located elsewhere.`;
+                                }
+                            } else if (job.location_type === "regions") {
+                                const allowedRegions = toArr(job.location_regions);
+                                const userRegion = userCountry ? (Object.fromEntries([
+                                    ['US', 'north_america'], ['CA', 'north_america'], ['MX', 'north_america'],
+                                    ['GB', 'europe'], ['DE', 'europe'], ['FR', 'europe'], ['ES', 'europe'], ['IT', 'europe'], ['NL', 'europe'], ['SE', 'europe'], ['PL', 'europe'], ['PT', 'europe'], ['IE', 'europe'], ['CH', 'europe'], ['NO', 'europe'], ['DK', 'europe'], ['FI', 'europe'], ['AT', 'europe'], ['BE', 'europe'], ['CZ', 'europe'], ['RO', 'europe'], ['HU', 'europe'], ['GR', 'europe'],
+                                    ['BR', 'latin_america'], ['AR', 'latin_america'], ['CL', 'latin_america'], ['CO', 'latin_america'], ['PE', 'latin_america'], ['UY', 'latin_america'], ['EC', 'latin_america'], ['VE', 'latin_america'], ['CR', 'latin_america'], ['PA', 'latin_america'],
+                                    ['AU', 'asia_pacific'], ['NZ', 'asia_pacific'], ['JP', 'asia_pacific'], ['KR', 'asia_pacific'], ['SG', 'asia_pacific'], ['IN', 'asia_pacific'], ['PH', 'asia_pacific'], ['TH', 'asia_pacific'], ['MY', 'asia_pacific'], ['ID', 'asia_pacific'], ['VN', 'asia_pacific'], ['TW', 'asia_pacific'], ['HK', 'asia_pacific'],
+                                    ['AE', 'middle_east_africa'], ['SA', 'middle_east_africa'], ['IL', 'middle_east_africa'], ['ZA', 'middle_east_africa'], ['NG', 'middle_east_africa'], ['KE', 'middle_east_africa'], ['EG', 'middle_east_africa'], ['QA', 'middle_east_africa'], ['KW', 'middle_east_africa'], ['BH', 'middle_east_africa']
+                                ])[userCountry] || '') : '';
+
+                                if (!allowedRegions.includes(userRegion)) {
+                                    canApply = false;
+                                    const allowedNames = allowedRegions.map(r => REGION_LABELS[r] || r).join(", ").replace(/🌎 |🇪🇺 |🌏 |🌍 /g, "");
+                                    restrictionMessage = `This job is restricted to freelancers in specific regions: ${allowedNames}. Your profile indicates you are located elsewhere.`;
+                                }
+                            }
+
+                            return (
+                                /* ── Submit proposal CTA ── */
                                 <div>
-                                    <h2 className="text-lg font-bold text-brand-dark mb-1">Interested in this job?</h2>
-                                    <p className="text-sm text-brand-muted">Submit a proposal to let the client know you&apos;re the right fit.</p>
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div>
+                                            <h2 className="text-lg font-bold text-brand-dark mb-1">Interested in this job?</h2>
+                                            <p className="text-sm text-brand-muted">Submit a proposal to let the client know you&apos;re the right fit.</p>
+                                        </div>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <button
+                                                onClick={toggleSaveJob}
+                                                disabled={saveLoading}
+                                                className={`px-4 py-3 text-sm font-semibold rounded-xl border transition-all duration-200 ${isSaved
+                                                    ? "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
+                                                    : "bg-white text-brand-dark border-brand-border/60 hover:border-brand-dark/30 hover:shadow-sm"
+                                                    }`}
+                                            >
+                                                {saveLoading ? "…" : isSaved ? "❤️ Saved" : "🤍 Save Job"}
+                                            </button>
+                                            <button
+                                                onClick={() => router.push(`/dashboard/jobs/${id}/proposal`)}
+                                                disabled={!canApply}
+                                                title={!canApply ? restrictionMessage : ""}
+                                                className={`px-6 py-3 text-sm font-bold text-white rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] transition-all duration-200 ${
+                                                    canApply 
+                                                    ? "bg-brand-orange hover:bg-brand-orange-hover hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] hover:-translate-y-0.5" 
+                                                    : "bg-gray-400 cursor-not-allowed opacity-80"
+                                                }`}
+                                            >
+                                                📝 Submit Proposal
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {!canApply && (
+                                        <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl flex items-start gap-2">
+                                            <span className="text-lg leading-none mt-0.5">⚠️</span>
+                                            <div>
+                                                <strong>Cannot Apply:</strong> {restrictionMessage}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="flex items-center gap-3 shrink-0">
-                                    <button
-                                        onClick={toggleSaveJob}
-                                        disabled={saveLoading}
-                                        className={`px-4 py-3 text-sm font-semibold rounded-xl border transition-all duration-200 ${isSaved
-                                            ? "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
-                                            : "bg-white text-brand-dark border-brand-border/60 hover:border-brand-dark/30 hover:shadow-sm"
-                                            }`}
-                                    >
-                                        {saveLoading ? "…" : isSaved ? "❤️ Saved" : "🤍 Save Job"}
-                                    </button>
-                                    <button
-                                        onClick={() => router.push(`/dashboard/jobs/${id}/proposal`)}
-                                        className="px-6 py-3 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_32px_rgba(240,138,17,0.55)] transition-all duration-200 hover:-translate-y-0.5"
-                                    >
-                                        📝 Submit Proposal
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                            );
+                        })()}
                     </div>
                 )}
 

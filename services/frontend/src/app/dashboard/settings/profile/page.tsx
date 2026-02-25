@@ -54,7 +54,7 @@ interface FreelancerProfile {
 }
 
 /* ── Field wrapper ─────────────────────────────── */
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
     return (
         <div>
             <label className="block text-xs font-semibold text-brand-dark mb-1.5">{label}</label>
@@ -65,9 +65,9 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 /* ── Section card ──────────────────────────────── */
-function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+function Section({ title, description, children, overflowHidden = true, className = "" }: { title: string; description?: string; children: React.ReactNode, overflowHidden?: boolean, className?: string }) {
     return (
-        <div className="bg-white rounded-xl border border-brand-border/60 overflow-hidden">
+        <div className={`bg-white rounded-xl border border-brand-border/60 ${overflowHidden ? 'overflow-hidden' : ''} ${className}`}>
             <div className="px-6 py-5 border-b border-brand-border/40">
                 <h2 className="text-base font-bold text-brand-dark">{title}</h2>
                 {description && <p className="text-xs text-brand-muted mt-0.5">{description}</p>}
@@ -83,11 +83,13 @@ function SearchableCountrySelect({
     onChange,
     placeholder = "Select a country…",
     renderLabel = (c: Country) => `${c.flag} ${c.name}`,
+    disabled = false,
 }: {
     value: string;
     onChange: (code: string) => void;
     placeholder?: string;
     renderLabel?: (c: Country) => string;
+    disabled?: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState("");
@@ -116,15 +118,18 @@ function SearchableCountrySelect({
         <div ref={ref} className="relative">
             <button
                 type="button"
-                onClick={() => { setOpen(!open); setSearch(""); }}
-                className={`${inputCls} text-left flex items-center justify-between`}
+                onClick={() => { if (!disabled) { setOpen(!open); setSearch(""); } }}
+                className={`${inputCls} text-left flex items-center justify-between ${disabled ? "bg-gray-50 cursor-not-allowed opacity-80" : ""}`}
+                disabled={disabled}
             >
                 <span className={selected ? "" : "text-brand-muted/60"}>
                     {selected ? renderLabel(selected) : placeholder}
                 </span>
-                <svg className={`w-4 h-4 text-brand-muted transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                {!disabled && (
+                    <svg className={`w-4 h-4 text-brand-muted transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                )}
             </button>
             {open && (
                 <div className="absolute z-50 mt-1 w-full bg-white border border-brand-border/60 rounded-xl shadow-lg overflow-hidden">
@@ -726,7 +731,7 @@ export default function ProfileSettingsPage() {
             </div>
 
             {/* ── Avatar & Basic Info ──────────────── */}
-            <Section title="Personal Information" description="Your basic profile details visible to others">
+            <Section title="Personal Information" description="Your basic profile details visible to others" overflowHidden={false} className="relative z-20">
                 <div className="space-y-5">
                     {/* Avatar */}
                     <div className="flex items-center gap-5">
@@ -829,11 +834,20 @@ export default function ProfileSettingsPage() {
                     </Field>
 
                     {/* Country & State */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Field label="Country">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative z-10">
+                        <Field 
+                            label="Country" 
+                            hint={
+                                <>
+                                    To change your country, please send a ticket to{" "}
+                                    <a href="/help/contact" className="text-brand-orange hover:underline">support</a>.
+                                </>
+                            }
+                        >
                             <SearchableCountrySelect
                                 value={country}
                                 onChange={(code) => { setCountry(code); setState(""); }}
+                                disabled={true}
                             />
                         </Field>
                         <Field label="State / Province">
@@ -856,8 +870,8 @@ export default function ProfileSettingsPage() {
             </Section>
 
             {/* ── Languages ────────────────────────── */}
-            <Section title="Languages" description="Languages you speak and your proficiency level">
-                <div className="space-y-4">
+            <Section title="Languages" description="Languages you speak and your proficiency level" overflowHidden={false} className="relative z-10">
+                <div className="space-y-4 relative z-10">
                     {/* Current languages */}
                     {userLanguages.length > 0 && (
                         <div className="space-y-2">

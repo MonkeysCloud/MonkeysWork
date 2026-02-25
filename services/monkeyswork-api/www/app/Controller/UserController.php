@@ -101,9 +101,7 @@ final class UserController
     public function uploadAvatar(ServerRequestInterface $request): JsonResponse
     {
         try {
-            error_log('[UserController::uploadAvatar] START');
             $userId = $this->userId($request);
-            error_log('[UserController::uploadAvatar] userId=' . $userId);
             if (!$userId) {
                 return $this->json(['error' => 'Authentication required'], 401);
             }
@@ -114,14 +112,12 @@ final class UserController
             // Framework may return raw $_FILES array instead of PSR-7 UploadedFileInterface
             if (is_array($raw) && isset($raw['tmp_name'])) {
                 // Raw $_FILES array — extract values directly
-                error_log('[UserController::uploadAvatar] handling raw $_FILES array');
                 $tmpName = $raw['tmp_name'];
                 $rawMime = $raw['type'] ?? '';
                 $rawSize = (int) ($raw['size'] ?? 0);
                 $rawError = (int) ($raw['error'] ?? UPLOAD_ERR_NO_FILE);
 
                 if ($rawError !== UPLOAD_ERR_OK || !is_uploaded_file($tmpName)) {
-                    error_log('[UserController::uploadAvatar] upload error=' . $rawError);
                     return $this->error('No avatar file uploaded');
                 }
 
@@ -148,7 +144,6 @@ final class UserController
                 }
 
                 if (!move_uploaded_file($tmpName, $filePath)) {
-                    error_log('[UserController::uploadAvatar] move_uploaded_file failed');
                     return $this->error('Failed to save avatar file');
                 }
             } elseif ($raw instanceof \Psr\Http\Message\UploadedFileInterface) {
@@ -183,11 +178,8 @@ final class UserController
 
                 $file->moveTo($filePath);
             } else {
-                error_log('[UserController::uploadAvatar] unexpected avatar type: ' . gettype($raw));
                 return $this->error('No avatar file uploaded');
             }
-
-            error_log('[UserController::uploadAvatar] file saved to ' . $filePath);
 
             // Upload to GCS (returns public URL in prod, relative path in dev)
             $avatarUrl = $this->gcs->upload($filePath, "avatars/{$filename}", $rawMime);
@@ -200,13 +192,10 @@ final class UserController
                         'id' => $userId,
                     ]);
 
-            error_log('[UserController::uploadAvatar] SUCCESS url=' . $avatarUrl);
             return $this->json([
                 'data' => ['avatar_url' => $avatarUrl],
             ]);
         } catch (\Throwable $e) {
-            error_log('[UserController::uploadAvatar] ERROR: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
-            error_log('[UserController::uploadAvatar] TRACE: ' . $e->getTraceAsString());
             return $this->json(['error' => $e->getMessage()], 500);
         }
     }
