@@ -152,6 +152,17 @@ spec:
                 secretKeyRef:
                   name: google-oauth
                   key: client-secret
+            - name: MONKEYSMAIL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: monkeysmail-credentials
+                  key: api-key
+            - name: MONKEYSMAIL_API_BASE
+              value: https://smtp.monkeysmail.com
+            - name: MONKEYSMAIL_FROM_EMAIL
+              value: no-reply@monkeysworks.com
+            - name: MONKEYSMAIL_FROM_NAME
+              value: MonkeysWorks
             - name: FRONTEND_URL
               value: https://monkeysworks.com
           resources:
