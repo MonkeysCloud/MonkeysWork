@@ -1,7 +1,7 @@
 class ApiConfig {
   ApiConfig._();
 
-  /// Base URL for the MonkeysWork API
+  /// Base URL for the MonkeysWorks API
   /// In production, this should come from environment config
   static const String baseUrl = 'http://localhost:8086/api/v1';
 

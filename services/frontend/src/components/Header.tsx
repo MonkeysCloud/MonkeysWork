@@ -118,7 +118,7 @@ export default function Header() {
                         <Link href="/" className="flex-shrink-0 relative z-10">
                             <Image
                                 src="/monkeyswork.svg"
-                                alt="MonkeysWork"
+                                alt="MonkeysWorks"
                                 width={200}
                                 height={60}
                                 priority

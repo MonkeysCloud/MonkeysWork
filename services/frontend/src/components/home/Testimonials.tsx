@@ -72,7 +72,7 @@ export default function Testimonials() {
                         What people are saying
                     </h2>
                     <p className="mt-4 text-brand-muted">
-                        From companies and freelancers who trust MonkeysWork
+                        From companies and freelancers who trust MonkeysWorks
                     </p>
                 </div>
 

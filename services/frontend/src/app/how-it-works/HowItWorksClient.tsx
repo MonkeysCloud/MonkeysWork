@@ -318,8 +318,8 @@ export default function HowItWorksPage() {
                     </h1>
                     <p className="mt-4 text-lg text-brand-muted max-w-2xl mx-auto leading-relaxed">
                         {isClient
-                            ? "From posting your first project to paying the final milestone — here's how MonkeysWork works for you."
-                            : "From creating your profile to getting paid — here's how MonkeysWork helps you grow your freelance career."}
+                            ? "From posting your first project to paying the final milestone — here's how MonkeysWorks works for you."
+                            : "From creating your profile to getting paid — here's how MonkeysWorks helps you grow your freelance career."}
                     </p>
 
                     {/* Toggle */}

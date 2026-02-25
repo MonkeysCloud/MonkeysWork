@@ -57,7 +57,7 @@ export default function BlogArticlePage() {
 
                 // Set page title and OG meta dynamically
                 if (json.data) {
-                    document.title = json.data.meta_title || `${json.data.title} — MonkeysWork Blog`;
+                    document.title = json.data.meta_title || `${json.data.title} — MonkeysWorks Blog`;
 
                     // OG meta tags
                     const setMeta = (prop: string, content: string) => {
@@ -83,7 +83,7 @@ export default function BlogArticlePage() {
                     setMeta("og:title", d.meta_title || d.title);
                     setMeta("og:description", d.meta_description || d.excerpt || "");
                     setMeta("og:type", "article");
-                    setMeta("og:site_name", "MonkeysWork");
+                    setMeta("og:site_name", "MonkeysWorks");
                     if (d.cover_image) {
                         setMeta("og:image", d.cover_image);
                         setName("twitter:image", d.cover_image);
@@ -107,7 +107,7 @@ export default function BlogArticlePage() {
                         },
                         publisher: {
                             "@type": "Organization",
-                            name: "MonkeysWork",
+                            name: "MonkeysWorks",
                         },
                     };
                     let script = document.querySelector('script[type="application/ld+json"]');

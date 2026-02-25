@@ -1196,7 +1196,7 @@ export default function ProfileSettingsPage() {
                         )}
                         {profileVisibility === "logged_in" && (
                             <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
-                                🔒 Only registered MonkeysWork users can view your profile.
+                                🔒 Only registered MonkeysWorks users can view your profile.
                             </div>
                         )}
                         {profileVisibility === "private" && (

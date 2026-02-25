@@ -210,7 +210,7 @@ class ProfileScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 Center(
                   child: Text(
-                    'MonkeysWork v1.0.0',
+                    'MonkeysWorks v1.0.0',
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       color: BrandColors.muted,

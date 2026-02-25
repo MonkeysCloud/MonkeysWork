@@ -95,7 +95,7 @@ export default function AppShell() {
                     <div className="w-16 flex-shrink-0" />
                     <img
                         src="/monkeyswork-dark.svg"
-                        alt="MonkeysWork"
+                        alt="MonkeysWorks"
                         className="h-5 mr-2"
                     />
 

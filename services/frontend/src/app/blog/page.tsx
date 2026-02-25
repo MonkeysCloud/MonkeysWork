@@ -3,21 +3,21 @@ import type { Metadata } from "next";
 import BlogIndexClient from "./BlogIndexClient";
 
 export const metadata: Metadata = {
-    title: "Blog — MonkeysWork | Freelancing Insights & Platform News",
+    title: "Blog — MonkeysWorks | Freelancing Insights & Platform News",
     description:
-        "Read the latest articles on freelancing, hiring remote talent, AI-powered project management, and MonkeysWork platform updates.",
+        "Read the latest articles on freelancing, hiring remote talent, AI-powered project management, and MonkeysWorks platform updates.",
     openGraph: {
-        title: "Blog — MonkeysWork",
+        title: "Blog — MonkeysWorks",
         description:
-            "Freelancing insights, hiring tips, and platform news from MonkeysWork.",
+            "Freelancing insights, hiring tips, and platform news from MonkeysWorks.",
         type: "website",
-        siteName: "MonkeysWork",
+        siteName: "MonkeysWorks",
     },
     twitter: {
         card: "summary_large_image",
-        title: "Blog — MonkeysWork",
+        title: "Blog — MonkeysWorks",
         description:
-            "Freelancing insights, hiring tips, and platform news from MonkeysWork.",
+            "Freelancing insights, hiring tips, and platform news from MonkeysWorks.",
     },
 };
 

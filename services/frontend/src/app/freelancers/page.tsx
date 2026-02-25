@@ -258,12 +258,12 @@ export default function FreelancersPage() {
                 )}
             </section>
 
-            {/* ── Why Hire on MonkeysWork ──────────────────── */}
+            {/* ── Why Hire on MonkeysWorks ──────────────────── */}
             <section className="bg-gray-50/80 py-20">
                 <div className="max-w-6xl mx-auto px-4">
                     <div className="text-center mb-12">
                         <h2 className="text-3xl font-extrabold text-brand-dark tracking-tight mb-3">
-                            Why Hire on <span className="text-brand-orange">MonkeysWork</span>
+                            Why Hire on <span className="text-brand-orange">MonkeysWorks</span>
                         </h2>
                         <p className="text-brand-muted">Everything you need to hire, collaborate, and pay — in one platform.</p>
                     </div>

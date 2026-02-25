@@ -102,7 +102,7 @@ export default function Footer() {
                         <Link href="/" className="inline-block">
                             <Image
                                 src="/monkeyswork-dark.svg"
-                                alt="MonkeysWork"
+                                alt="MonkeysWorks"
                                 width={200}
                                 height={60}
                                 className="h-16 w-auto"
@@ -141,7 +141,7 @@ export default function Footer() {
 
                         {/* copyright */}
                         <p className="text-xs text-white/40 order-2 sm:order-1">
-                            © 2026 MonkeysWork · Part of{" "}
+                            © 2026 MonkeysWorks · Part of{" "}
                             <a
                                 href="https://monkeys.cloud"
                                 target="_blank"

@@ -164,7 +164,7 @@ export default function ClientRegisterForm() {
                     </h2>
                     <p className="mt-5 text-white/40 leading-relaxed max-w-sm">
                         Join thousands of businesses hiring top freelancers on
-                        MonkeysWork. Post your first project in minutes.
+                        MonkeysWorks. Post your first project in minutes.
                     </p>
 
                     {/* trust items */}
@@ -369,7 +369,7 @@ export default function ClientRegisterForm() {
                                 I acknowledge the{" "}
                                 <Link href="/terms#fees" className="text-brand-orange hover:text-brand-orange-hover font-medium">platform fees</Link>,{" "}
                                 <Link href="/terms#disputes" className="text-brand-orange hover:text-brand-orange-hover font-medium">dispute resolution process</Link>,
-                                and that MonkeysWork is a marketplace —{" "}
+                                and that MonkeysWorks is a marketplace —{" "}
                                 <Link href="/terms#relationship" className="text-brand-orange hover:text-brand-orange-hover font-medium">no employer-employee relationship</Link>{" "}
                                 is created.
                             </span>

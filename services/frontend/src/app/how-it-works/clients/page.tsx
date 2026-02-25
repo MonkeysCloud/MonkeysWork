@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: "How It Works for Clients — Hire Top Freelancers | MonkeysWork",
+    title: "How It Works for Clients — Hire Top Freelancers | MonkeysWorks",
     description:
-        "Post a job, get AI-matched proposals, hire verified freelancers, and pay securely through milestone-based escrow. Start hiring in minutes on MonkeysWork.",
+        "Post a job, get AI-matched proposals, hire verified freelancers, and pay securely through milestone-based escrow. Start hiring in minutes on MonkeysWorks.",
     openGraph: {
-        title: "How It Works for Clients — MonkeysWork",
+        title: "How It Works for Clients — MonkeysWorks",
         description:
             "Post a job, get AI-matched proposals, hire verified freelancers, and pay securely. The smarter way to outsource.",
         type: "website",
-        siteName: "MonkeysWork",
+        siteName: "MonkeysWorks",
     },
     twitter: {
         card: "summary_large_image",
-        title: "How It Works for Clients — MonkeysWork",
+        title: "How It Works for Clients — MonkeysWorks",
         description:
             "Post a job, get AI-matched proposals, hire verified freelancers, and pay securely.",
     },
@@ -172,7 +172,7 @@ export default function HowItWorksClientsPage() {
                             4 Simple Steps to Hire
                         </h2>
                         <p className="mt-4 text-brand-muted text-lg max-w-xl mx-auto">
-                            From posting your job to paying for completed work — here&apos;s how MonkeysWork makes hiring effortless.
+                            From posting your job to paying for completed work — here&apos;s how MonkeysWorks makes hiring effortless.
                         </p>
                     </div>
 
@@ -225,7 +225,7 @@ export default function HowItWorksClientsPage() {
                 <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-14">
                         <h2 className="text-3xl sm:text-4xl font-extrabold text-brand-text tracking-tight">
-                            Why Clients Choose MonkeysWork
+                            Why Clients Choose MonkeysWorks
                         </h2>
                         <p className="mt-4 text-brand-muted text-lg max-w-xl mx-auto">
                             Everything you need to hire confidently and manage projects efficiently.
@@ -252,13 +252,13 @@ export default function HowItWorksClientsPage() {
                 <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-12">
                         <h2 className="text-3xl font-extrabold text-brand-text mb-4">
-                            MonkeysWork vs Traditional Hiring
+                            MonkeysWorks vs Traditional Hiring
                         </h2>
                     </div>
                     <div className="bg-white rounded-2xl border border-brand-border/60 overflow-hidden shadow-sm">
                         <div className="grid grid-cols-3 text-center text-sm font-bold bg-brand-dark text-white">
                             <div className="p-4">Feature</div>
-                            <div className="p-4 bg-brand-orange">MonkeysWork</div>
+                            <div className="p-4 bg-brand-orange">MonkeysWorks</div>
                             <div className="p-4">Others</div>
                         </div>
                         {[
@@ -329,7 +329,7 @@ export default function HowItWorksClientsPage() {
                         Ready to Hire Smarter?
                     </h2>
                     <p className="text-lg text-white/60 mb-10 max-w-lg mx-auto">
-                        Join thousands of clients who trust MonkeysWork to find, vet, and manage top freelance talent.
+                        Join thousands of clients who trust MonkeysWorks to find, vet, and manage top freelance talent.
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                         <a

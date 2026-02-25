@@ -552,7 +552,7 @@ export default function FreelancerProfilePage({ params }: { params: Promise<{ id
 
                 {/* Footer */}
                 <div className="text-center py-6 text-xs text-gray-300">
-                    MonkeysWork · © {new Date().getFullYear()}
+                    MonkeysWorks · © {new Date().getFullYear()}
                 </div>
             </div>
 

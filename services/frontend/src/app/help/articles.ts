@@ -17,7 +17,7 @@ const articles: HelpArticle[] = [
         categoryIcon: "🚀",
         content: `
 <h2>Sign Up in 3 Easy Steps</h2>
-<p>Creating a MonkeysWork account is free and takes less than 2 minutes.</p>
+<p>Creating a MonkeysWorks account is free and takes less than 2 minutes.</p>
 
 <h3>Step 1: Visit the Registration Page</h3>
 <p>Go to <strong>monkeysworks.com/register</strong> or click the <strong>"Get Started Free"</strong> button on the homepage.</p>
@@ -144,7 +144,7 @@ const articles: HelpArticle[] = [
         categoryIcon: "📋",
         content: `
 <h2>Post Your First Job</h2>
-<p>Posting a job on MonkeysWork is free and only takes a few minutes.</p>
+<p>Posting a job on MonkeysWorks is free and only takes a few minutes.</p>
 
 <h3>Step 1: Click "Post a Job"</h3>
 <p>From your dashboard, click the <strong>"Post a Job"</strong> button in the top navigation or sidebar.</p>
@@ -183,7 +183,7 @@ const articles: HelpArticle[] = [
         categoryIcon: "📋",
         content: `
 <h2>How AI Matching Works</h2>
-<p>MonkeysWork uses artificial intelligence to rank proposals based on how well each freelancer matches your project needs.</p>
+<p>MonkeysWorks uses artificial intelligence to rank proposals based on how well each freelancer matches your project needs.</p>
 
 <h3>Match Score (0–100)</h3>
 <p>Every proposal you receive includes a <strong>Match Score</strong>. This score is calculated based on:</p>
@@ -312,7 +312,7 @@ const articles: HelpArticle[] = [
         categoryIcon: "💼",
         content: `
 <h2>Find the Perfect Project</h2>
-<p>MonkeysWork offers multiple ways to discover projects that match your skills.</p>
+<p>MonkeysWorks offers multiple ways to discover projects that match your skills.</p>
 
 <h3>Job Feed</h3>
 <p>Your dashboard shows an <strong>AI-curated feed</strong> of jobs ranked by match score. The more complete your profile, the better the recommendations.</p>
@@ -438,7 +438,7 @@ const articles: HelpArticle[] = [
         categoryIcon: "💼",
         content: `
 <h2>Get Paid Securely</h2>
-<p>MonkeysWork supports two payout methods: Stripe and PayPal.</p>
+<p>MonkeysWorks supports two payout methods: Stripe and PayPal.</p>
 
 <h3>Setting Up Payouts</h3>
 <ol>
@@ -455,7 +455,7 @@ const articles: HelpArticle[] = [
 </ul>
 
 <h3>Platform Fees</h3>
-<p>MonkeysWork charges a competitive platform fee that decreases as you earn more:</p>
+<p>MonkeysWorks charges a competitive platform fee that decreases as you earn more:</p>
 <ul>
 <li>First $500 with a client: 10%</li>
 <li>$500–$10,000: 7%</li>
@@ -475,7 +475,7 @@ const articles: HelpArticle[] = [
         categoryIcon: "📊",
         content: `
 <h2>Your Command Center</h2>
-<p>The dashboard is your central hub for managing everything on MonkeysWork.</p>
+<p>The dashboard is your central hub for managing everything on MonkeysWorks.</p>
 
 <h3>Dashboard Sections</h3>
 
@@ -541,7 +541,7 @@ const articles: HelpArticle[] = [
         categoryIcon: "📊",
         content: `
 <h2>Track Your Hours Accurately</h2>
-<p>For hourly contracts, MonkeysWork includes built-in time tracking.</p>
+<p>For hourly contracts, MonkeysWorks includes built-in time tracking.</p>
 
 <h3>Starting the Timer</h3>
 <ol>
@@ -654,11 +654,11 @@ const articles: HelpArticle[] = [
         categoryIcon: "💰",
         content: `
 <h2>Your Money is Protected</h2>
-<p>Escrow is the foundation of payment security on MonkeysWork.</p>
+<p>Escrow is the foundation of payment security on MonkeysWorks.</p>
 
 <h3>How It Works</h3>
 <ol>
-<li><strong>Client funds escrow</strong> — Money is charged but held securely by MonkeysWork</li>
+<li><strong>Client funds escrow</strong> — Money is charged but held securely by MonkeysWorks</li>
 <li><strong>Freelancer works</strong> — Knowing the payment is guaranteed</li>
 <li><strong>Client approves</strong> — After reviewing deliverables</li>
 <li><strong>Payment released</strong> — Funds are sent to the freelancer</li>
@@ -929,13 +929,13 @@ const articles: HelpArticle[] = [
         category: "Mobile App",
         categoryIcon: "📱",
         content: `
-<h2>MonkeysWork on the Go</h2>
-<p>The MonkeysWork mobile app is available for iOS and Android.</p>
+<h2>MonkeysWorks on the Go</h2>
+<p>The MonkeysWorks mobile app is available for iOS and Android.</p>
 
 <h3>Download Links</h3>
 <ul>
-<li><strong>iOS</strong> — Search "MonkeysWork" on the App Store or visit our download page</li>
-<li><strong>Android</strong> — Search "MonkeysWork" on Google Play or visit our download page</li>
+<li><strong>iOS</strong> — Search "MonkeysWorks" on the App Store or visit our download page</li>
+<li><strong>Android</strong> — Search "MonkeysWorks" on Google Play or visit our download page</li>
 </ul>
 
 <h3>Requirements</h3>
@@ -980,7 +980,7 @@ const articles: HelpArticle[] = [
 
 <h3>Enabling Notifications</h3>
 <ol>
-<li>Open the MonkeysWork app</li>
+<li>Open the MonkeysWorks app</li>
 <li>Go to <strong>Settings → Notifications</strong></li>
 <li>Toggle on the notification types you want</li>
 <li>Allow notifications when prompted by your device</li>
@@ -995,7 +995,7 @@ const articles: HelpArticle[] = [
 </ul>
 
 <h3>Troubleshooting</h3>
-<p>If notifications aren't working, check your device's notification settings and make sure MonkeysWork has permission to send notifications.</p>
+<p>If notifications aren't working, check your device's notification settings and make sure MonkeysWorks has permission to send notifications.</p>
 `,
     },
     {

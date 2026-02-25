@@ -347,7 +347,7 @@ export default function PayoutSetup() {
                 {/* TOS notice */}
                 {(step === "identity" || step === "bank") && (
                     <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 16, textAlign: "center" }}>
-                        By continuing, you agree to Stripe&apos;s <a href="https://stripe.com/connect-account/legal" target="_blank" rel="noreferrer" style={{ color: "#6366f1" }}>Connected Account Agreement</a> and authorize MonkeysWork to process payouts.
+                        By continuing, you agree to Stripe&apos;s <a href="https://stripe.com/connect-account/legal" target="_blank" rel="noreferrer" style={{ color: "#6366f1" }}>Connected Account Agreement</a> and authorize MonkeysWorks to process payouts.
                     </p>
                 )}
             </div>

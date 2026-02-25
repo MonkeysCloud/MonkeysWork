@@ -96,7 +96,7 @@ export default function SelectRolePage() {
                         </svg>
                     </div>
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-brand-dark tracking-tight">
-                        How will you use MonkeysWork?
+                        How will you use MonkeysWorks?
                     </h1>
                     <p className="mt-2 text-sm text-brand-muted max-w-md mx-auto">
                         Choose your role to personalize your experience. You can always update this later.

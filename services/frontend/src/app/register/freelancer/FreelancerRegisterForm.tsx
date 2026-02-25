@@ -403,7 +403,7 @@ export default function FreelancerRegisterForm() {
                                 I acknowledge the{" "}
                                 <Link href="/terms#fees" className="text-brand-orange hover:text-brand-orange-hover font-medium">platform fees</Link>,{" "}
                                 <Link href="/terms#disputes" className="text-brand-orange hover:text-brand-orange-hover font-medium">dispute resolution process</Link>,
-                                and that MonkeysWork is a marketplace —{" "}
+                                and that MonkeysWorks is a marketplace —{" "}
                                 <Link href="/terms#relationship" className="text-brand-orange hover:text-brand-orange-hover font-medium">no employer-employee relationship</Link>{" "}
                                 is created.
                             </span>

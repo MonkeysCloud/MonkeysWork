@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-    title: "Privacy Policy — MonkeysWork",
-    description: "MonkeysWork Privacy Policy — how we collect, use, and protect your data. GDPR and CCPA compliant.",
+    title: "Privacy Policy — MonkeysWorks",
+    description: "MonkeysWorks Privacy Policy — how we collect, use, and protect your data. GDPR and CCPA compliant.",
 };
 
 const LAST_UPDATED = "February 22, 2026";
@@ -12,7 +12,7 @@ const sections = [
     {
         id: "overview",
         title: "1. Overview",
-        content: `MonkeysCloud LLC ("MonkeysWork", "we", "us", "our") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your personal information when you use our platform at monkeysworks.com and related services. We process personal data in compliance with the EU General Data Protection Regulation (GDPR), the California Consumer Privacy Act (CCPA), and other applicable privacy laws. Our Data Protection Officer can be contacted at privacy@monkeysworks.com.`,
+        content: `MonkeysCloud LLC ("MonkeysWorks", "we", "us", "our") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your personal information when you use our platform at monkeysworks.com and related services. We process personal data in compliance with the EU General Data Protection Regulation (GDPR), the California Consumer Privacy Act (CCPA), and other applicable privacy laws. Our Data Protection Officer can be contacted at privacy@monkeysworks.com.`,
     },
     {
         id: "data-collected",
@@ -37,7 +37,7 @@ const sections = [
     {
         id: "international-transfers",
         title: "6. International Data Transfers",
-        content: `MonkeysWork is based in the United States. If you are accessing from the EU/EEA, UK, or other regions, your data will be transferred to the US. We ensure adequate protection through: Standard Contractual Clauses (SCCs) approved by the European Commission. Data processing agreements with all sub-processors. Technical and organizational measures including encryption in transit and at rest. Google Cloud's GDPR compliance framework for infrastructure services.`,
+        content: `MonkeysWorks is based in the United States. If you are accessing from the EU/EEA, UK, or other regions, your data will be transferred to the US. We ensure adequate protection through: Standard Contractual Clauses (SCCs) approved by the European Commission. Data processing agreements with all sub-processors. Technical and organizational measures including encryption in transit and at rest. Google Cloud's GDPR compliance framework for infrastructure services.`,
     },
     {
         id: "your-rights",
@@ -57,7 +57,7 @@ const sections = [
     {
         id: "children",
         title: "10. Children's Privacy",
-        content: `MonkeysWork is not intended for users under 18. We do not knowingly collect personal information from children. If we learn that we have collected data from a child under 18, we will delete it promptly. If you believe a child has provided us with personal information, please contact us at privacy@monkeysworks.com.`,
+        content: `MonkeysWorks is not intended for users under 18. We do not knowingly collect personal information from children. If we learn that we have collected data from a child under 18, we will delete it promptly. If you believe a child has provided us with personal information, please contact us at privacy@monkeysworks.com.`,
     },
     {
         id: "changes",

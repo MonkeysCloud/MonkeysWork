@@ -94,7 +94,7 @@ export default function UpdateGate({ children }: { children: React.ReactNode }) 
                         Update Required
                     </h1>
                     <p className="text-white/60 text-sm leading-relaxed mb-6">
-                        A new version of MonkeysWork is available. Please update to continue using the app.
+                        A new version of MonkeysWorks is available. Please update to continue using the app.
                     </p>
 
                     {/* Version info */}

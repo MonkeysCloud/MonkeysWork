@@ -116,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'MonkeysWork',
+                      'MonkeysWorks',
                       style: GoogleFonts.inter(
                         fontSize: 26,
                         fontWeight: FontWeight.w800,

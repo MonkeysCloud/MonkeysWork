@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-    title: "Trust & Safety — MonkeysWork",
-    description: "How MonkeysWork protects clients and freelancers with escrow payments, identity verification, dispute resolution, and AI-powered content moderation.",
+    title: "Trust & Safety — MonkeysWorks",
+    description: "How MonkeysWorks protects clients and freelancers with escrow payments, identity verification, dispute resolution, and AI-powered content moderation.",
 };
 
 const pillars = [

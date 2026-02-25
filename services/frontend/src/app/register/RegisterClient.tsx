@@ -60,7 +60,7 @@ export default function RegisterClient() {
             <section className="pt-16 sm:pt-24 pb-12 bg-gradient-to-b from-brand-dark/[0.03] to-brand-surface">
                 <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
                     <h1 className="text-4xl sm:text-5xl font-extrabold text-brand-dark tracking-tight">
-                        Join MonkeysWork
+                        Join MonkeysWorks
                     </h1>
                     <p className="mt-4 text-lg text-brand-muted max-w-xl mx-auto leading-relaxed">
                         Create your free account and start collaborating with

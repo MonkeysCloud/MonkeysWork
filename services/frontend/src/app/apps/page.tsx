@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-    title: "Download MonkeysWork — Desktop & Mobile Apps",
+    title: "Download MonkeysWorks — Desktop & Mobile Apps",
     description:
-        "Get MonkeysWork on your desktop or mobile device. Available for macOS, Windows, Ubuntu, iOS, and Android.",
+        "Get MonkeysWorks on your desktop or mobile device. Available for macOS, Windows, Ubuntu, iOS, and Android.",
 };
 
 /* ── Release config ─────────────────────────────── */
@@ -19,7 +19,7 @@ const desktopDownloads = [
         format: ".dmg",
         requirement: "macOS 12 Monterey or later",
         chip: "Apple Silicon & Intel",
-        href: `${BASE_URL}/v${VERSION}/MonkeysWork_${VERSION}_universal.dmg`,
+        href: `${BASE_URL}/v${VERSION}/MonkeysWorks_${VERSION}_universal.dmg`,
         color: "#000000",
         gradient: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
     },
@@ -29,7 +29,7 @@ const desktopDownloads = [
         format: ".exe",
         requirement: "Windows 10 or later",
         chip: "64-bit (x64)",
-        href: `${BASE_URL}/v${VERSION}/MonkeysWork_${VERSION}_x64-setup.exe`,
+        href: `${BASE_URL}/v${VERSION}/MonkeysWorks_${VERSION}_x64-setup.exe`,
         color: "#0078d4",
         gradient: "linear-gradient(135deg, #0078d4 0%, #005a9e 100%)",
     },
@@ -39,7 +39,7 @@ const desktopDownloads = [
         format: ".deb",
         requirement: "Ubuntu 20.04+ / Debian-based",
         chip: "64-bit (amd64)",
-        href: `${BASE_URL}/v${VERSION}/MonkeysWork_${VERSION}_amd64.deb`,
+        href: `${BASE_URL}/v${VERSION}/MonkeysWorks_${VERSION}_amd64.deb`,
         color: "#e95420",
         gradient: "linear-gradient(135deg, #e95420 0%, #c34113 100%)",
     },
@@ -151,7 +151,7 @@ export default function AppsPage() {
                             letterSpacing: "-0.02em",
                         }}
                     >
-                        Take MonkeysWork{" "}
+                        Take MonkeysWorks{" "}
                         <span
                             style={{
                                 background: "linear-gradient(135deg, #f08a11, #fbbf24)",
@@ -581,7 +581,7 @@ export default function AppsPage() {
                         margin: "0 0 24px",
                     }}
                 >
-                    Join thousands of freelancers and businesses on MonkeysWork.
+                    Join thousands of freelancers and businesses on MonkeysWorks.
                 </p>
                 <div
                     style={{

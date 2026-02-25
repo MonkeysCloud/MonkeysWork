@@ -261,7 +261,7 @@ export default function PricingClient() {
                                     <span className="text-brand-muted ml-2 text-sm">platform fee per milestone</span>
                                 </div>
                                 <p className="mt-2 text-xs text-brand-muted">
-                                    Payment processing fees (Stripe) are absorbed by MonkeysWork — you only pay the 5% platform fee.
+                                    Payment processing fees (Stripe) are absorbed by MonkeysWorks — you only pay the 5% platform fee.
                                 </p>
                             </div>
                             <div className="p-7 sm:p-8">
@@ -350,7 +350,7 @@ export default function PricingClient() {
                                 Need more than self-serve?
                             </h2>
                             <p className="mt-4 text-white/50 max-w-xl mx-auto leading-relaxed">
-                                MonkeysWork for Teams includes volume pricing, centralized billing,
+                                MonkeysWorks for Teams includes volume pricing, centralized billing,
                                 role-based permissions, compliance workflows, and dedicated account support.
                             </p>
                             <Link

@@ -128,7 +128,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Join MonkeysWork today',
+                      'Join MonkeysWorks today',
                       style: GoogleFonts.inter(
                         fontSize: 15,
                         color: Colors.white.withValues(alpha: 0.6),

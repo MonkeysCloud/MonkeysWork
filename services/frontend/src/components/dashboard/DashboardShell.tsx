@@ -192,7 +192,7 @@ export default function DashboardShell({
                     <Link href="/" className="flex-shrink-0">
                         <Image
                             src="/monkeyswork-dark.svg"
-                            alt="MonkeysWork"
+                            alt="MonkeysWorks"
                             width={180}
                             height={52}
                             className="h-11 w-auto"

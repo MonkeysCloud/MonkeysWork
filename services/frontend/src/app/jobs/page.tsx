@@ -253,7 +253,7 @@ export default function JobsPage() {
                                 Ready to Start Freelancing?
                             </h2>
                             <p className="text-gray-300 max-w-lg mx-auto mb-8">
-                                Join thousands of freelancers who are building their careers on MonkeysWork.
+                                Join thousands of freelancers who are building their careers on MonkeysWorks.
                                 It&apos;s free to sign up and start applying.
                             </p>
                             <div className="flex flex-col sm:flex-row justify-center gap-4">

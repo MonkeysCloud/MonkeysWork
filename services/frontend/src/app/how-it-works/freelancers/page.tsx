@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: "How It Works for Freelancers — Find Work & Grow | MonkeysWork",
+    title: "How It Works for Freelancers — Find Work & Grow | MonkeysWorks",
     description:
-        "Create your profile, get AI-matched with projects, submit proposals, and get paid securely through milestone-based escrow. Start earning on MonkeysWork today.",
+        "Create your profile, get AI-matched with projects, submit proposals, and get paid securely through milestone-based escrow. Start earning on MonkeysWorks today.",
     openGraph: {
-        title: "How It Works for Freelancers — MonkeysWork",
+        title: "How It Works for Freelancers — MonkeysWorks",
         description:
             "Build your profile, get matched with ideal projects, and get paid securely. The smarter way to freelance.",
         type: "website",
-        siteName: "MonkeysWork",
+        siteName: "MonkeysWorks",
     },
     twitter: {
         card: "summary_large_image",
-        title: "How It Works for Freelancers — MonkeysWork",
+        title: "How It Works for Freelancers — MonkeysWorks",
         description:
             "Build your profile, get matched with ideal projects, and get paid securely.",
     },
@@ -228,7 +228,7 @@ export default function HowItWorksFreelancersPage() {
                 <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-14">
                         <h2 className="text-3xl sm:text-4xl font-extrabold text-brand-text tracking-tight">
-                            Why Freelancers Love MonkeysWork
+                            Why Freelancers Love MonkeysWorks
                         </h2>
                         <p className="mt-4 text-brand-muted text-lg max-w-xl mx-auto">
                             A platform built with freelancers in mind — fair, transparent, and designed for growth.
@@ -283,7 +283,7 @@ export default function HowItWorksFreelancersPage() {
                             What You Could Earn
                         </h2>
                         <p className="text-brand-muted max-w-lg mx-auto">
-                            Freelancers on MonkeysWork set their own rates. Here&apos;s what top earners make in popular categories.
+                            Freelancers on MonkeysWorks set their own rates. Here&apos;s what top earners make in popular categories.
                         </p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -355,7 +355,7 @@ export default function HowItWorksFreelancersPage() {
                             href="/register"
                             className="px-10 py-4 text-base font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_20px_rgba(240,138,17,0.4)] hover:shadow-[0_6px_28px_rgba(240,138,17,0.55)] transition-all duration-300 hover:-translate-y-0.5"
                         >
-                            Join MonkeysWork — It&apos;s Free
+                            Join MonkeysWorks — It&apos;s Free
                         </a>
                         <a
                             href="/jobs"

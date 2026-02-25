@@ -111,7 +111,7 @@ function LoginFormInner() {
                     <h2 className="text-3xl xl:text-4xl font-extrabold text-white tracking-tight leading-tight">
                         Sign in to your
                         <br />
-                        MonkeysWork
+                        MonkeysWorks
                         <br />
                         account
                     </h2>
@@ -171,7 +171,7 @@ function LoginFormInner() {
             <div className="flex-1 flex items-center justify-center px-4 sm:px-8 py-12 sm:py-16 bg-brand-surface">
                 <div className="w-full max-w-md">
                     <h1 className="text-2xl sm:text-3xl font-extrabold text-brand-dark tracking-tight">
-                        Log in to MonkeysWork
+                        Log in to MonkeysWorks
                     </h1>
                     <p className="mt-2 text-sm text-brand-muted">
                         Enter your credentials to access your account.

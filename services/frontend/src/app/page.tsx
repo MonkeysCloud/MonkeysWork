@@ -11,7 +11,7 @@ import Ecosystem from "@/components/home/Ecosystem";
 import FinalCTA from "@/components/home/FinalCTA";
 
 export const metadata: Metadata = {
-  title: "MonkeysWork — The AI-Powered Freelance Marketplace",
+  title: "MonkeysWorks — The AI-Powered Freelance Marketplace",
   description:
     "Hire verified freelancers or find your next project. AI-powered matching, milestone-based escrow payments, and built-in scope analysis. Start free.",
 };

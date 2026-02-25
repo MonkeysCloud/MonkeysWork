@@ -1172,7 +1172,7 @@ export default function MessagesPage() {
                                     </div>
                                     <div>
                                         <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#0f172a" }}>
-                                            MonkeysWork System
+                                            MonkeysWorks System
                                         </div>
                                         <div style={{ color: "#94a3b8", fontSize: "0.6875rem" }}>
                                             {selected.type.replace(".", " · ")}

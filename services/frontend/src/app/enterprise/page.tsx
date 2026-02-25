@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-    title: "Enterprise Solutions — MonkeysWork",
-    description: "Scale your workforce with MonkeysWork Enterprise. Dedicated account management, custom contracts, compliance, and bulk hiring for organizations.",
+    title: "Enterprise Solutions — MonkeysWorks",
+    description: "Scale your workforce with MonkeysWorks Enterprise. Dedicated account management, custom contracts, compliance, and bulk hiring for organizations.",
 };
 
 const features = [
@@ -192,7 +192,7 @@ export default function EnterprisePage() {
                     Trusted by forward-thinking companies
                 </p>
                 <p style={{ fontSize: "0.875rem", color: "#cbd5e1" }}>
-                    From startups to Fortune 500 — MonkeysWork Enterprise scales with you.
+                    From startups to Fortune 500 — MonkeysWorks Enterprise scales with you.
                 </p>
             </section>
 

@@ -5,16 +5,16 @@ import 'screens/auth/register_screen.dart';
 import 'services/version_service.dart';
 
 void main() {
-  runApp(const MonkeysWorkApp());
+  runApp(const MonkeysWorksApp());
 }
 
-class MonkeysWorkApp extends StatelessWidget {
-  const MonkeysWorkApp({super.key});
+class MonkeysWorksApp extends StatelessWidget {
+  const MonkeysWorksApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MonkeysWork',
+      title: 'MonkeysWorks',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

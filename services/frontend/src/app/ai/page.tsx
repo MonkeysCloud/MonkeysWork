@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-    title: "AI Features — MonkeysWork",
-    description: "Discover how MonkeysWork uses advanced AI for smart job matching, proposal assistance, content moderation, and scope analysis.",
+    title: "AI Features — MonkeysWorks",
+    description: "Discover how MonkeysWorks uses advanced AI for smart job matching, proposal assistance, content moderation, and scope analysis.",
 };
 
 const features = [
@@ -229,7 +229,7 @@ export default function AiPage() {
                     Experience AI-Powered Freelancing
                 </h2>
                 <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.8)", margin: "0 0 24px", maxWidth: 500, marginLeft: "auto", marginRight: "auto" }}>
-                    Join thousands of professionals already using MonkeysWork to find better matches, faster.
+                    Join thousands of professionals already using MonkeysWorks to find better matches, faster.
                 </p>
                 <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
                     <Link href="/register" style={{

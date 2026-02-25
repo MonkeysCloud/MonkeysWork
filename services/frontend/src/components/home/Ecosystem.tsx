@@ -32,7 +32,7 @@ export default function Ecosystem() {
                             powered by MonkeysCloud
                         </h2>
                         <p className="mt-4 text-brand-muted max-w-xl mx-auto">
-                            MonkeysWork is built with MonkeysLegion and powered by MonkeysMail.
+                            MonkeysWorks is built with MonkeysLegion and powered by MonkeysMail.
                             Our tools are open-source, battle-tested, and built for developers.
                         </p>
 

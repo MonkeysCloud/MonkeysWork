@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-    title: "Help Center — MonkeysWork Support",
+    title: "Help Center — MonkeysWorks Support",
     description:
-        "Get help with MonkeysWork. Browse guides for clients and freelancers, learn how to use the dashboard, manage contracts, and contact our support team.",
+        "Get help with MonkeysWorks. Browse guides for clients and freelancers, learn how to use the dashboard, manage contracts, and contact our support team.",
     alternates: { canonical: "https://monkeysworks.com/help" },
 };
 
@@ -13,7 +13,7 @@ const CATEGORIES = [
     {
         icon: "🚀",
         title: "Getting Started",
-        desc: "New to MonkeysWork? Start here.",
+        desc: "New to MonkeysWorks? Start here.",
         articles: [
             { title: "Creating your account", slug: "creating-account" },
             { title: "Setting up your profile", slug: "profile-setup" },
@@ -85,7 +85,7 @@ const CATEGORIES = [
     {
         icon: "📱",
         title: "Mobile App",
-        desc: "Use MonkeysWork on iOS and Android.",
+        desc: "Use MonkeysWorks on iOS and Android.",
         articles: [
             { title: "Downloading the mobile app", slug: "download-app" },
             { title: "Mobile dashboard features", slug: "mobile-dashboard" },
@@ -109,12 +109,12 @@ const CATEGORIES = [
 
 const FAQ = [
     {
-        q: "Is MonkeysWork free to use?",
+        q: "Is MonkeysWorks free to use?",
         a: "Yes! Creating an account and posting jobs is completely free. We only charge a small platform fee when a contract is completed.",
     },
     {
         q: "How does escrow protection work?",
-        a: "When a contract starts, the client funds the milestone into escrow. The money is held securely by MonkeysWork and only released to the freelancer when the client approves the deliverable.",
+        a: "When a contract starts, the client funds the milestone into escrow. The money is held securely by MonkeysWorks and only released to the freelancer when the client approves the deliverable.",
     },
     {
         q: "What payment methods are supported?",
@@ -130,7 +130,7 @@ const FAQ = [
     },
     {
         q: "Is there a mobile app?",
-        a: "Yes! MonkeysWork is available on iOS and Android. You can manage projects, send messages, review deliverables, and track time on the go.",
+        a: "Yes! MonkeysWorks is available on iOS and Android. You can manage projects, send messages, review deliverables, and track time on the go.",
     },
 ];
 
@@ -144,7 +144,7 @@ export default function HelpCenterPage() {
                         How can we <span className="text-brand-orange">help</span>?
                     </h1>
                     <p className="mt-4 text-lg text-white/60 max-w-xl mx-auto">
-                        Browse our guides or contact support. We&apos;re here to help you get the most out of MonkeysWork.
+                        Browse our guides or contact support. We&apos;re here to help you get the most out of MonkeysWorks.
                     </p>
 
                     {/* Quick links */}

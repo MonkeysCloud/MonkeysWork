@@ -85,7 +85,7 @@ class VersionService {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'A newer version of MonkeysWork is required to continue.',
+                'A newer version of MonkeysWorks is required to continue.',
                 style: TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 16),

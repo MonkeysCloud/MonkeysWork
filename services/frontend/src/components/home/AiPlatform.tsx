@@ -101,7 +101,7 @@ export default function AiPlatform() {
                         </h2>
 
                         <p className="mt-4 text-brand-muted leading-relaxed">
-                            MonkeysWork uses AI at every step — not to replace human judgment,
+                            MonkeysWorks uses AI at every step — not to replace human judgment,
                             but to eliminate busywork.
                         </p>
 

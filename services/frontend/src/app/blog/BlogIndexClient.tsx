@@ -100,7 +100,7 @@ export default function BlogIndexClient() {
                         </h1>
                         <p className="text-lg text-gray-300 max-w-2xl mx-auto">
                             Insights on freelancing, hiring, AI-powered project management, and
-                            the latest from MonkeysWork.
+                            the latest from MonkeysWorks.
                         </p>
                         <div className="mt-8 max-w-md mx-auto">
                             <input

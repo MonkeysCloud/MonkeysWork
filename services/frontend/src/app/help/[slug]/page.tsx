@@ -19,8 +19,8 @@ export async function generateMetadata({
     if (!article) return { title: "Article Not Found" };
 
     return {
-        title: `${article.title} — MonkeysWork Help Center`,
-        description: `Learn about ${article.title.toLowerCase()} on MonkeysWork. ${article.category} guide.`,
+        title: `${article.title} — MonkeysWorks Help Center`,
+        description: `Learn about ${article.title.toLowerCase()} on MonkeysWorks. ${article.category} guide.`,
         alternates: { canonical: `https://monkeysworks.com/help/${slug}` },
     };
 }

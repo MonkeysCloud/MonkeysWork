@@ -2,19 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-    title: "Join MonkeysWork — Early Access for Freelancers",
+    title: "Join MonkeysWorks — Early Access for Freelancers",
     description:
-        "Be among the first freelancers on MonkeysWork. Get priority matching, a verified early-adopter badge, and reduced fees. Claim your spot — it's free.",
+        "Be among the first freelancers on MonkeysWorks. Get priority matching, a verified early-adopter badge, and reduced fees. Claim your spot — it's free.",
     openGraph: {
-        title: "Join MonkeysWork — Early Access for Freelancers",
+        title: "Join MonkeysWorks — Early Access for Freelancers",
         description:
-            "Be the first. Get matched first. Join MonkeysWork early and unlock exclusive freelancer benefits.",
+            "Be the first. Get matched first. Join MonkeysWorks early and unlock exclusive freelancer benefits.",
         type: "website",
-        siteName: "MonkeysWork",
+        siteName: "MonkeysWorks",
     },
     twitter: {
         card: "summary_large_image",
-        title: "Join MonkeysWork — Early Access for Freelancers",
+        title: "Join MonkeysWorks — Early Access for Freelancers",
         description:
             "Be the first. Get matched first. Claim your free spot today.",
     },
@@ -122,7 +122,7 @@ export default function JoinFreelancersPage() {
                     </h1>
 
                     <p className="mt-6 text-lg sm:text-xl text-white/60 max-w-2xl mx-auto leading-relaxed">
-                        MonkeysWork is launching soon. Register now to secure your spot,
+                        MonkeysWorks is launching soon. Register now to secure your spot,
                         get a verified early-adopter badge, and be first in line when
                         clients start posting projects.
                     </p>
@@ -285,7 +285,7 @@ export default function JoinFreelancersPage() {
                             A Platform That <span className="text-brand-orange">Values</span> Your Work
                         </h2>
                         <p className="text-white/50 max-w-lg mx-auto leading-relaxed">
-                            MonkeysWork combines AI technology with fair, transparent policies — so you can focus on what you do best.
+                            MonkeysWorks combines AI technology with fair, transparent policies — so you can focus on what you do best.
                         </p>
                     </div>
 

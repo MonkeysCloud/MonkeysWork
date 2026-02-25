@@ -3,8 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-    title: "About MonkeysWork — AI-Powered Freelance Marketplace",
-    description: "Learn about MonkeysWork, the AI-powered freelance marketplace by MonkeysCloud. Our mission, values, and the team behind the platform.",
+    title: "About MonkeysWorks — AI-Powered Freelance Marketplace",
+    description: "Learn about MonkeysWorks, the AI-powered freelance marketplace by MonkeysCloud. Our mission, values, and the team behind the platform.",
 };
 
 const stats = [
@@ -25,12 +25,12 @@ const values = [
 
 const timeline = [
     { year: "2024", event: "MonkeysCloud founded with a vision to revolutionize freelance work" },
-    { year: "2025", event: "MonkeysWork marketplace beta launch with AI matching engine" },
+    { year: "2025", event: "MonkeysWorks marketplace beta launch with AI matching engine" },
     { year: "2026", event: "Platform launch with escrow payments, dispute resolution, and AI integration" },
 ];
 
 const ecosystem = [
-    { name: "MonkeysWork", desc: "A freelancer marketplace focused on fair commissions and better collaboration", color: "#f08a11" },
+    { name: "MonkeysWorks", desc: "A freelancer marketplace focused on fair commissions and better collaboration", color: "#f08a11" },
     { name: "MonkeysCloud", desc: "An all-in-one SaaS platform for managing projects, code, and hosting", color: "#3b82f6" },
     { name: "MonkeysLegion", desc: "A modular development framework and tooling ecosystem for modern apps", color: "#8b5cf6" },
     { name: "MonkeysAI", desc: "A self-hosted AI platform running LLM training and inference on Google Cloud GPU clusters", color: "#22c55e" },
@@ -63,7 +63,7 @@ export default function AboutPage() {
                         Building the Future of <span style={{ color: "#f08a11" }}>Freelance Work</span>
                     </h1>
                     <p style={{ fontSize: "1.125rem", color: "rgba(255,255,255,0.65)", lineHeight: 1.7, maxWidth: 600, margin: "0 auto" }}>
-                        MonkeysWork is an AI-powered freelance marketplace that connects exceptional talent
+                        MonkeysWorks is an AI-powered freelance marketplace that connects exceptional talent
                         with ambitious projects. We&apos;re making freelance work more efficient, transparent, and rewarding.
                     </p>
                 </div>
@@ -135,7 +135,7 @@ export default function AboutPage() {
                             }}>
                                 <Image
                                     src="/jorge-peraza.jpg"
-                                    alt="Jorge Peraza — Founder of MonkeysWork"
+                                    alt="Jorge Peraza — Founder of MonkeysWorks"
                                     width={180}
                                     height={180}
                                     style={{ objectFit: "cover", width: "100%", height: "100%" }}
@@ -294,7 +294,7 @@ export default function AboutPage() {
                         Part of MonkeysCloud
                     </h2>
                     <p style={{ fontSize: "0.9375rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.7, margin: "0 0 20px" }}>
-                        MonkeysWork is a product of MonkeysCloud, a technology company building AI-powered cloud
+                        MonkeysWorks is a product of MonkeysCloud, a technology company building AI-powered cloud
                         services for the modern workforce.
                     </p>
                     <a

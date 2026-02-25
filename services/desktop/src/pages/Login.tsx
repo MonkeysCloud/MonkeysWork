@@ -53,7 +53,7 @@ export default function Login() {
                 <div className="text-center mb-8">
                     <img
                         src="/monkeyswork-dark.svg"
-                        alt="MonkeysWork"
+                        alt="MonkeysWorks"
                         className="h-14 mx-auto mb-3"
                     />
                     <p className="text-white/50 text-sm">Sign in to your account</p>
@@ -111,7 +111,7 @@ export default function Login() {
                 </Card>
 
                 <p className="text-center text-white/30 text-xs mt-6">
-                    MonkeysWork Desktop · v0.1.0
+                    MonkeysWorks Desktop · v0.1.0
                 </p>
             </div>
         </div>

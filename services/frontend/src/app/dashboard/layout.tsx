@@ -2,7 +2,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 
 export const metadata = {
-    title: "Dashboard — MonkeysWork",
+    title: "Dashboard — MonkeysWorks",
 };
 
 export default function DashboardLayout({

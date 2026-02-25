@@ -12,21 +12,21 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://monkeysworks.com"),
-  title: "MonkeysWork — AI-Powered Freelance Marketplace",
+  title: "MonkeysWorks — AI-Powered Freelance Marketplace",
   description:
-    "Connect with exceptional freelance talent or find your next project on MonkeysWork, the AI-powered marketplace by MonkeysCloud.",
+    "Connect with exceptional freelance talent or find your next project on MonkeysWorks, the AI-powered marketplace by MonkeysCloud.",
   openGraph: {
-    siteName: "MonkeysWork",
+    siteName: "MonkeysWorks",
     type: "website",
     locale: "en_US",
-    title: "MonkeysWork — AI-Powered Freelance Marketplace",
+    title: "MonkeysWorks — AI-Powered Freelance Marketplace",
     description:
-      "Connect with exceptional freelance talent or find your next project on MonkeysWork.",
-    images: [{ url: "/og-default.png", width: 1200, height: 630, alt: "MonkeysWork" }],
+      "Connect with exceptional freelance talent or find your next project on MonkeysWorks.",
+    images: [{ url: "/og-default.png", width: 1200, height: 630, alt: "MonkeysWorks" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "MonkeysWork — AI-Powered Freelance Marketplace",
+    title: "MonkeysWorks — AI-Powered Freelance Marketplace",
     description:
       "Connect with exceptional freelance talent or find your next project.",
     images: ["/og-default.png"],

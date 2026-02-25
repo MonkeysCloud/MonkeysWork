@@ -184,7 +184,7 @@ export default function CategoriesPage() {
                         Ready to start?
                     </h2>
                     <p className="text-brand-muted text-lg mb-8 max-w-xl mx-auto">
-                        Join thousands of businesses and freelancers already working together on MonkeysWork.
+                        Join thousands of businesses and freelancers already working together on MonkeysWorks.
                     </p>
                     <div className="flex items-center justify-center gap-4 flex-wrap">
                         <Link

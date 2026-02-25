@@ -18,9 +18,9 @@ const instructions: Record<OS, { title: string; steps: string[] }> = {
         steps: [
             "Open System Settings (Apple menu → System Settings)",
             "Go to Privacy & Security → Accessibility",
-            'Find "MonkeysWork" in the list and toggle it ON',
+            'Find "MonkeysWorks" in the list and toggle it ON',
             "Go back to Privacy & Security → Screen Recording",
-            'Find "MonkeysWork" and toggle it ON',
+            'Find "MonkeysWorks" and toggle it ON',
             "You may need to restart the app after granting permission",
         ],
     },
@@ -158,7 +158,7 @@ export default function PermissionSetup({ onDismiss }: PermissionSetupProps) {
                         lineHeight: 1.5,
                     }}
                 >
-                    MonkeysWork needs permission to count keyboard and mouse
+                    MonkeysWorks needs permission to count keyboard and mouse
                     activity system-wide. We only track{" "}
                     <strong style={{ color: "rgba(255,255,255,0.85)" }}>
                         counts

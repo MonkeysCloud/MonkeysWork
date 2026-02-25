@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
 
-/// Central HTTP client for all API calls to the MonkeysWork backend.
+/// Central HTTP client for all API calls to the MonkeysWorks backend.
 /// Handles token injection, refresh, and error mapping.
 class ApiService {
   static final ApiService _instance = ApiService._internal();

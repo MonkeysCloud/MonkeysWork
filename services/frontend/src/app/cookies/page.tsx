@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-    title: "Cookie Policy — MonkeysWork",
-    description: "MonkeysWork Cookie Policy — detailed information about cookies and tracking technologies we use.",
+    title: "Cookie Policy — MonkeysWorks",
+    description: "MonkeysWorks Cookie Policy — detailed information about cookies and tracking technologies we use.",
 };
 
 const LAST_UPDATED = "February 22, 2026";
@@ -15,9 +15,9 @@ const cookieCategories = [
         required: true,
         description: "Required for basic Platform functionality. Cannot be disabled.",
         cookies: [
-            { name: "mw_session", purpose: "Maintains your login session", duration: "Session", provider: "MonkeysWork" },
-            { name: "mw_csrf", purpose: "Prevents cross-site request forgery attacks", duration: "Session", provider: "MonkeysWork" },
-            { name: "mw_cookie_consent", purpose: "Stores your cookie preferences", duration: "1 year", provider: "MonkeysWork" },
+            { name: "mw_session", purpose: "Maintains your login session", duration: "Session", provider: "MonkeysWorks" },
+            { name: "mw_csrf", purpose: "Prevents cross-site request forgery attacks", duration: "Session", provider: "MonkeysWorks" },
+            { name: "mw_cookie_consent", purpose: "Stores your cookie preferences", duration: "1 year", provider: "MonkeysWorks" },
             { name: "__stripe_mid", purpose: "Payment fraud prevention", duration: "1 year", provider: "Stripe" },
             { name: "__stripe_sid", purpose: "Payment session identification", duration: "Session", provider: "Stripe" },
         ],
@@ -40,9 +40,9 @@ const cookieCategories = [
         required: false,
         description: "Enable enhanced functionality like chat support, preferences, and personalized features.",
         cookies: [
-            { name: "mw_theme", purpose: "Stores your display theme preference", duration: "1 year", provider: "MonkeysWork" },
-            { name: "mw_lang", purpose: "Stores your language preference", duration: "1 year", provider: "MonkeysWork" },
-            { name: "mw_sidebar", purpose: "Dashboard sidebar state", duration: "1 year", provider: "MonkeysWork" },
+            { name: "mw_theme", purpose: "Stores your display theme preference", duration: "1 year", provider: "MonkeysWorks" },
+            { name: "mw_lang", purpose: "Stores your language preference", duration: "1 year", provider: "MonkeysWorks" },
+            { name: "mw_sidebar", purpose: "Dashboard sidebar state", duration: "1 year", provider: "MonkeysWorks" },
         ],
     },
     {
@@ -77,7 +77,7 @@ export default function CookiesPage() {
                 color: "#9a3412",
                 lineHeight: 1.6,
             }}>
-                🍪 This Cookie Policy explains what cookies are, how we use them on MonkeysWork, and your choices regarding cookies.
+                🍪 This Cookie Policy explains what cookies are, how we use them on MonkeysWorks, and your choices regarding cookies.
                 This policy is compliant with the <strong>EU ePrivacy Directive</strong>, <strong>GDPR</strong>, and <strong>CCPA</strong>.
             </div>
 
@@ -99,7 +99,7 @@ export default function CookiesPage() {
                     Your Cookie Choices
                 </h2>
                 <p style={{ fontSize: "0.9375rem", lineHeight: 1.8, color: "#374151", margin: "0 0 12px" }}>
-                    When you first visit MonkeysWork, a cookie banner allows you to accept all cookies, reject non-essential cookies,
+                    When you first visit MonkeysWorks, a cookie banner allows you to accept all cookies, reject non-essential cookies,
                     or customize your preferences by category. You can change your preferences at any time:
                 </p>
                 <div style={{

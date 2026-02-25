@@ -1,5 +1,5 @@
 /**
- * Shared API client for the MonkeysWork API.
+ * Shared API client for the MonkeysWorks API.
  * All requests go through this helper to ensure consistent auth headers.
  */
 
