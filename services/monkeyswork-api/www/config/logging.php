@@ -52,7 +52,7 @@ return [
         */
         'stack' => [
             'driver' => 'stack',
-            'channels' => ['daily', 'console'],
+            'channels' => ['daily', 'errorlog'],
             'ignore_exceptions' => false,
         ],
 
