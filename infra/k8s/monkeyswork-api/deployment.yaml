@@ -188,6 +188,28 @@ spec:
             - name: uploaded-files
               mountPath: /app/www/public/files
 
+        # ── Sidecar: continuously sync local files TO GCS ──
+        - name: file-sync-sidecar
+          image: gcr.io/google.com/cloudsdktool/cloud-sdk:alpine
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "[file-sync-sidecar] Starting continuous sync to GCS..."
+              while true; do
+                gsutil -m rsync -r -C /mnt/files/ gs://mw-prod-uploads-monkeyswork/files/ 2>&1 || true
+                sleep 60
+              done
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: uploaded-files
+              mountPath: /mnt/files
+
       volumes:
         - name: uploaded-files
           emptyDir: {}
