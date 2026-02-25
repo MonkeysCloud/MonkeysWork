@@ -202,9 +202,20 @@ export default function Header() {
                                     >
                                         Log Out
                                     </button>
-                                    <div className="w-9 h-9 rounded-full bg-brand-orange/10 flex items-center justify-center text-brand-orange font-bold text-sm">
-                                        {user.display_name?.[0]?.toUpperCase() ?? "U"}
-                                    </div>
+                                    {user.avatar_url ? (
+                                        <Image
+                                            src={user.avatar_url.startsWith("http") ? user.avatar_url : `${new URL(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086").origin}${user.avatar_url}`}
+                                            alt={user.display_name || "Avatar"}
+                                            width={36}
+                                            height={36}
+                                            className="w-9 h-9 rounded-full object-cover ring-2 ring-brand-orange/20"
+                                            unoptimized
+                                        />
+                                    ) : (
+                                        <div className="w-9 h-9 rounded-full bg-brand-orange/10 flex items-center justify-center text-brand-orange font-bold text-sm">
+                                            {user.display_name?.[0]?.toUpperCase() ?? "U"}
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <>
