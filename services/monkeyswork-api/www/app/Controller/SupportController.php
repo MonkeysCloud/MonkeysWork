@@ -86,7 +86,7 @@ final class SupportController
             $file->moveTo($localPath);
 
             // Upload to GCS
-            $url = $this->gcs->upload($localPath, "support/{$newName}");
+            $url = $this->gcs->upload($localPath, "files/support/{$newName}");
 
             $attachments[] = [
                 'name' => $file->getClientFilename(),

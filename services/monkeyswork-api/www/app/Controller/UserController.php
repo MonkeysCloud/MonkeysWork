@@ -182,7 +182,7 @@ final class UserController
             }
 
             // Upload to GCS (returns public URL in prod, relative path in dev)
-            $avatarUrl = $this->gcs->upload($filePath, "avatars/{$filename}", $rawMime);
+            $avatarUrl = $this->gcs->upload($filePath, "files/avatars/{$filename}", $rawMime);
 
             $this->db->pdo()->prepare(
                 'UPDATE "user" SET avatar_url = :url, updated_at = :now WHERE id = :id'

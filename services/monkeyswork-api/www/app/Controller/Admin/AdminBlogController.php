@@ -320,7 +320,7 @@ final class AdminBlogController
                 return $this->error('No image file provided');
             }
 
-            $url = $this->gcs->upload($filePath, "blog/{$filename}");
+            $url = $this->gcs->upload($filePath, "files/blog/{$filename}");
 
             return $this->json(['data' => ['url' => $url, 'filename' => $filename]]);
         } catch (\Throwable $e) {

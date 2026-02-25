@@ -143,7 +143,7 @@ final class AttachmentController
                 $ext = pathinfo($originalName, PATHINFO_EXTENSION);
                 $safeName = bin2hex(random_bytes(16)) . ($ext ? ".{$ext}" : '');
                 $filePath = "{$dir}/{$safeName}";
-                $gcsPath = "attachments/{$entityType}/{$entityId}/{$safeName}";
+                $gcsPath = "files/attachments/{$entityType}/{$entityId}/{$safeName}";
 
                 // Move file locally first
                 if (isset($f['_psr7'])) {
