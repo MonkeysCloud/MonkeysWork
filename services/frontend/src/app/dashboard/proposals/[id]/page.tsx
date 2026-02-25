@@ -467,7 +467,7 @@ export default function ProposalDetailPage() {
                                 )}
                             </div>
                             <Link
-                                href={`/dashboard/freelancers/${freelancerProfile.user_id}`}
+                                href={`/freelancers/${freelancerProfile.user_id}`}
                                 className="text-sm font-semibold text-brand-orange hover:underline shrink-0"
                             >
                                 View Full Profile →
