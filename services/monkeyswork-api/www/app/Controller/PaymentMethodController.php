@@ -210,8 +210,69 @@ final class PaymentMethodController
                 ]);
             }
 
-            // Bank accounts require verification; cards/paypal are auto-verified
-            $verified = ($pmType !== 'us_bank_account');
+            // Bank accounts require microdeposit verification
+            // Cards require a $1.00 charge + immediate refund to verify the card is real
+            if ($pmType === 'us_bank_account') {
+                $verified = false;
+            } else {
+                // ── $1.00 verification charge + immediate refund for cards ──
+                $verified = false;
+                try {
+                    // Get or create Stripe customer
+                    $userStmt = $pdo->prepare(
+                        'SELECT email, first_name, last_name, stripe_customer_id FROM "user" WHERE id = :uid'
+                    );
+                    $userStmt->execute(['uid' => $userId]);
+                    $userRow = $userStmt->fetch(\PDO::FETCH_ASSOC);
+
+                    $customerId = $this->stripe->getOrCreateCustomer(
+                        $userId,
+                        $userRow['email'],
+                        trim(($userRow['first_name'] ?? '') . ' ' . ($userRow['last_name'] ?? '')),
+                        $pdo
+                    );
+
+                    // Ensure PM is attached to customer
+                    if (!$pm->customer) {
+                        $this->stripe->attachPaymentMethod($stripePmId, $customerId);
+                    }
+
+                    // Charge $1.00 (100 cents)
+                    $verifyPi = $this->stripe->getClient()->paymentIntents->create([
+                        'amount' => 100,
+                        'currency' => 'usd',
+                        'customer' => $customerId,
+                        'payment_method' => $stripePmId,
+                        'payment_method_types' => [$pmType],
+                        'off_session' => true,
+                        'confirm' => true,
+                        'description' => 'MonkeysWorks — Card verification ($1.00 will be refunded)',
+                        'metadata' => [
+                            'mw_type' => 'card_verification',
+                            'mw_user_id' => $userId,
+                        ],
+                    ]);
+
+                    // Immediately refund the $1.00
+                    if ($verifyPi->status === 'succeeded') {
+                        $this->stripe->getClient()->refunds->create([
+                            'payment_intent' => $verifyPi->id,
+                            'reason' => 'requested_by_customer',
+                            'metadata' => [
+                                'mw_type' => 'card_verification_refund',
+                            ],
+                        ]);
+                        $verified = true;
+                        error_log("[PaymentMethodController] Card verification SUCCESS for user {$userId}, PI: {$verifyPi->id}");
+                    } else {
+                        error_log("[PaymentMethodController] Card verification charge status: {$verifyPi->status} for user {$userId}");
+                    }
+                } catch (\Throwable $verifyErr) {
+                    // Card declined / invalid — save it but mark as unverified
+                    error_log("[PaymentMethodController] Card verification FAILED for user {$userId}: " . $verifyErr->getMessage());
+                    $verified = false;
+                }
+            }
 
             // Get setup_intent_id from the SetupIntent confirmation if available
             $setupIntentId = $data['setup_intent_id'] ?? null;
