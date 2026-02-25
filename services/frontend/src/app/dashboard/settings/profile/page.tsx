@@ -523,7 +523,10 @@ export default function ProfileSettingsPage() {
                 headers: { Authorization: `Bearer ${token}` },
                 body: formData,
             });
-            if (!res.ok) throw new Error("Failed to upload avatar");
+            if (!res.ok) {
+                const errBody = await res.json().catch(() => ({}));
+                throw new Error((errBody as Record<string, string>).error || `Upload failed (${res.status})`);
+            }
             const result = await res.json();
             // API returns { data: { avatar_url: "/files/avatars/..." } }
             const newUrl = result?.data?.avatar_url ?? result?.avatar_url ?? null;
@@ -535,8 +538,8 @@ export default function ProfileSettingsPage() {
             setAvatarFile(null);
             setAvatarPreview(null);
             setToast({ message: "Avatar updated!", type: "success" });
-        } catch {
-            setToast({ message: "Failed to upload avatar", type: "error" });
+        } catch (err) {
+            setToast({ message: err instanceof Error ? err.message : "Failed to upload avatar", type: "error" });
         } finally {
             setAvatarUploading(false);
         }

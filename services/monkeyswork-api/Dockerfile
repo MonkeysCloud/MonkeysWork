@@ -65,7 +65,8 @@ COPY . /app/
 # Set permissions — www-data (PHP-FPM group) needs write access to var/
 RUN chown -R appuser:www-data /app/www \
     && chmod -R 755 /app/www \
-    && mkdir -p /app/www/var/logs /app/www/var/cache/mlc /app/www/var/cache/rate_limit /app/www/var/cache/views \
+    && mkdir -p /app/www/var/logs /app/www/var/log /app/www/var/cache/mlc /app/www/var/cache/rate_limit /app/www/var/cache/views \
+    && chown -R appuser:www-data /app/www/var \
     && chmod -R 775 /app/www/var
 
 EXPOSE 8080
