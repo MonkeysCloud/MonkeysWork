@@ -62,30 +62,42 @@ export default async function FreelancerProfilePage({ params }: { params: { id: 
     const cookieStore = await cookies();
     const token = cookieStore.get("ml_auth_token")?.value;
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://api.monkeysworks.com"}/api/v1/freelancers/${params.id}`, {
-        headers: {
-            "Content-Type": "application/json",
-            ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        },
-        // Don't cache rigidly so new reviews/jobs show up
-        next: { revalidate: 60 }
-    });
+    let profile: FreelancerProfile | null = null;
+    let fetchError = false;
 
-    if (!res.ok) {
-        if (res.status === 404) return notFound();
-        // If 403 or 401, they don't have permission to view it
+    try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://api.monkeysworks.com"}/api/v1/freelancers/${params.id}`, {
+            headers: {
+                "Content-Type": "application/json",
+                ...(token ? { "Authorization": `Bearer ${token}` } : {})
+            },
+            // Don't cache rigidly so new reviews/jobs show up
+            next: { revalidate: 60 }
+        });
+
+        if (!res.ok) {
+            if (res.status === 404) return notFound();
+            fetchError = true;
+        } else {
+            const json = await res.json();
+            profile = json.data as FreelancerProfile;
+        }
+    } catch (e) {
+        console.error("Failed to fetch freelancer profile:", e);
+        fetchError = true;
+    }
+
+    if (fetchError || !profile) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
                 <svg className="w-16 h-16 text-yellow-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Profile Unavailable</h1>
-                <p className="text-gray-600 max-w-md">This freelancer's profile is private or requires you to be logged in to view it.</p>
+                <p className="text-gray-600 max-w-md">This profile is private, requires login, or our servers are temporarily unreachable.</p>
             </div>
         );
     }
-
-    const { data: profile } = (await res.json()) as { data: FreelancerProfile };
 
     return (
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-6">
