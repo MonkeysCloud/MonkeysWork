@@ -3,17 +3,17 @@ const PRODUCTS = [
     {
         name: "MonkeysLegion",
         desc: "High-performance PHP framework",
-        href: "https://monkeyscloud.com/legion",
+        href: "https://monkeys.cloud/legion",
     },
     {
         name: "MonkeysMail",
         desc: "Transactional email service",
-        href: "https://monkeyscloud.com/mail",
+        href: "https://monkeys.cloud/mail",
     },
     {
         name: "MonkeysCMS",
         desc: "Headless content management",
-        href: "https://monkeyscloud.com/cms",
+        href: "https://monkeys.cloud/cms",
     },
 ];
 
@@ -60,7 +60,7 @@ export default function Ecosystem() {
                         </div>
 
                         <a
-                            href="https://monkeyscloud.com"
+                            href="https://monkeys.cloud"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 mt-8 text-sm font-semibold text-brand-orange hover:text-brand-orange-hover transition-colors"

@@ -143,7 +143,7 @@ export default function Footer() {
                         <p className="text-xs text-white/40 order-2 sm:order-1">
                             © 2026 MonkeysWork · Part of{" "}
                             <a
-                                href="https://monkeyscloud.com"
+                                href="https://monkeys.cloud"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="hover:text-brand-orange transition-colors"

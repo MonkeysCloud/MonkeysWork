@@ -298,7 +298,7 @@ export default function AboutPage() {
                         services for the modern workforce.
                     </p>
                     <a
-                        href="https://monkeyscloud.com"
+                        href="https://monkeys.cloud"
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{

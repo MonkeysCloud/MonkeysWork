@@ -636,7 +636,7 @@ export default function AppsPage() {
             >
                 Powered by{" "}
                 <a
-                    href="https://monkeyscloud.com"
+                    href="https://monkeys.cloud"
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ color: "#f08a11", fontWeight: 600, textDecoration: "none" }}
