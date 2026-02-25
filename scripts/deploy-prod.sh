@@ -29,9 +29,17 @@ gcloud container clusters get-credentials "mw-${ENV}-cluster" --zone "$ZONE"
 NAMESPACE="monkeyswork"
 [[ "$SERVICE" == ai-* ]] && NAMESPACE="monkeyswork-ai"
 
-kubectl set image "deployment/$SERVICE" \
-  "$SERVICE=$REGISTRY/$SERVICE:$IMAGE_TAG" \
-  -n "$NAMESPACE"
+MANIFEST="infra/k8s/$SERVICE/deployment.yaml"
+if [[ -f "$MANIFEST" ]]; then
+    echo "→ Applying deployment manifest: $MANIFEST"
+    # Replace the image tag in the manifest and apply
+    sed "s|image: .*${SERVICE}:.*|image: ${REGISTRY}/${SERVICE}:${IMAGE_TAG}|" "$MANIFEST" \
+      | kubectl apply -n "$NAMESPACE" -f -
+else
+    kubectl set image "deployment/$SERVICE" \
+      "$SERVICE=$REGISTRY/$SERVICE:$IMAGE_TAG" \
+      -n "$NAMESPACE"
+fi
 
 # 3. Wait for rollout
 echo "→ Waiting for rollout..."
