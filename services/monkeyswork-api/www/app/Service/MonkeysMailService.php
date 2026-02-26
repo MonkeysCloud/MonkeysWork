@@ -18,10 +18,10 @@ final class MonkeysMailService
 
     public function __construct()
     {
-        $this->apiKey = getenv('MONKEYSMAIL_API_KEY') ?: '';
-        $this->apiBase = rtrim(getenv('MONKEYSMAIL_API_BASE') ?: 'https://smtp.monkeysmail.com', '/');
-        $this->fromEmail = getenv('MONKEYSMAIL_FROM_EMAIL') ?: 'no-reply@monkeysworks.com';
-        $this->fromName = getenv('MONKEYSMAIL_FROM_NAME') ?: 'MonkeysWork';
+        $this->apiKey = $_ENV['MONKEYSMAIL_API_KEY'] ?? getenv('MONKEYSMAIL_API_KEY') ?: '';
+        $this->apiBase = rtrim($_ENV['MONKEYSMAIL_API_BASE'] ?? getenv('MONKEYSMAIL_API_BASE') ?: 'https://smtp.monkeysmail.com', '/');
+        $this->fromEmail = $_ENV['MONKEYSMAIL_FROM_EMAIL'] ?? getenv('MONKEYSMAIL_FROM_EMAIL') ?: 'no-reply@monkeysworks.com';
+        $this->fromName = $_ENV['MONKEYSMAIL_FROM_NAME'] ?? getenv('MONKEYSMAIL_FROM_NAME') ?: 'MonkeysWorks';
     }
 
     /**
@@ -42,8 +42,7 @@ final class MonkeysMailService
         string $text = '',
         array $tags = [],
         ?string $replyTo = null,
-        ): bool
-    {
+    ): bool {
         if (!$this->apiKey) {
             error_log('[MonkeysMail] API key not configured — skipping email to: ' . (is_array($to) ? implode(',', $to) : $to));
             return false;
@@ -112,8 +111,7 @@ final class MonkeysMailService
         string $templateName,
         array $vars = [],
         array $tags = [],
-        ): bool
-    {
+    ): bool {
         $templateDir = dirname(__DIR__, 2) . '/resources/emails';
         $templateFile = "{$templateDir}/{$templateName}.php";
 
@@ -130,8 +128,7 @@ final class MonkeysMailService
         $layoutFile = "{$templateDir}/layout.php";
         if (file_exists($layoutFile)) {
             $html = $this->renderTemplate($layoutFile, array_merge($vars, ['content' => $content]));
-        }
-        else {
+        } else {
             $html = $content;
         }
 

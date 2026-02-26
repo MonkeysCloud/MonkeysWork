@@ -35,111 +35,140 @@ final class AuthController
     #[Route('POST', '/register', name: 'auth.register', summary: 'Create account', tags: ['Auth'])]
     public function register(ServerRequestInterface $request): JsonResponse
     {
-        $data = $this->body($request);
-
-        // Validate input
-        $validationError = $this->registrationValidator->validateOrFail($data);
-        if ($validationError) {
-            return $validationError;
-        }
-
-        // ── Require legal acceptance ──
-        if (empty($data['accepted_terms']) || empty($data['accepted_fees']) || empty($data['accepted_contractor'])) {
-            return $this->error('You must accept all legal agreements to register', 422);
-        }
-
-        $email = strtolower(trim($data['email']));
-
-        // Check duplicate
-        $stmt = $this->db->pdo()->prepare('SELECT id FROM "user" WHERE email = :email');
-        $stmt->execute(['email' => $email]);
-        if ($stmt->fetch()) {
-            return $this->error('Email already registered', 409);
-        }
-
-        $id = $this->uuid();
-        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-
-        $this->db->pdo()->prepare(
-            'INSERT INTO "user" (id, email, password_hash, role, status, display_name,
-                                 first_name, last_name, timezone, locale, token_version,
-                                 metadata, created_at, updated_at)
-             VALUES (:id, :email, :password_hash, :role, :status, :display_name,
-                     :first_name, :last_name, :timezone, :locale, 1,
-                     :metadata, :created_at, :updated_at)'
-        )->execute([
-                    'id' => $id,
-                    'email' => $email,
-                    'password_hash' => password_hash($data['password'], PASSWORD_BCRYPT),
-                    'role' => $data['role'],
-                    'status' => 'pending_verification',
-                    'display_name' => $data['display_name'],
-                    'first_name' => $data['first_name'] ?? null,
-                    'last_name' => $data['last_name'] ?? null,
-                    'timezone' => $data['timezone'] ?? 'UTC',
-                    'locale' => $data['locale'] ?? 'en',
-                    'metadata' => json_encode(array_merge(
-                        $data['metadata'] ?? [],
-                        [
-                            'legal_accepted_at' => $now,
-                            'terms_version' => '2026-02-23',
-                            'accepted_terms' => true,
-                            'accepted_fees' => true,
-                            'accepted_contractor' => true,
-                        ]
-                    )),
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ]);
-
-        // Create empty profile row based on role
-        $role = $data['role'];
-        if ($role === 'client') {
-            $this->db->pdo()->prepare(
-                'INSERT INTO "clientprofile" (user_id, created_at, updated_at)
-                 VALUES (:uid, :now, :now)'
-            )->execute(['uid' => $id, 'now' => $now]);
-        } elseif ($role === 'freelancer') {
-            $this->db->pdo()->prepare(
-                'INSERT INTO "freelancerprofile" (user_id, created_at, updated_at)
-                 VALUES (:uid, :now, :now)'
-            )->execute(['uid' => $id, 'now' => $now]);
-        }
-
-        // ── Generate email-verification token ──
-        $verifyToken = bin2hex(random_bytes(32));
-        $this->db->pdo()->prepare(
-            'UPDATE "user" SET metadata = jsonb_set(COALESCE(metadata, \'{}\'::jsonb), \'{email_verify_token}\', to_jsonb(:token::text)),
-                               updated_at = :now WHERE id = :id'
-        )->execute(['token' => $verifyToken, 'now' => $now, 'id' => $id]);
-
-        // Send verification email
-        $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
-        $verifyUrl = "{$frontendUrl}/auth/verify-email?token={$verifyToken}";
         try {
-            $this->mail->sendTemplate(
-                $email,
-                'Verify your email — MonkeysWork',
-                'verify-email',
-                ['userName' => $data['display_name'], 'verifyUrl' => $verifyUrl],
-                ['auth', 'verify-email'],
-            );
+            error_log('[Auth][register] ── START ──');
+            $data = $this->body($request);
+            error_log('[Auth][register] body parsed: ' . json_encode(array_diff_key($data, ['password' => 1])));
+
+            // Validate input
+            $validationError = $this->registrationValidator->validateOrFail($data);
+            if ($validationError) {
+                error_log('[Auth][register] validation failed');
+                return $validationError;
+            }
+            error_log('[Auth][register] validation OK');
+
+            // ── Require legal acceptance ──
+            if (empty($data['accepted_terms']) || empty($data['accepted_fees']) || empty($data['accepted_contractor'])) {
+                error_log('[Auth][register] legal agreements missing');
+                return $this->error('You must accept all legal agreements to register', 422);
+            }
+            error_log('[Auth][register] legal agreements OK');
+
+            $email = strtolower(trim($data['email']));
+
+            // Check duplicate
+            error_log('[Auth][register] checking duplicate email: ' . $email);
+            $stmt = $this->db->pdo()->prepare('SELECT id FROM "user" WHERE email = :email');
+            $stmt->execute(['email' => $email]);
+            if ($stmt->fetch()) {
+                error_log('[Auth][register] duplicate email');
+                return $this->error('Email already registered', 409);
+            }
+            error_log('[Auth][register] email unique OK');
+
+            $id = $this->uuid();
+            $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+            error_log('[Auth][register] inserting user id=' . $id);
+            $this->db->pdo()->prepare(
+                'INSERT INTO "user" (id, email, password_hash, role, status, display_name,
+                                     first_name, last_name, timezone, locale, token_version,
+                                     metadata, created_at, updated_at)
+                 VALUES (:id, :email, :password_hash, :role, :status, :display_name,
+                         :first_name, :last_name, :timezone, :locale, 1,
+                         :metadata, :created_at, :updated_at)'
+            )->execute([
+                        'id' => $id,
+                        'email' => $email,
+                        'password_hash' => password_hash($data['password'], PASSWORD_BCRYPT),
+                        'role' => $data['role'],
+                        'status' => 'pending_verification',
+                        'display_name' => $data['display_name'],
+                        'first_name' => $data['first_name'] ?? null,
+                        'last_name' => $data['last_name'] ?? null,
+                        'timezone' => $data['timezone'] ?? 'UTC',
+                        'locale' => $data['locale'] ?? 'en',
+                        'metadata' => json_encode(array_merge(
+                            is_array($data['metadata'] ?? null) ? $data['metadata'] : (is_string($data['metadata'] ?? null) ? (json_decode($data['metadata'], true) ?: []) : []),
+                            [
+                                'legal_accepted_at' => $now,
+                                'terms_version' => '2026-02-23',
+                                'accepted_terms' => true,
+                                'accepted_fees' => true,
+                                'accepted_contractor' => true,
+                            ]
+                        )),
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+            error_log('[Auth][register] user INSERT OK');
+
+            // Create empty profile row based on role
+            $role = $data['role'];
+            error_log('[Auth][register] creating profile for role=' . $role);
+            if ($role === 'client') {
+                $this->db->pdo()->prepare(
+                    'INSERT INTO "clientprofile" (user_id, created_at, updated_at)
+                     VALUES (:uid, :now, :now)'
+                )->execute(['uid' => $id, 'now' => $now]);
+                error_log('[Auth][register] clientprofile INSERT OK');
+            } elseif ($role === 'freelancer') {
+                $this->db->pdo()->prepare(
+                    'INSERT INTO "freelancerprofile" (user_id, created_at, updated_at)
+                     VALUES (:uid, :now, :now)'
+                )->execute(['uid' => $id, 'now' => $now]);
+                error_log('[Auth][register] freelancerprofile INSERT OK');
+            }
+
+            // ── Generate email-verification token ──
+            error_log('[Auth][register] generating verify token');
+            $verifyToken = bin2hex(random_bytes(32));
+            $this->db->pdo()->prepare(
+                'UPDATE "user" SET metadata = jsonb_set(COALESCE(metadata, \'{}\'::jsonb), \'{email_verify_token}\', to_jsonb(:token::text)),
+                                   updated_at = :now WHERE id = :id'
+            )->execute(['token' => $verifyToken, 'now' => $now, 'id' => $id]);
+            error_log('[Auth][register] verify token saved');
+
+            // Send verification email
+            $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
+            $verifyUrl = "{$frontendUrl}/auth/verify-email?token={$verifyToken}";
+            error_log('[Auth][register] sending verify email to ' . $email);
+            try {
+                $this->mail->sendTemplate(
+                    $email,
+                    'Verify your email — MonkeysWork',
+                    'verify-email',
+                    ['userName' => $data['display_name'], 'verifyUrl' => $verifyUrl],
+                    ['auth', 'verify-email'],
+                );
+                error_log('[Auth][register] verify email sent OK');
+            } catch (\Throwable $e) {
+                error_log('[Auth][register] verify email FAILED: ' . $e->getMessage());
+            }
+
+            // Dispatch domain event
+            error_log('[Auth][register] dispatching event');
+            $this->events?->dispatch(new UserRegistered($id, $email, $data['role']));
+
+            // Publish to Pub/Sub (triggers fraud baseline + verification automation)
+            error_log('[Auth][register] publishing to PubSub');
+            $pubsub = $this->pubsub ?? new PubSubPublisher();
+            try {
+                $pubsub->userRegistered($id, $data['role'], $email);
+                error_log('[Auth][register] PubSub OK');
+            } catch (\Throwable $e) {
+                error_log('[Auth][register] PubSub FAILED (non-critical): ' . $e->getMessage());
+            }
+
+            error_log('[Auth][register] ── SUCCESS ── id=' . $id);
+            return $this->created(['data' => ['id' => $id, 'email' => $email, 'verification_sent' => true]]);
         } catch (\Throwable $e) {
-            error_log('[Auth] Failed to send verify email: ' . $e->getMessage());
+            error_log('[Auth][register] ── FATAL ERROR ── ' . $e->getMessage());
+            error_log('[Auth][register] file: ' . $e->getFile() . ':' . $e->getLine());
+            error_log('[Auth][register] trace: ' . $e->getTraceAsString());
+            return $this->error('Registration failed: ' . $e->getMessage(), 500);
         }
-
-        // Dispatch domain event
-        $this->events?->dispatch(new UserRegistered($id, $email, $data['role']));
-
-        // Publish to Pub/Sub (triggers fraud baseline + verification automation)
-        $pubsub = $this->pubsub ?? new PubSubPublisher();
-        try {
-            $pubsub->userRegistered($id, $data['role'], $email);
-        } catch (\Throwable) {
-            // Non-critical: don't fail registration if Pub/Sub is down
-        }
-
-        return $this->created(['data' => ['id' => $id, 'email' => $email, 'verification_sent' => true]]);
     }
 
     /* ------------------------------------------------------------------ */
