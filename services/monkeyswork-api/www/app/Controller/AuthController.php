@@ -198,6 +198,14 @@ final class AuthController
             return $this->error('Account suspended', 403);
         }
 
+        if ($user['status'] === 'pending_verification') {
+            return $this->json([
+                'error' => 'Email not verified',
+                'code' => 'email_not_verified',
+                'email' => $user['email'] ?? strtolower(trim($data['email'])),
+            ], 403);
+        }
+
         // Generate JWT
         $jwtSecret = getenv('JWT_SECRET') ?: 'changeme-use-at-least-32-characters-of-randomness';
         $now = time();
@@ -271,6 +279,57 @@ final class AuthController
 
         // TODO: revoke session / blacklist JWT
         return $this->json(['message' => 'Logged out']);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  POST /auth/resend-verification                                     */
+    /* ------------------------------------------------------------------ */
+    #[Route('POST', '/resend-verification', name: 'auth.resendVerification', summary: 'Resend verification email', tags: ['Auth'])]
+    public function resendVerification(ServerRequestInterface $request): JsonResponse
+    {
+        $data = $this->body($request);
+        $email = strtolower(trim($data['email'] ?? ''));
+
+        if (!$email) {
+            return $this->error('Email is required');
+        }
+
+        $stmt = $this->db->pdo()->prepare(
+            'SELECT id, display_name, status FROM "user" WHERE email = :email AND deleted_at IS NULL'
+        );
+        $stmt->execute(['email' => $email]);
+        $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        // Always return success to prevent email enumeration
+        if (!$user || $user['status'] !== 'pending_verification') {
+            return $this->json(['message' => 'If the email exists and is unverified, a new verification link has been sent']);
+        }
+
+        // Generate new verification token
+        $verifyToken = bin2hex(random_bytes(32));
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+
+        $this->db->pdo()->prepare(
+            'UPDATE "user" SET metadata = jsonb_set(COALESCE(metadata, \'{}\'::jsonb), \'{email_verify_token}\', to_jsonb(:token::text)),
+                               updated_at = :now WHERE id = :id'
+        )->execute(['token' => $verifyToken, 'now' => $now, 'id' => $user['id']]);
+
+        // Send verification email
+        $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
+        $verifyUrl = "{$frontendUrl}/auth/verify-email?token={$verifyToken}";
+        try {
+            $this->mail->sendTemplate(
+                $email,
+                'Verify your email — MonkeysWorks',
+                'verify-email',
+                ['userName' => $user['display_name'], 'verifyUrl' => $verifyUrl],
+                ['auth', 'verify-email'],
+            );
+        } catch (\Throwable $e) {
+            error_log('[Auth] Failed to resend verify email: ' . $e->getMessage());
+        }
+
+        return $this->json(['message' => 'If the email exists and is unverified, a new verification link has been sent']);
     }
 
     /* ------------------------------------------------------------------ */

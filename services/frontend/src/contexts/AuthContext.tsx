@@ -96,6 +96,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const body = await res.json();
 
         if (!res.ok) {
+            // Pass through structured error for email_not_verified
+            if (body.code === "email_not_verified") {
+                const err = new Error("Email not verified") as Error & { code: string; email: string };
+                err.code = "email_not_verified";
+                err.email = body.email;
+                throw err;
+            }
             const msg =
                 res.status === 401
                     ? "Invalid email or password."

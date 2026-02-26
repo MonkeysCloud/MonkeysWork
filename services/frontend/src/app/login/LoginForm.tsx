@@ -40,6 +40,10 @@ function LoginFormInner() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+    const [needsVerification, setNeedsVerification] = useState(false);
+    const [verificationEmail, setVerificationEmail] = useState("");
+    const [resendLoading, setResendLoading] = useState(false);
+    const [resendSuccess, setResendSuccess] = useState(false);
 
     const [form, setForm] = useState({
         email: "",
@@ -55,13 +59,35 @@ function LoginFormInner() {
                 return next;
             });
             setError(null);
+            setNeedsVerification(false);
+            setResendSuccess(false);
         };
+    }
+
+    async function handleResendVerification() {
+        setResendLoading(true);
+        setResendSuccess(false);
+        try {
+            const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+            await fetch(`${API_BASE}/auth/resend-verification`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: verificationEmail }),
+            });
+            setResendSuccess(true);
+        } catch {
+            // silent fail — endpoint always returns success
+        } finally {
+            setResendLoading(false);
+        }
     }
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         setError(null);
         setFieldErrors({});
+        setNeedsVerification(false);
+        setResendSuccess(false);
 
         // Client-side validation
         const errs: Record<string, string> = {};
@@ -78,11 +104,17 @@ function LoginFormInner() {
             const redirect = searchParams.get("redirect") || "/dashboard";
             router.push(redirect);
         } catch (err: unknown) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Login failed. Please try again."
-            );
+            const typedErr = err as Error & { code?: string; email?: string };
+            if (typedErr.code === "email_not_verified") {
+                setNeedsVerification(true);
+                setVerificationEmail(typedErr.email || form.email.trim());
+            } else {
+                setError(
+                    err instanceof Error
+                        ? err.message
+                        : "Login failed. Please try again."
+                );
+            }
         } finally {
             setLoading(false);
         }
@@ -177,8 +209,44 @@ function LoginFormInner() {
                         Enter your credentials to access your account.
                     </p>
 
+                    {/* email verification needed */}
+                    {needsVerification && (
+                        <div className="mt-6 px-4 py-4 bg-amber-50 border border-amber-200 rounded-xl">
+                            <div className="flex items-start gap-3">
+                                <span className="text-xl mt-0.5">📧</span>
+                                <div className="flex-1">
+                                    <p className="text-sm font-semibold text-amber-800">
+                                        Please verify your email
+                                    </p>
+                                    <p className="mt-1 text-sm text-amber-700">
+                                        We sent a verification link to{" "}
+                                        <strong>{verificationEmail}</strong>.
+                                        Please check your inbox and click the link to activate your account.
+                                    </p>
+                                    <p className="mt-1.5 text-xs text-amber-600">
+                                        💡 Can&apos;t find it? Check your <strong>Spam</strong> or <strong>Junk</strong> folder — sometimes verification emails end up there.
+                                    </p>
+                                    {resendSuccess ? (
+                                        <p className="mt-3 text-sm font-medium text-green-700">
+                                            ✅ Verification email resent! Check your inbox.
+                                        </p>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={handleResendVerification}
+                                            disabled={resendLoading}
+                                            className="mt-3 text-sm font-semibold text-brand-orange hover:text-brand-orange-hover transition-colors disabled:opacity-50"
+                                        >
+                                            {resendLoading ? "Sending…" : "Resend verification email"}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* global error */}
-                    {error && (
+                    {error && !needsVerification && (
                         <div className="mt-6 px-4 py-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl">
                             {error}
                         </div>
