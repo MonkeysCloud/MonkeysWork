@@ -179,3 +179,62 @@ spec:
                 limits:
                   cpu: 100m
                   memory: 64Mi
+
+---
+# ── Daily 7:00 AM UTC — Send job recommendations to freelancers
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: recommend-jobs-daily
+  namespace: monkeyswork
+  labels:
+    app: monkeyswork-api
+    component: cron
+spec:
+  schedule: "0 7 * * *"          # Every day at 07:00 UTC
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            app: monkeyswork-api
+            component: cron
+            job: recommend-jobs
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: cron-runner
+              image: curlimages/curl:8.5.0
+              command: ["sh", "-c"]
+              args:
+                - |
+                  echo "[$(date -u)] Starting daily job recommendations..."
+                  HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+                    -X POST \
+                    -H "Content-Type: application/json" \
+                    -H "X-Internal-Token: ${INTERNAL_API_TOKEN}" \
+                    --max-time 300 \
+                    http://monkeyswork-api.monkeyswork.svc.cluster.local:8080/api/v1/cron/recommend-jobs)
+                  echo "HTTP ${HTTP_CODE}"
+                  cat /tmp/response.json
+                  echo ""
+                  [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]
+              env:
+                - name: INTERNAL_API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: internal-api-token
+                      key: token
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
