@@ -19,9 +19,11 @@ final class GcsStorage
 
     public function __construct()
     {
-        $this->bucket = $_ENV['GCS_BUCKET'] ?? '';
-        $this->publicBaseUrl = rtrim($_ENV['GCS_PUBLIC_URL'] ?? '', '/');
-        $this->enabled = $this->bucket !== '' && in_array($_ENV['APP_ENV'] ?? 'local', ['production', 'prod'], true);
+        $this->bucket = getenv('GCS_BUCKET') ?: ($_ENV['GCS_BUCKET'] ?? '');
+        $this->publicBaseUrl = rtrim(getenv('GCS_PUBLIC_URL') ?: ($_ENV['GCS_PUBLIC_URL'] ?? ''), '/');
+        $appEnv = getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? 'local');
+        $this->enabled = $this->bucket !== '' && in_array($appEnv, ['production', 'prod'], true);
+        error_log("[GcsStorage] bucket={$this->bucket} appEnv={$appEnv} enabled=" . ($this->enabled ? 'YES' : 'NO'));
     }
 
     /* ── public helpers ───────────────────────────────────────────────── */
