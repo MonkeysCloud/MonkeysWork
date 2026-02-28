@@ -763,10 +763,14 @@ export default function CompleteProfileWizard() {
             if (res.ok) {
                 const body = await res.json();
                 const d = body.data || {};
-                setAiPreview({
-                    headline: d.headline || "",
-                    bio: d.bio || "",
-                });
+                if (d.status === "ai_service_unavailable" || (!d.headline && !d.bio)) {
+                    setError("AI service is temporarily unavailable. Please try again later.");
+                } else {
+                    setAiPreview({
+                        headline: d.headline || "",
+                        bio: d.bio || "",
+                    });
+                }
             } else {
                 setError("AI service is temporarily unavailable. Try again later.");
             }
