@@ -527,6 +527,7 @@ final class AuthController
 
         // Send welcome email
         try {
+            $this->mail ??= new MonkeysMailService();
             $this->mail->sendTemplate(
                 $user['email'],
                 'Welcome to MonkeysWork!',

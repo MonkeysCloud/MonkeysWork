@@ -68,7 +68,7 @@ function VerifyEmailInner() {
                         <h1 className="text-xl font-bold text-brand-dark mb-2">Email Verified!</h1>
                         <p className="text-sm text-brand-muted mb-6">{message}</p>
                         <button
-                            onClick={() => router.push("/auth/login")}
+                            onClick={() => router.push("/login")}
                             className="px-6 py-2.5 text-sm font-bold bg-brand-orange text-white rounded-xl hover:opacity-90 shadow-[0_4px_16px_rgba(240,138,17,0.3)]"
                         >
                             Go to Login
@@ -82,7 +82,7 @@ function VerifyEmailInner() {
                         <h1 className="text-xl font-bold text-brand-dark mb-2">Verification Failed</h1>
                         <p className="text-sm text-brand-muted mb-6">{message}</p>
                         <button
-                            onClick={() => router.push("/auth/login")}
+                            onClick={() => router.push("/login")}
                             className="px-6 py-2.5 text-sm font-bold bg-brand-orange text-white rounded-xl hover:opacity-90"
                         >
                             Go to Login
