@@ -121,27 +121,41 @@ final class MonkeysMailService
         array $vars = [],
         array $tags = [],
     ): bool {
-        $templateDir = dirname(__DIR__, 2) . '/resources/emails';
-        $templateFile = "{$templateDir}/{$templateName}.php";
+        try {
+            error_log("[MonkeysMail] sendTemplate START -> to: " . (is_array($to) ? implode(',', $to) : $to) . ", template: {$templateName}");
 
-        if (!file_exists($templateFile)) {
-            error_log("[MonkeysMail] Template not found: {$templateFile}");
+            $templateDir = dirname(__DIR__, 2) . '/resources/emails';
+            $templateFile = "{$templateDir}/{$templateName}.php";
+
+            if (!file_exists($templateFile)) {
+                error_log("[MonkeysMail] Template not found: {$templateFile}");
+                return false;
+            }
+
+            // Render template
+            error_log("[MonkeysMail] Rendering main template...");
+            $vars['subject'] = $subject;
+            $content = $this->renderTemplate($templateFile, $vars);
+
+            // Wrap in layout
+            $layoutFile = "{$templateDir}/layout.php";
+            if (file_exists($layoutFile)) {
+                error_log("[MonkeysMail] Rendering layout template...");
+                $html = $this->renderTemplate($layoutFile, array_merge($vars, ['content' => $content]));
+            } else {
+                error_log("[MonkeysMail] Layout template not found, using raw content.");
+                $html = $content;
+            }
+
+            error_log("[MonkeysMail] Dispatching to send()...");
+            $result = $this->send($to, $subject, $html, strip_tags($content), $tags);
+            error_log("[MonkeysMail] send() result: " . ($result ? 'TRUE' : 'FALSE'));
+
+            return $result;
+        } catch (\Throwable $e) {
+            error_log("[MonkeysMail] sendTemplate EXCEPTION: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
             return false;
         }
-
-        // Render template
-        $vars['subject'] = $subject;
-        $content = $this->renderTemplate($templateFile, $vars);
-
-        // Wrap in layout
-        $layoutFile = "{$templateDir}/layout.php";
-        if (file_exists($layoutFile)) {
-            $html = $this->renderTemplate($layoutFile, array_merge($vars, ['content' => $content]));
-        } else {
-            $html = $content;
-        }
-
-        return $this->send($to, $subject, $html, strip_tags($content), $tags);
     }
 
     private function renderTemplate(string $file, array $vars): string

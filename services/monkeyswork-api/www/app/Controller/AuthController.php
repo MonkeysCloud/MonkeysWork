@@ -135,6 +135,7 @@ final class AuthController
             $verifyUrl = "{$frontendUrl}/auth/verify-email?token={$verifyToken}";
             error_log('[Auth][register] sending verify email to ' . $email);
             try {
+                $this->mail ??= new MonkeysMailService();
                 $this->mail->sendTemplate(
                     $email,
                     'Verify your email — MonkeysWork',
@@ -374,6 +375,7 @@ final class AuthController
             $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
             $resetUrl = "{$frontendUrl}/auth/reset-password?token={$resetToken}";
             try {
+                $this->mail ??= new MonkeysMailService();
                 $this->mail->sendTemplate(
                     $email,
                     'Reset your password — MonkeysWork',
