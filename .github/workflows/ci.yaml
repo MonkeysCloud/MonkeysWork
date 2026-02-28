@@ -118,3 +118,31 @@ jobs:
         run: |
           terraform init -backend=false
           terraform validate
+
+  manifest-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify IMAGE_PLACEHOLDER in K8s manifests
+        run: |
+          FAILED=0
+          for svc in ai-scope-assistant ai-match-v1 ai-fraud-v1 verification-automation monkeyswork-api frontend socket-server; do
+            MANIFEST="k8s/services/${svc}.yaml"
+            if [ ! -f "$MANIFEST" ]; then
+              echo "❌ Missing manifest: $MANIFEST"
+              FAILED=1
+              continue
+            fi
+            if ! grep -q "IMAGE_PLACEHOLDER" "$MANIFEST"; then
+              echo "❌ $MANIFEST does NOT contain IMAGE_PLACEHOLDER — deployments will use a stale image!"
+              FAILED=1
+            else
+              echo "✅ $MANIFEST"
+            fi
+          done
+          if [ $FAILED -ne 0 ]; then
+            echo ""
+            echo "::error::Some K8s manifests are missing IMAGE_PLACEHOLDER. CI/CD will not update these services."
+            exit 1
+          fi
