@@ -296,7 +296,7 @@ final class AuthController
         }
 
         $stmt = $this->db->pdo()->prepare(
-            'SELECT id, display_name, status FROM "user" WHERE email = :email AND deleted_at IS NULL'
+            'SELECT id, display_name, status, metadata FROM "user" WHERE email = :email AND deleted_at IS NULL'
         );
         $stmt->execute(['email' => $email]);
         $user = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -310,10 +310,17 @@ final class AuthController
         $verifyToken = bin2hex(random_bytes(32));
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
+        // Safely parse metadata (handles both valid JSONB and double-encoded strings from old bug)
+        $meta = json_decode($user['metadata'] ?? '{}', true);
+        if (is_string($meta)) {
+            $meta = json_decode($meta, true) ?: [];
+        }
+        $meta = is_array($meta) ? $meta : [];
+        $meta['email_verify_token'] = $verifyToken;
+
         $this->db->pdo()->prepare(
-            'UPDATE "user" SET metadata = jsonb_set(COALESCE(metadata, \'{}\'::jsonb), \'{email_verify_token}\', to_jsonb(:token::text)),
-                               updated_at = :now WHERE id = :id'
-        )->execute(['token' => $verifyToken, 'now' => $now, 'id' => $user['id']]);
+            'UPDATE "user" SET metadata = :meta, updated_at = :now WHERE id = :id'
+        )->execute(['meta' => json_encode($meta), 'now' => $now, 'id' => $user['id']]);
 
         // Send verification email
         $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
