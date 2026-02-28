@@ -386,7 +386,7 @@ final class AuthController
 
             // Send reset email
             $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
-            $resetUrl = "{$frontendUrl}/reset-password?token={$resetToken}";
+            $resetUrl = "{$frontendUrl}/auth/reset-password?token={$resetToken}";
             try {
                 $this->mail ??= new MonkeysMailService();
                 $this->mail->sendTemplate(
