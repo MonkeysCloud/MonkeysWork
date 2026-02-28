@@ -561,7 +561,7 @@ export default function CompleteProfileWizard() {
     const [skills, setSkills] = useState<Skill[]>([]);
     const [skillSearch, setSkillSearch] = useState("");
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
-    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatar_url || null);
     const [avatarUploading, setAvatarUploading] = useState(false);
     const avatarInputRef = useRef<HTMLInputElement>(null);
     const [userLanguages, setUserLanguages] = useState<LanguageEntry[]>([]);

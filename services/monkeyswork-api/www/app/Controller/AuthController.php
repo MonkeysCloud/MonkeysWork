@@ -635,6 +635,13 @@ final class AuthController
                     'UPDATE "user" SET status = \'active\', email_verified_at = COALESCE(email_verified_at, :now)
                      WHERE id = :id AND status = \'pending_verification\''
                 )->execute(['id' => $userId, 'now' => $now]);
+                // Set avatar from OAuth only if user doesn't already have one
+                if ($avatar) {
+                    $pdo->prepare(
+                        'UPDATE "user" SET avatar_url = :avatar, updated_at = :now
+                         WHERE id = :id AND (avatar_url IS NULL OR avatar_url = \'\')'
+                    )->execute(['avatar' => $avatar, 'now' => $now, 'id' => $userId]);
+                }
             } else {
                 // Check if user with this email exists
                 $stmt = $pdo->prepare('SELECT id FROM "user" WHERE email = :email AND deleted_at IS NULL');
@@ -648,6 +655,13 @@ final class AuthController
                         'UPDATE "user" SET status = \'active\', email_verified_at = COALESCE(email_verified_at, :now)
                          WHERE id = :id AND status = \'pending_verification\''
                     )->execute(['id' => $userId, 'now' => $now]);
+                    // Set avatar from OAuth only if user doesn't already have one
+                    if ($avatar) {
+                        $pdo->prepare(
+                            'UPDATE "user" SET avatar_url = :avatar, updated_at = :now
+                             WHERE id = :id AND (avatar_url IS NULL OR avatar_url = \'\')'
+                        )->execute(['avatar' => $avatar, 'now' => $now, 'id' => $userId]);
+                    }
                 } else {
                     // ── 3. Create new user ──
                     $userId = $this->uuid();
