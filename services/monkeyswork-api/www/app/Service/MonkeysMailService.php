@@ -18,10 +18,19 @@ final class MonkeysMailService
 
     public function __construct()
     {
-        $this->apiKey = $_ENV['MONKEYSMAIL_API_KEY'] ?? getenv('MONKEYSMAIL_API_KEY') ?: '';
-        $this->apiBase = rtrim($_ENV['MONKEYSMAIL_API_BASE'] ?? getenv('MONKEYSMAIL_API_BASE') ?: 'https://smtp.monkeysmail.com', '/');
-        $this->fromEmail = $_ENV['MONKEYSMAIL_FROM_EMAIL'] ?? getenv('MONKEYSMAIL_FROM_EMAIL') ?: 'no-reply@monkeysworks.com';
-        $this->fromName = $_ENV['MONKEYSMAIL_FROM_NAME'] ?? getenv('MONKEYSMAIL_FROM_NAME') ?: 'MonkeysWorks';
+        $this->apiKey = $this->env('MONKEYSMAIL_API_KEY', '');
+        $this->apiBase = rtrim($this->env('MONKEYSMAIL_API_BASE', 'https://smtp.monkeysmail.com'), '/');
+        $this->fromEmail = $this->env('MONKEYSMAIL_FROM_EMAIL', 'no-reply@monkeysworks.com');
+        $this->fromName = $this->env('MONKEYSMAIL_FROM_NAME', 'MonkeysWorks');
+    }
+
+    private function env(string $key, string $default): string
+    {
+        if (!empty($_ENV[$key])) {
+            return (string) $_ENV[$key];
+        }
+        $val = getenv($key);
+        return $val !== false && $val !== '' ? (string) $val : $default;
     }
 
     /**

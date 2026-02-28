@@ -600,6 +600,11 @@ final class AuthController
             if ($oauthRow) {
                 // Existing OAuth link — fetch user
                 $userId = $oauthRow['user_id'];
+                // Auto-verify if still pending (OAuth provider confirms email)
+                $pdo->prepare(
+                    'UPDATE "user" SET status = \'active\', email_verified_at = COALESCE(email_verified_at, :now)
+                     WHERE id = :id AND status = \'pending_verification\''
+                )->execute(['id' => $userId, 'now' => $now]);
             } else {
                 // Check if user with this email exists
                 $stmt = $pdo->prepare('SELECT id FROM "user" WHERE email = :email AND deleted_at IS NULL');
@@ -608,6 +613,11 @@ final class AuthController
 
                 if ($existingUser) {
                     $userId = $existingUser['id'];
+                    // Auto-verify email for OAuth users — the provider already confirmed it
+                    $pdo->prepare(
+                        'UPDATE "user" SET status = \'active\', email_verified_at = COALESCE(email_verified_at, :now)
+                         WHERE id = :id AND status = \'pending_verification\''
+                    )->execute(['id' => $userId, 'now' => $now]);
                 } else {
                     // ── 3. Create new user ──
                     $userId = $this->uuid();
