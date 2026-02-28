@@ -20,7 +20,7 @@ final class MonkeysMailService
     {
         $this->apiKey = $this->env('MONKEYSMAIL_API_KEY', '');
         $this->apiBase = rtrim($this->env('MONKEYSMAIL_API_BASE', 'https://smtp.monkeysmail.com'), '/');
-        $this->fromEmail = $this->env('MONKEYSMAIL_FROM_EMAIL', 'no-reply@monkeysworks.com');
+        $this->fromEmail = $this->env('MONKEYSMAIL_FROM_EMAIL', 'no-reply@monkeys.cloud');
         $this->fromName = $this->env('MONKEYSMAIL_FROM_NAME', 'MonkeysWorks');
     }
 
@@ -65,19 +65,26 @@ final class MonkeysMailService
             'subject' => $subject,
             'html' => $html,
             'text' => $text ?: strip_tags($html),
-            'tags' => $tags,
+            'tracking' => ['opens' => true, 'clicks' => true],
         ];
 
         if ($replyTo) {
-            $payload['reply_to'] = $replyTo;
+            $payload['replyTo'] = $replyTo;
+        }
+
+        if (!empty($tags)) {
+            $payload['tags'] = $tags;
         }
 
         $url = "{$this->apiBase}/messages/send";
+        $jsonPayload = json_encode($payload);
+
+        error_log("[MonkeysMail] POST {$url} -> to: " . implode(',', $recipients) . ", subject: {$subject}");
 
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_POSTFIELDS => $jsonPayload,
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
                 "X-API-Key: {$this->apiKey}",
@@ -102,6 +109,7 @@ final class MonkeysMailService
             return false;
         }
 
+        error_log("[MonkeysMail] OK HTTP {$httpCode}: {$response}");
         return true;
     }
 

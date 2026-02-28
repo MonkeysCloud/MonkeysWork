@@ -160,7 +160,7 @@ spec:
             - name: MONKEYSMAIL_API_BASE
               value: https://smtp.monkeysmail.com
             - name: MONKEYSMAIL_FROM_EMAIL
-              value: no-reply@monkeysworks.com
+              value: no-reply@monkeys.cloud
             - name: MONKEYSMAIL_FROM_NAME
               value: MonkeysWorks
             - name: FRONTEND_URL
