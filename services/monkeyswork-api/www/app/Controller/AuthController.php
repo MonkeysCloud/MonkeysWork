@@ -505,7 +505,7 @@ final class AuthController
 
         // Find user by verification token
         $stmt = $this->db->pdo()->prepare(
-            'SELECT id, email, display_name, role FROM "user" WHERE metadata->>>\'email_verify_token\' = :token AND deleted_at IS NULL'
+            'SELECT id, email, display_name, role, metadata FROM "user" WHERE metadata->>\'email_verify_token\' = :token AND deleted_at IS NULL'
         );
         $stmt->execute(['token' => $data['token']]);
         $user = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -514,16 +514,23 @@ final class AuthController
             return $this->error('Invalid verification token', 400);
         }
 
-        // Activate account
+        // Activate account — safely parse metadata and remove token
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $meta = json_decode($user['metadata'] ?? '{}', true);
+        if (is_string($meta)) {
+            $meta = json_decode($meta, true) ?: [];
+        }
+        $meta = is_array($meta) ? $meta : [];
+        unset($meta['email_verify_token']);
+
         $this->db->pdo()->prepare(
             'UPDATE "user" SET
                 status = \'active\',
                 email_verified_at = :now,
-                metadata = metadata - \'email_verify_token\',
+                metadata = :meta,
                 updated_at = :now
              WHERE id = :id'
-        )->execute(['now' => $now, 'id' => $user['id']]);
+        )->execute(['now' => $now, 'meta' => json_encode($meta), 'id' => $user['id']]);
 
         // Send welcome email
         try {
