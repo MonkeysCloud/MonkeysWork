@@ -15,6 +15,8 @@ router = APIRouter(prefix="/api/v1/profile", tags=["Profile AI"])
 
 MODEL_VERSION = "dev-fallback-v1"
 
+logger.info("profile_routes_loaded", endpoints=["enhance", "suggest-skills"])
+
 
 # ── Request / Response models ──────────────────────────────────────
 
