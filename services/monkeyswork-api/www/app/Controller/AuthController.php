@@ -368,19 +368,25 @@ final class AuthController
             $expiresAt = (new \DateTimeImmutable('+1 hour'))->format('Y-m-d H:i:s');
             $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
+            // Safely parse and update metadata
+            $stmt2 = $this->db->pdo()->prepare('SELECT metadata FROM "user" WHERE id = :id');
+            $stmt2->execute(['id' => $user['id']]);
+            $rawMeta = $stmt2->fetchColumn() ?: '{}';
+            $meta = json_decode($rawMeta, true);
+            if (is_string($meta)) {
+                $meta = json_decode($meta, true) ?: [];
+            }
+            $meta = is_array($meta) ? $meta : [];
+            $meta['reset_token'] = $resetToken;
+            $meta['reset_token_expires'] = $expiresAt;
+
             $this->db->pdo()->prepare(
-                'UPDATE "user" SET
-                    metadata = jsonb_set(
-                        jsonb_set(COALESCE(metadata, \'{}\'::jsonb), \'{reset_token}\', to_jsonb(:token::text)),
-                        \'{reset_token_expires}\', to_jsonb(:expires::text)
-                    ),
-                    updated_at = :now
-                 WHERE id = :id'
-            )->execute(['token' => $resetToken, 'expires' => $expiresAt, 'now' => $now, 'id' => $user['id']]);
+                'UPDATE "user" SET metadata = :meta, updated_at = :now WHERE id = :id'
+            )->execute(['meta' => json_encode($meta), 'now' => $now, 'id' => $user['id']]);
 
             // Send reset email
             $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
-            $resetUrl = "{$frontendUrl}/auth/reset-password?token={$resetToken}";
+            $resetUrl = "{$frontendUrl}/reset-password?token={$resetToken}";
             try {
                 $this->mail ??= new MonkeysMailService();
                 $this->mail->sendTemplate(
@@ -416,7 +422,7 @@ final class AuthController
 
         // Find user by reset token
         $stmt = $this->db->pdo()->prepare(
-            'SELECT id, metadata FROM "user" WHERE metadata->>>\'reset_token\' = :token AND deleted_at IS NULL'
+            'SELECT id, metadata FROM "user" WHERE metadata->>\'reset_token\' = :token AND deleted_at IS NULL'
         );
         $stmt->execute(['token' => $data['token']]);
         $user = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -425,8 +431,12 @@ final class AuthController
             return $this->error('Invalid or expired reset token', 400);
         }
 
-        // Check expiry
+        // Check expiry — safely parse metadata
         $meta = json_decode($user['metadata'] ?? '{}', true);
+        if (is_string($meta)) {
+            $meta = json_decode($meta, true) ?: [];
+        }
+        $meta = is_array($meta) ? $meta : [];
         $expires = $meta['reset_token_expires'] ?? null;
         if ($expires && new \DateTimeImmutable($expires) < new \DateTimeImmutable()) {
             return $this->error('Reset token has expired. Please request a new one.', 400);
@@ -434,15 +444,18 @@ final class AuthController
 
         // Update password, clear token, bump token_version to invalidate sessions
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        unset($meta['reset_token'], $meta['reset_token_expires']);
+
         $this->db->pdo()->prepare(
             'UPDATE "user" SET
                 password_hash = :hash,
                 token_version = token_version + 1,
-                metadata = metadata - \'reset_token\' - \'reset_token_expires\',
+                metadata = :meta,
                 updated_at = :now
              WHERE id = :id'
         )->execute([
                     'hash' => password_hash($data['password'], PASSWORD_BCRYPT),
+                    'meta' => json_encode($meta),
                     'now' => $now,
                     'id' => $user['id'],
                 ]);
