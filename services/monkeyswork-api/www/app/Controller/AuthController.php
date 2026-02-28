@@ -318,6 +318,7 @@ final class AuthController
         $frontendUrl = getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
         $verifyUrl = "{$frontendUrl}/auth/verify-email?token={$verifyToken}";
         try {
+            $this->mail ??= new MonkeysMailService();
             $this->mail->sendTemplate(
                 $email,
                 'Verify your email — MonkeysWorks',
