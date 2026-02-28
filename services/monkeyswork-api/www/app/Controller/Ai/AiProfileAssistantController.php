@@ -157,6 +157,48 @@ final class AiProfileAssistantController
             ]);
         }
 
-        return $this->json(['data' => json_decode($response, true)]);
+        $aiResult = json_decode($response, true);
+        $suggestedSkills = $aiResult['suggested_skills'] ?? [];
+
+        if (empty($suggestedSkills)) {
+            return $this->json(['data' => $aiResult]);
+        }
+
+        // Validate suggested skills against the database — only return skills that exist
+        $suggestedNames = array_map(fn($s) => strtolower($s['name'] ?? ''), $suggestedSkills);
+        $suggestedNames = array_filter($suggestedNames);
+
+        if (!empty($suggestedNames)) {
+            $placeholders = implode(',', array_fill(0, count($suggestedNames), '?'));
+            $dbStmt = $this->db->pdo()->prepare(
+                "SELECT id, name, slug FROM \"skill\" WHERE LOWER(name) IN ({$placeholders}) AND is_active = true"
+            );
+            $dbStmt->execute(array_values($suggestedNames));
+            $dbSkills = $dbStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            // Build a lookup by lowercase name
+            $dbSkillMap = [];
+            foreach ($dbSkills as $dbSkill) {
+                $dbSkillMap[strtolower($dbSkill['name'])] = $dbSkill;
+            }
+
+            // Only include suggestions that exist in the database, use the DB name
+            $validatedSuggestions = [];
+            foreach ($suggestedSkills as $s) {
+                $key = strtolower($s['name'] ?? '');
+                if (isset($dbSkillMap[$key])) {
+                    $validatedSuggestions[] = [
+                        'name' => $dbSkillMap[$key]['name'],
+                        'reason' => $s['reason'] ?? '',
+                        'skill_id' => $dbSkillMap[$key]['id'],
+                        'slug' => $dbSkillMap[$key]['slug'],
+                    ];
+                }
+            }
+
+            $aiResult['suggested_skills'] = $validatedSuggestions;
+        }
+
+        return $this->json(['data' => $aiResult]);
     }
 }
