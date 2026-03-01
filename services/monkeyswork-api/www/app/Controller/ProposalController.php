@@ -456,10 +456,8 @@ final class ProposalController
                     'updated_at' => $now,
                 ]);
 
-        // ── Mark job as in_progress (no longer 'open' for browsing) ──
-        $pdo->prepare(
-            'UPDATE "job" SET status = \'in_progress\', updated_at = :now WHERE id = :jid'
-        )->execute(['now' => $now, 'jid' => $info['job_id']]);
+        // Note: Job status is NOT changed here — the client chooses via
+        // the frontend modal whether to close the job or keep it listed.
 
         // ── Create milestones from proposal ──
         $milestones = json_decode($info['milestones_proposed'] ?? '[]', true);

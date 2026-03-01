@@ -185,6 +185,13 @@ export default function JobProposalsPage() {
     // Modal state
     const [selectedProposal, setSelectedProposal] = useState<ScoredProposal | null>(null);
 
+    // Post-accept modal state
+    const [postAcceptModal, setPostAcceptModal] = useState<{
+        open: boolean;
+        freelancerName: string;
+    }>({ open: false, freelancerName: "" });
+    const [closingJob, setClosingJob] = useState(false);
+
     // Fetch job + proposals
     useEffect(() => {
         if (!token || !id) return;
@@ -228,9 +235,38 @@ export default function JobProposalsPage() {
                 }
                 setToast(`Proposal ${action === "accept" ? "accepted" : action === "reject" ? "rejected" : "shortlisted"}!`);
                 setTimeout(() => setToast(null), 3000);
+
+                // Show post-accept modal asking to close or keep job open
+                if (action === "accept") {
+                    const p = proposals.find((pr) => pr.id === proposalId);
+                    const name = p
+                        ? `${p.freelancer_first_name || ""} ${p.freelancer_last_name || ""}`.trim() || "the freelancer"
+                        : "the freelancer";
+                    setPostAcceptModal({ open: true, freelancerName: name });
+                }
             }
         } finally {
             setActionLoading(null);
+        }
+    }
+
+    // Close job after accepting
+    async function handleCloseJob() {
+        if (!token || !id) return;
+        setClosingJob(true);
+        try {
+            await fetch(`${API_BASE}/jobs/${id}/close`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setPostAcceptModal({ open: false, freelancerName: "" });
+            setToast("Job closed! No more proposals will be accepted.");
+            setTimeout(() => setToast(null), 3000);
+            if (job) setJob({ ...job, status: "cancelled" });
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setClosingJob(false);
         }
     }
 
@@ -685,7 +721,41 @@ export default function JobProposalsPage() {
                 )}
             </div>
 
-            {/* ── Proposal Detail Modal ────────────── */}
+            {/* ── Post-Accept Modal ──────────────────── */}
+            {postAcceptModal.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6 text-center">
+                            <div className="text-4xl mb-3">🎉</div>
+                            <h2 className="text-xl font-bold text-brand-dark mb-2">Proposal Accepted!</h2>
+                            <p className="text-sm text-brand-muted mb-1">
+                                You hired <strong className="text-brand-dark">{postAcceptModal.freelancerName}</strong>.
+                                A contract has been created.
+                            </p>
+                            <p className="text-sm text-brand-muted mb-6">
+                                Would you like to keep this job listed so you can hire more freelancers, or close it?
+                            </p>
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    onClick={() => setPostAcceptModal({ open: false, freelancerName: "" })}
+                                    className="w-full px-5 py-3 text-sm font-bold text-white bg-brand-orange hover:bg-brand-orange-hover rounded-xl shadow-[0_4px_24px_rgba(240,138,17,0.4)] transition-all"
+                                >
+                                    🔓 Keep Job Open — Hire more freelancers
+                                </button>
+                                <button
+                                    onClick={handleCloseJob}
+                                    disabled={closingJob}
+                                    className="w-full px-5 py-3 text-sm font-semibold text-brand-dark border border-brand-border/60 rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50"
+                                >
+                                    {closingJob ? "Closing…" : "✅ Close Job — I’m done hiring"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Proposal Detail Modal ───────────────── */}
             {selectedProposal && (
                 <ProposalDetailModal
                     proposal={selectedProposal}

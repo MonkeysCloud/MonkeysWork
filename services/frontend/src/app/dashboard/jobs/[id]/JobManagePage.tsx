@@ -162,6 +162,19 @@ export default function JobManagePage() {
     const [previewAtt, setPreviewAtt] = useState<Attachment | null>(null);
     const [hasPaymentMethod, setHasPaymentMethod] = useState<boolean | null>(null);
 
+    /* Contracts for this job */
+    interface JobContract {
+        id: string;
+        freelancer_name: string;
+        contract_type: string;
+        total_amount: string;
+        hourly_rate: string | null;
+        status: string;
+        started_at: string;
+        created_at: string;
+    }
+    const [contracts, setContracts] = useState<JobContract[]>([]);
+
     const isOwner = !!(job && user && job.client_id === user.id);
     const [isSaved, setIsSaved] = useState(false);
     const [saveLoading, setSaveLoading] = useState(false);
@@ -253,6 +266,17 @@ export default function JobManagePage() {
             })
             .catch(() => setHasPaymentMethod(false));
     }, [token, isOwner]);
+
+    /* Fetch contracts for this job (owner only) */
+    useEffect(() => {
+        if (!token || !isOwner || !id) return;
+        fetch(`${API_BASE}/contracts?job_id=${id}&per_page=50`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then((r) => r.json())
+            .then((body) => setContracts(body.data ?? []))
+            .catch(() => {});
+    }, [token, isOwner, id]);
 
     async function toggleSaveJob() {
         if (!token) return;
@@ -575,6 +599,56 @@ export default function JobManagePage() {
                                     🗑️ Delete
                                 </button>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Contracts Section ── */}
+                {isOwner && contracts.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-brand-border/60 p-6 mb-6">
+                        <h2 className="text-sm font-bold text-brand-dark uppercase tracking-wide mb-4">
+                            📄 Active Contracts ({contracts.length})
+                        </h2>
+                        <div className="space-y-3">
+                            {contracts.map((c) => {
+                                const statusColors: Record<string, string> = {
+                                    active: "bg-emerald-100 text-emerald-700 border-emerald-200",
+                                    completed: "bg-blue-100 text-blue-700 border-blue-200",
+                                    cancelled: "bg-gray-100 text-gray-600 border-gray-200",
+                                    paused: "bg-yellow-100 text-yellow-700 border-yellow-200",
+                                };
+                                const statusIcons: Record<string, string> = {
+                                    active: "🟢", completed: "✅", cancelled: "🚫", paused: "⏸️",
+                                };
+                                return (
+                                    <Link
+                                        key={c.id}
+                                        href={`/dashboard/contracts/${c.id}`}
+                                        className="flex items-center gap-4 p-4 rounded-xl border border-brand-border/40 hover:border-brand-orange/40 hover:shadow-sm transition-all group"
+                                    >
+                                        <div className="shrink-0 w-10 h-10 rounded-full bg-brand-orange/10 flex items-center justify-center text-base font-bold text-brand-orange">
+                                            {c.freelancer_name?.[0]?.toUpperCase() || "?"}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-semibold text-brand-dark group-hover:text-brand-orange transition-colors truncate">
+                                                {c.freelancer_name}
+                                            </p>
+                                            <div className="flex flex-wrap gap-2 mt-1">
+                                                <span className="text-xs text-brand-muted">
+                                                    {c.contract_type === "hourly" ? `⏱️ $${c.hourly_rate}/hr` : `💰 $${Number(c.total_amount).toLocaleString()}`}
+                                                </span>
+                                                <span className="text-xs text-brand-muted">
+                                                    Started {new Date(c.started_at || c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <span className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-full border ${statusColors[c.status] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                                            {statusIcons[c.status] || "📄"} {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                                        </span>
+                                        <span className="text-brand-muted text-xs group-hover:text-brand-orange transition-colors">→</span>
+                                    </Link>
+                                );
+                            })}
                         </div>
                     </div>
                 )}

@@ -44,6 +44,12 @@ final class ContractController
             $params['status'] = $status;
         }
 
+        $jobId = $request->getQueryParams()['job_id'] ?? null;
+        if ($jobId) {
+            $where .= ' AND c.job_id = :job_id';
+            $params['job_id'] = $jobId;
+        }
+
         $cnt = $this->db->pdo()->prepare("SELECT COUNT(*) FROM \"contract\" c WHERE {$where}");
         $cnt->execute($params);
         $total = (int) $cnt->fetchColumn();
