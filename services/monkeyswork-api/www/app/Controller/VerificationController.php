@@ -242,23 +242,19 @@ final class VerificationController
                         $typeData[$item['type']] ?? []
                     );
                     error_log("[VerificationController] scored {$item['type']}: confidence={$confidence}");
+                    $scorerFailed = false;
                 } catch (\Throwable $e) {
                     error_log("[VerificationController] scorer failed for {$item['type']}: " . $e->getMessage());
-                    // Fallback: use a simulated score so records don't stay stuck in 'pending'
-                    $baseScores = [
-                        'identity' => 0.88,
-                        'skill_assessment' => 0.85,
-                        'portfolio' => 0.90,
-                        'work_history' => 0.82,
-                        'payment_method' => 0.92,
-                    ];
-                    $confidence = $baseScores[$item['type']] ?? 0.80;
-                    $confidence += mt_rand(-10, 10) / 100.0;
-                    $confidence = max(0.0, min(1.0, $confidence));
+                    $confidence = 0.0;
+                    $scorerFailed = true;
                 }
 
                 try {
-                    if ($confidence >= 0.85) {
+                    if ($scorerFailed) {
+                        // AI unavailable — require human review, NEVER auto-approve
+                        $newStatus = 'in_review';
+                        $decision = 'human_review';
+                    } elseif ($confidence >= 0.85) {
                         $newStatus = 'approved';
                         $decision = 'auto_approved';
                     } elseif ($confidence >= 0.50) {

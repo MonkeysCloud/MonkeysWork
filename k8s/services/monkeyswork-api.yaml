@@ -83,7 +83,9 @@ spec:
                   name: internal-api-token
                   key: token
             - name: GCP_PROJECT_ID
-              value: "monkeyswork-prod"
+              value: "monkeyswork"
+            - name: VERTEX_AI_MODEL
+              value: "gemini-2.0-flash"
             - name: GCS_BUCKET
               value: "mw-prod-uploads-monkeyswork"
             - name: GCS_PUBLIC_URL
