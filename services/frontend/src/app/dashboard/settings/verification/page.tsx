@@ -208,7 +208,7 @@ export default function VerificationPage() {
 
     const level = badgeSummary?.level ?? "none";
     const levelInfo = LEVEL_BADGE[level] ?? LEVEL_BADGE.none;
-    const hasAnyPending = verifications.some(v => ["pending", "in_review"].includes(v.status));
+    const hasAnyPending = verifications.some(v => v.status === "pending");
 
     return (
         <div className="max-w-3xl mx-auto space-y-6 pb-10">
@@ -287,7 +287,8 @@ export default function VerificationPage() {
                         const record = getVerifRecord(vtype.value);
                         const notApplicable = isNotApplicable(vtype.value);
                         const isVerified = badge?.verified ?? false;
-                        const isPending = record && ["pending", "in_review"].includes(record.status);
+                        const isPending = record && record.status === "pending";
+                        const isInReview = record && ["in_review", "human_review", "info_requested"].includes(record.status);
                         const isRejected = record && ["rejected", "auto_rejected"].includes(record.status);
 
                         const statusKey = notApplicable
@@ -305,11 +306,13 @@ export default function VerificationPage() {
                                     ? "border-green-200 bg-green-50/30"
                                     : isPending
                                         ? "border-yellow-200 bg-yellow-50/30"
-                                        : isRejected
-                                            ? "border-red-200 bg-red-50/20"
-                                            : notApplicable
-                                                ? "border-gray-200/60 bg-gray-50/30 opacity-60"
-                                                : "border-brand-border/60"
+                                        : isInReview
+                                            ? "border-blue-200 bg-blue-50/30"
+                                            : isRejected
+                                                ? "border-red-200 bg-red-50/20"
+                                                : notApplicable
+                                                    ? "border-gray-200/60 bg-gray-50/30 opacity-60"
+                                                    : "border-brand-border/60"
                                     }`}
                             >
                                 <div className="text-2xl w-10 h-10 flex items-center justify-center flex-shrink-0">
@@ -348,6 +351,10 @@ export default function VerificationPage() {
                                         <span className="flex items-center gap-1.5 text-xs text-yellow-600 font-medium">
                                             <span className="animate-spin h-3 w-3 border-2 border-yellow-400/30 border-t-yellow-600 rounded-full" />
                                             Processing
+                                        </span>
+                                    ) : isInReview ? (
+                                        <span className="flex items-center gap-1.5 text-xs text-blue-600 font-medium">
+                                            🔍 In Review
                                         </span>
                                     ) : isRejected ? (
                                         <span className="text-red-500 text-lg">✗</span>
