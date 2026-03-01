@@ -657,9 +657,9 @@ export default function CompleteProfileWizard() {
             if (res.ok) {
                 const body = await res.json();
                 const fileUrl = body.data?.[0]?.file_url || "";
-                // file_url is relative like /files/attachments/..., prepend API host
+                // file_url may be absolute (GCS) or relative — handle both
                 const apiHost = API_BASE.replace(/\/api\/v1$/, "");
-                const url = fileUrl ? `${apiHost}${fileUrl}` : "";
+                const url = fileUrl.startsWith("http") ? fileUrl : (fileUrl ? `${apiHost}${fileUrl}` : "");
                 setVerifEvidence((p) => ({
                     ...p,
                     identity: { ...p.identity, government_id_url: url },
@@ -1803,7 +1803,7 @@ export default function CompleteProfileWizard() {
                                                                         const body = await res.json();
                                                                         const fileUrl = body.data?.[0]?.file_url || "";
                                                                         const apiHost = API_BASE.replace(/\/api\/v1$/, "");
-                                                                        const url = fileUrl ? `${apiHost}${fileUrl}` : "";
+                                                                        const url = fileUrl.startsWith("http") ? fileUrl : (fileUrl ? `${apiHost}${fileUrl}` : "");
                                                                         setVerifEvidence((p) => ({
                                                                             ...p,
                                                                             identity: { ...p.identity, government_id_url: url },
