@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 
 /* ── inline icons ───────────────────────────────────── */
 function BriefcaseIcon() {
@@ -54,6 +57,18 @@ const ROLES = [
 ];
 
 export default function RegisterClient() {
+    const router = useRouter();
+    const { isAuthenticated, isLoading } = useAuth();
+
+    // Redirect logged-in users to dashboard
+    useEffect(() => {
+        if (!isLoading && isAuthenticated) {
+            router.replace("/dashboard");
+        }
+    }, [isLoading, isAuthenticated, router]);
+
+    if (isLoading || isAuthenticated) return null;
+
     return (
         <>
             {/* ── Hero ── */}

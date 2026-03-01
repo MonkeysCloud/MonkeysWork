@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
@@ -46,6 +47,15 @@ function OAuthButton({
 
 export default function FreelancerRegisterForm() {
     const router = useRouter();
+    const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+    // Redirect logged-in users to dashboard
+    useEffect(() => {
+        if (!authLoading && isAuthenticated) {
+            router.replace("/dashboard");
+        }
+    }, [authLoading, isAuthenticated, router]);
+
     const [showPassword, setShowPassword] = useState(false);
     const [agreed, setAgreed] = useState(false);
     const [loading, setLoading] = useState(false);
