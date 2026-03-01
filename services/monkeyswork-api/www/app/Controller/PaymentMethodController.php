@@ -178,6 +178,47 @@ final class PaymentMethodController
                 ]);
             }
 
+            // ── Bank Transfer (ACH via Stripe Connect): save record without Stripe PM ID ──
+            if ($type === 'bank_transfer') {
+                $last4 = substr($data['account_number'] ?? $data['last_four'] ?? '••••', -4);
+                $bankName = $data['bank_name'] ?? 'Bank';
+                $holder = $data['account_holder'] ?? '';
+
+                $pdo->prepare(
+                    'INSERT INTO "paymentmethod" (id, user_id, type, provider, last_four,
+                                                  token, stripe_payment_method_id, metadata,
+                                                  is_default, is_active, expiry,
+                                                  created_at, updated_at)
+                     VALUES (:id, :uid, :type, :prov, :last4, :tok, :spm, :meta, :def, true, null, :now, :now)'
+                )->execute([
+                            'id' => $id,
+                            'uid' => $userId,
+                            'type' => 'bank_transfer',
+                            'prov' => $bankName,
+                            'last4' => $last4,
+                            'tok' => null,
+                            'spm' => null,
+                            'meta' => json_encode([
+                                'bank_name' => $bankName,
+                                'account_holder' => $holder,
+                                'routing_number' => substr($data['routing_number'] ?? '', -4),
+                                'method' => 'stripe_connect',
+                            ]),
+                            'def' => $setDefault ? 'true' : 'false',
+                            'now' => $now,
+                        ]);
+
+                return $this->created([
+                    'data' => [
+                        'id' => $id,
+                        'type' => 'bank_transfer',
+                        'provider' => $bankName,
+                        'last_four' => $last4,
+                        'is_default' => $setDefault,
+                    ]
+                ]);
+            }
+
             // ── Stripe card or bank account ──
             $stripePmId = $data['payment_method_id'] ?? null;
             if (empty($stripePmId)) {
