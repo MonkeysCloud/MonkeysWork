@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import COUNTRIES, { type Country } from "@/data/countries";
+import { getStatesForCountry } from "@/data/states";
 
 const API_BASE =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
@@ -80,6 +82,98 @@ function Section({ title, description, children }: { title: string; description?
 function MaskedValue({ value }: { value: string }) {
     if (!value || value.length <= 4) return <span>{value || "—"}</span>;
     return <span>{"•".repeat(value.length - 4)}{value.slice(-4)}</span>;
+}
+
+/* ── SearchableCountrySelect ───────────────────── */
+function SearchableCountrySelect({ value, onChange }: { value: string; onChange: (code: string) => void }) {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const ref = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, []);
+
+    useEffect(() => { if (open && inputRef.current) inputRef.current.focus(); }, [open]);
+
+    const selected = COUNTRIES.find((c) => c.code === value);
+    const q = search.toLowerCase();
+    const filtered = COUNTRIES.filter((c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q));
+
+    return (
+        <div ref={ref} className="relative">
+            <button type="button" onClick={() => { setOpen(!open); setSearch(""); }} className={`${inputCls} text-left flex items-center justify-between`}>
+                <span className={selected ? "" : "text-brand-muted/60"}>
+                    {selected ? `${selected.flag} ${selected.name}` : "Select a country…"}
+                </span>
+                <svg className={`w-4 h-4 text-brand-muted transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {open && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-brand-border/60 rounded-xl shadow-lg overflow-hidden">
+                    <div className="p-2 border-b border-brand-border/40">
+                        <input ref={inputRef} className="w-full px-3 py-2 text-sm rounded-lg border border-brand-border/40 focus:outline-none focus:border-brand-orange/50 placeholder:text-brand-muted/50" placeholder="Search countries…" value={search} onChange={(e) => setSearch(e.target.value)} />
+                    </div>
+                    <div className="max-h-52 overflow-y-auto">
+                        {filtered.length === 0 && <p className="text-xs text-brand-muted text-center py-4">No countries found</p>}
+                        {filtered.map((c) => (
+                            <button key={c.code} type="button" onClick={() => { onChange(c.code); setOpen(false); setSearch(""); }}
+                                className={`w-full text-left px-3 py-2.5 text-sm flex items-center gap-2 transition-colors ${c.code === value ? "bg-brand-orange/10 text-brand-orange font-semibold" : "hover:bg-gray-50 text-brand-dark"}`}>
+                                <span className="text-base">{c.flag}</span><span className="flex-1">{c.name}</span><span className="text-brand-muted text-xs">{c.code}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ── SearchableStateSelect ─────────────────────── */
+function SearchableStateSelect({ countryCode, value, onChange }: { countryCode: string; value: string; onChange: (name: string) => void }) {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const ref = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const states = getStatesForCountry(countryCode);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, []);
+
+    useEffect(() => { if (open && inputRef.current) inputRef.current.focus(); }, [open]);
+
+    const q = search.toLowerCase();
+    const filtered = states.filter((s) => s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q));
+
+    return (
+        <div ref={ref} className="relative">
+            <button type="button" onClick={() => { setOpen(!open); setSearch(""); }} className={`${inputCls} text-left flex items-center justify-between`}>
+                <span className={value ? "" : "text-brand-muted/60"}>{value || "Select state / province…"}</span>
+                <svg className={`w-4 h-4 text-brand-muted transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {open && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-brand-border/60 rounded-xl shadow-lg overflow-hidden">
+                    <div className="p-2 border-b border-brand-border/40">
+                        <input ref={inputRef} className="w-full px-3 py-2 text-sm rounded-lg border border-brand-border/40 focus:outline-none focus:border-brand-orange/50 placeholder:text-brand-muted/50" placeholder="Search states…" value={search} onChange={(e) => setSearch(e.target.value)} />
+                    </div>
+                    <div className="max-h-52 overflow-y-auto">
+                        {filtered.length === 0 && <p className="text-xs text-brand-muted text-center py-4">No matches found</p>}
+                        {filtered.map((s) => (
+                            <button key={s.code} type="button" onClick={() => { onChange(s.name); setOpen(false); setSearch(""); }}
+                                className={`w-full text-left px-3 py-2.5 text-sm flex items-center gap-2 transition-colors ${s.name === value ? "bg-brand-orange/10 text-brand-orange font-semibold" : "hover:bg-gray-50 text-brand-dark"}`}>
+                                <span className="flex-1">{s.name}</span><span className="text-brand-muted text-xs">{s.code}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 }
 
 /* ── Main Page ──────────────────────────────────── */
@@ -424,21 +518,27 @@ export default function PayoutMethodsPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-medium text-brand-dark mb-1.5">Country</label>
-                                <input
-                                    className={inputCls}
-                                    placeholder="e.g. US"
+                                <SearchableCountrySelect
                                     value={taxInfo.billing_country}
-                                    onChange={(e) => setTaxInfo(prev => ({ ...prev, billing_country: e.target.value.toUpperCase().slice(0, 2) }))}
+                                    onChange={(code) => setTaxInfo(prev => ({ ...prev, billing_country: code, billing_state: "" }))}
                                 />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-brand-dark mb-1.5">State / Province</label>
-                                <input
-                                    className={inputCls}
-                                    placeholder="e.g. California"
-                                    value={taxInfo.billing_state}
-                                    onChange={(e) => setTaxInfo(prev => ({ ...prev, billing_state: e.target.value }))}
-                                />
+                                {taxInfo.billing_country && getStatesForCountry(taxInfo.billing_country).length > 0 ? (
+                                    <SearchableStateSelect
+                                        countryCode={taxInfo.billing_country}
+                                        value={taxInfo.billing_state}
+                                        onChange={(val) => setTaxInfo(prev => ({ ...prev, billing_state: val }))}
+                                    />
+                                ) : (
+                                    <input
+                                        className={inputCls}
+                                        placeholder="State / Province"
+                                        value={taxInfo.billing_state}
+                                        onChange={(e) => setTaxInfo(prev => ({ ...prev, billing_state: e.target.value }))}
+                                    />
+                                )}
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-brand-dark mb-1.5">City</label>
