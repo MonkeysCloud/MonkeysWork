@@ -64,6 +64,10 @@ COPY --from=builder /build/www /app/www
 # Copy local overrides (if any exist during build)
 COPY . /app/
 
+# Install repo-level composer dependencies (e.g. stripe/stripe-php)
+RUN cd /app/www && composer install --no-interaction --no-dev --optimize-autoloader 2>/dev/null || \
+    composer update --no-interaction --no-dev --optimize-autoloader
+
 # Set permissions — www-data (PHP-FPM group) needs write access to var/ and public/files/
 RUN chown -R appuser:www-data /app/www \
     && chmod -R 755 /app/www \
