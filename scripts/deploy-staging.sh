@@ -30,6 +30,12 @@ else
       -n "$NAMESPACE"
 fi
 
+# Apply CronJobs on API deploy
+if [[ "$SERVICE" == "monkeyswork-api" ]] && [[ -f "k8s/services/cron-jobs.yaml" ]]; then
+    echo "→ Applying CronJob manifests..."
+    kubectl apply -f "k8s/services/cron-jobs.yaml"
+fi
+
 kubectl rollout status "deployment/$SERVICE" -n "$NAMESPACE" --timeout=300s
 
 echo "✅ $SERVICE deployed to staging (tag: $IMAGE_TAG)"
