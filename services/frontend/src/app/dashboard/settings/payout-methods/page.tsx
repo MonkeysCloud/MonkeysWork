@@ -209,6 +209,7 @@ export default function PayoutMethodsPage() {
                     provider: selectedType,
                     last_four: lastFour || "••••",
                     is_default: makeDefault,
+                    ...formData,
                     metadata: formData,
                 }),
             });
