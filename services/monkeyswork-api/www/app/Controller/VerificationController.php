@@ -259,15 +259,22 @@ final class VerificationController
             $scorer = new VertexAiScorer();
             foreach ($created as &$item) {
                 try {
-                    $confidence = $scorer->scoreVerification(
+                    $aiResult = $scorer->scoreVerification(
                         $item['type'],
                         $typeData[$item['type']] ?? []
                     );
-                    error_log("[VerificationController] scored {$item['type']}: confidence={$confidence}");
+                    $confidence = (float) ($aiResult['confidence'] ?? 0.0);
+                    $reasoning = $aiResult['reasoning'] ?? '';
+                    $checks = $aiResult['checks'] ?? [];
+                    $aiModel = $aiResult['model'] ?? 'unknown';
+                    error_log("[VerificationController] scored {$item['type']}: confidence={$confidence} reasoning={$reasoning}");
                     $scorerFailed = false;
                 } catch (\Throwable $e) {
                     error_log("[VerificationController] scorer failed for {$item['type']}: " . $e->getMessage());
                     $confidence = 0.0;
+                    $reasoning = 'AI scorer unavailable: ' . $e->getMessage();
+                    $checks = [];
+                    $aiModel = 'error';
                     $scorerFailed = true;
                 }
 
@@ -287,8 +294,6 @@ final class VerificationController
                         $decision = 'auto_rejected';
                     }
 
-                    $modelName = $scorer->isSimulated() ? 'simulated-dev-v1.0' : 'vertex-ai-gemini';
-
                     $pdo->prepare(
                         'UPDATE "verification" SET status = :status, ai_confidence = :conf,
                                 ai_model_version = :model, ai_result = :result,
@@ -297,11 +302,12 @@ final class VerificationController
                     )->execute([
                                 'status' => $newStatus,
                                 'conf' => round($confidence, 4),
-                                'model' => $modelName,
+                                'model' => $aiModel,
                                 'result' => json_encode([
                                     'decision' => $decision,
                                     'confidence' => $confidence,
-                                    'checks' => [],
+                                    'reasoning' => $reasoning,
+                                    'checks' => $checks,
                                 ]),
                                 'data' => json_encode(
                                     array_merge(

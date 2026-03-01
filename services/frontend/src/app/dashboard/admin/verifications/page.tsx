@@ -771,6 +771,12 @@ export default function AdminVerificationsPage() {
                                                         </span>
                                                     </p>
                                                 )}
+                                                {typeof aiResult.reasoning === 'string' && aiResult.reasoning && (
+                                                    <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                                        <p className="text-gray-500 mb-1 font-medium">💡 AI Reasoning:</p>
+                                                        <p className="text-gray-700 whitespace-pre-line">{aiResult.reasoning}</p>
+                                                    </div>
+                                                )}
                                                 {Array.isArray(aiResult.checks) && aiResult.checks.length > 0 && (
                                                     <div className="mt-2">
                                                         <p className="text-gray-500 mb-1">Checks:</p>

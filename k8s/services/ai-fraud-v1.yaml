@@ -29,7 +29,7 @@ spec:
             - name: REGION
               value: "us-central1"
             - name: VERTEX_MODEL
-              value: "gemini-2.0-flash"
+              value: "gemini-2.5-flash"
             - name: INTERNAL_API_URL
               value: "http://monkeyswork-api.monkeyswork.svc.cluster.local/api/v1/internal"
             - name: INTERNAL_API_TOKEN

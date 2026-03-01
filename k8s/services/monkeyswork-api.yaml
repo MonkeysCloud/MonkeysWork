@@ -85,7 +85,7 @@ spec:
             - name: GCP_PROJECT_ID
               value: "monkeyswork"
             - name: VERTEX_AI_MODEL
-              value: "gemini-2.0-flash"
+              value: "gemini-2.5-flash"
             - name: GCS_BUCKET
               value: "mw-prod-uploads-monkeyswork"
             - name: GCS_PUBLIC_URL

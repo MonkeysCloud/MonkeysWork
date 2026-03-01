@@ -43,25 +43,12 @@ const PAYOUT_TYPES = [
         value: "bank_transfer",
         label: "Bank Transfer (ACH)",
         icon: "🏦",
-        desc: "Direct deposit to your bank account",
+        desc: "Direct deposit to your bank account via Stripe",
         fields: [
             { key: "bank_name", label: "Bank Name", placeholder: "e.g. Chase, Wells Fargo" },
             { key: "account_holder", label: "Account Holder Name", placeholder: "Full name on the account" },
             { key: "routing_number", label: "Routing Number", placeholder: "9-digit routing number", mask: true },
             { key: "account_number", label: "Account Number", placeholder: "Account number", mask: true },
-        ],
-    },
-    {
-        value: "wire",
-        label: "Wire Transfer",
-        icon: "🌐",
-        desc: "International wire transfer (SWIFT)",
-        fields: [
-            { key: "bank_name", label: "Bank Name", placeholder: "e.g. HSBC, Barclays" },
-            { key: "account_holder", label: "Account Holder Name", placeholder: "Full name on the account" },
-            { key: "swift_code", label: "SWIFT/BIC Code", placeholder: "8-11 character code" },
-            { key: "iban", label: "IBAN / Account Number", placeholder: "International bank account number", mask: true },
-            { key: "country", label: "Bank Country", placeholder: "e.g. United States, United Kingdom" },
         ],
     },
     {
@@ -71,16 +58,6 @@ const PAYOUT_TYPES = [
         desc: "Receive payments to your PayPal account",
         fields: [
             { key: "paypal_email", label: "PayPal Email", placeholder: "your-paypal@email.com" },
-        ],
-    },
-    {
-        value: "wise",
-        label: "Wise (TransferWise)",
-        icon: "🔄",
-        desc: "Low-fee international transfers",
-        fields: [
-            { key: "wise_email", label: "Wise Email", placeholder: "your@email.com" },
-            { key: "currency", label: "Preferred Currency", placeholder: "e.g. USD, EUR, GBP" },
         ],
     },
 ];
@@ -167,13 +144,8 @@ export default function PayoutMethodsPage() {
         if (selectedType === "paypal") {
             const email = formData.paypal_email || "";
             lastFour = email.includes("@") ? email.split("@")[0].slice(-4) : email.slice(-4);
-        } else if (selectedType === "wise") {
-            const email = formData.wise_email || "";
-            lastFour = email.includes("@") ? email.split("@")[0].slice(-4) : email.slice(-4);
         } else if (selectedType === "bank_transfer") {
             lastFour = (formData.account_number || "").slice(-4);
-        } else if (selectedType === "wire") {
-            lastFour = (formData.iban || "").slice(-4);
         }
 
         try {
