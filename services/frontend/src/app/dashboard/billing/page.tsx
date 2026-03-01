@@ -3,10 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import PayoutSetup from "@/components/billing/PayoutSetup";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
 
+const PAYOUT_ICONS: Record<string, string> = {
+    bank_transfer: "🏦",
+    wire_transfer: "🌐",
+    paypal: "🅿️",
+    card: "💳",
+};
 
 interface BillingSummary {
     escrow_balance: string;
@@ -28,6 +33,8 @@ interface PaymentMethod {
     last_four: string;
     expiry: string | null;
     is_default: boolean;
+    is_active?: boolean;
+    metadata?: Record<string, string> | null;
 }
 
 interface Transaction {
@@ -89,6 +96,10 @@ export default function BillingPage() {
         </div>
     );
 
+    /* Payout methods summary for freelancers */
+    const payoutMethods = methods.filter(m => m.type === "bank_transfer" || m.type === "wire_transfer" || m.type === "paypal");
+    const defaultPayout = payoutMethods.find(m => m.is_default) || payoutMethods[0];
+
     return (
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
@@ -98,8 +109,75 @@ export default function BillingPage() {
                 </div>
             </div>
 
-            {/* ── Payout Setup (freelancer only) ── */}
-            {!isClient && <PayoutSetup />}
+            {/* ── Payout Status (freelancer only) ── */}
+            {!isClient && (
+                <div style={{
+                    borderRadius: 14, border: "1px solid #e5e7eb", marginBottom: 24, overflow: "hidden",
+                    background: defaultPayout
+                        ? "linear-gradient(135deg, #ecfdf5, #d1fae5)"
+                        : "linear-gradient(135deg, #fff7ed, #ffedd5)",
+                    borderColor: defaultPayout ? "#6ee7b7" : "#fdba74",
+                }}>
+                    <div style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                        <div style={{
+                            width: 48, height: 48, borderRadius: 12,
+                            background: defaultPayout ? "#059669" : "#f97316",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 22, color: "#fff",
+                        }}>
+                            {defaultPayout ? "✅" : "💳"}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 200 }}>
+                            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: 0 }}>
+                                {defaultPayout ? "Payouts Active" : "Set Up Payouts"}
+                            </h3>
+                            {defaultPayout ? (
+                                <p style={{ fontSize: 13, color: "#6b7280", margin: "4px 0 0" }}>
+                                    Default: {PAYOUT_ICONS[defaultPayout.type] || "💳"}{" "}
+                                    {defaultPayout.type === "paypal" ? "PayPal" : defaultPayout.type === "bank_transfer" ? "Bank (ACH)" : "Wire Transfer"}
+                                    {defaultPayout.last_four ? ` •••• ${defaultPayout.last_four}` : ""}
+                                    {defaultPayout.provider ? ` · ${defaultPayout.provider}` : ""}
+                                </p>
+                            ) : (
+                                <p style={{ fontSize: 13, color: "#6b7280", margin: "4px 0 0" }}>
+                                    Add a bank account or PayPal to receive payouts for completed work.
+                                </p>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => router.push("/dashboard/settings/payout-methods")}
+                            style={{
+                                padding: "10px 20px", borderRadius: 10, border: "none",
+                                background: defaultPayout ? "#fff" : "linear-gradient(135deg, #f97316, #ea580c)",
+                                color: defaultPayout ? "#374151" : "#fff",
+                                fontWeight: 600, fontSize: 14, cursor: "pointer",
+                                boxShadow: defaultPayout ? "0 1px 3px rgba(0,0,0,0.1)" : "0 4px 16px rgba(249,115,22,0.3)",
+                                transition: "all 0.15s",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}
+                        >
+                            {defaultPayout ? "Manage Payout Methods →" : "Set Up Payouts →"}
+                        </button>
+                    </div>
+                    {defaultPayout && payoutMethods.length > 1 && (
+                        <div style={{
+                            padding: "10px 24px", borderTop: "1px solid rgba(0,0,0,0.06)",
+                            background: "rgba(255,255,255,0.5)", fontSize: 13, color: "#374151",
+                            display: "flex", gap: 16, flexWrap: "wrap",
+                        }}>
+                            {payoutMethods.map(m => (
+                                <span key={m.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                    {PAYOUT_ICONS[m.type] || "💳"}
+                                    {m.type === "paypal" ? "PayPal" : m.type === "bank_transfer" ? "Bank" : "Wire"}
+                                    {m.last_four ? ` ••${m.last_four}` : ""}
+                                    {m.is_default && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 999, background: "#dcfce7", color: "#16a34a", fontWeight: 600, marginLeft: 4 }}>Default</span>}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* ── Summary Cards ── */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16, marginBottom: 32 }}>

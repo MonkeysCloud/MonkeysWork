@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import PayoutSetup from "@/components/billing/PayoutSetup";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8086/api/v1";
 
@@ -17,30 +17,35 @@ interface Summary {
     pending_payouts: string;
 }
 
+interface PayoutMethod {
+    id: string; type: string; provider: string; last_four: string; is_default: boolean;
+}
+
 export default function PayoutsPage() {
     const { token } = useAuth();
+    const router = useRouter();
     const [payouts, setPayouts] = useState<Payout[]>([]);
     const [summary, setSummary] = useState<Summary | null>(null);
     const [loading, setLoading] = useState(true);
     const [requesting, setRequesting] = useState(false);
     const [amount, setAmount] = useState("");
-    const [connectStatus, setConnectStatus] = useState<string>("not_started");
+    const [payoutMethods, setPayoutMethods] = useState<PayoutMethod[]>([]);
 
     const load = useCallback(async () => {
         if (!token) return;
         setLoading(true);
         try {
-            const [pRes, sRes] = await Promise.all([
+            const [pRes, sRes, pmRes] = await Promise.all([
                 fetch(`${API}/payouts`, { headers: { Authorization: `Bearer ${token}` } }),
                 fetch(`${API}/billing/summary`, { headers: { Authorization: `Bearer ${token}` } }),
+                fetch(`${API}/payment-methods`, { headers: { Authorization: `Bearer ${token}` } }),
             ]);
             if (pRes.ok) setPayouts((await pRes.json()).data);
             if (sRes.ok) { const d = (await sRes.json()).data; setSummary({ net_earnings: d.net_earnings, pending_payouts: d.pending_payouts }); }
-            // Fetch connect status
-            try {
-                const cRes = await fetch(`${API}/connect/status`, { headers: { Authorization: `Bearer ${token}` } });
-                if (cRes.ok) { const cd = await cRes.json(); setConnectStatus(cd.data.status); }
-            } catch { }
+            if (pmRes.ok) {
+                const all: PayoutMethod[] = (await pmRes.json()).data || [];
+                setPayoutMethods(all.filter(m => m.type === "bank_transfer" || m.type === "wire_transfer" || m.type === "paypal"));
+            }
         } catch (e) { console.error(e); }
         setLoading(false);
     }, [token]);
@@ -71,13 +76,43 @@ export default function PayoutsPage() {
         rejected: { color: "#dc2626", bg: "#fef2f2" },
     };
 
+    const hasPayoutMethod = payoutMethods.length > 0;
+
     return (
         <div style={{ maxWidth: 800, margin: "0 auto" }}>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Payouts</h1>
             <p style={{ color: "#6b7280", marginBottom: 24 }}>Withdraw your earnings</p>
 
-            {/* Payout Setup / Connect Status */}
-            <PayoutSetup />
+            {/* Payout Method Status */}
+            {!hasPayoutMethod && !loading && (
+                <div style={{
+                    borderRadius: 14, border: "1px solid #fdba74", marginBottom: 24,
+                    background: "linear-gradient(135deg, #fff7ed, #ffedd5)", padding: "20px 24px",
+                    display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
+                }}>
+                    <div style={{
+                        width: 48, height: 48, borderRadius: 12, background: "#f97316",
+                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#fff",
+                    }}>💳</div>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: 0 }}>Set Up Payout Method</h3>
+                        <p style={{ fontSize: 13, color: "#6b7280", margin: "4px 0 0" }}>
+                            Add a bank account or PayPal to request payouts.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => router.push("/dashboard/settings/payout-methods")}
+                        style={{
+                            padding: "10px 20px", borderRadius: 10, border: "none",
+                            background: "linear-gradient(135deg, #f97316, #ea580c)",
+                            color: "#fff", fontWeight: 600, fontSize: 14, cursor: "pointer",
+                            boxShadow: "0 4px 16px rgba(249,115,22,0.3)",
+                        }}
+                    >
+                        Set Up Payouts →
+                    </button>
+                </div>
+            )}
 
             {/* Balance Cards */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 32 }}>
@@ -94,9 +129,9 @@ export default function PayoutsPage() {
             {/* Request Payout */}
             <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb", padding: 24, marginBottom: 24 }}>
                 <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, color: "#111827" }}>💸 Request Payout</h2>
-                {connectStatus !== "complete" && (
+                {!hasPayoutMethod && (
                     <p style={{ color: "#d97706", fontSize: 13, marginBottom: 12, padding: "8px 12px", background: "#fef3c7", borderRadius: 8 }}>
-                        ⚠️ Complete your payout setup above before requesting payouts.
+                        ⚠️ <button onClick={() => router.push("/dashboard/settings/payout-methods")} style={{ background: "none", border: "none", color: "#d97706", fontWeight: 600, cursor: "pointer", textDecoration: "underline", padding: 0 }}>Add a payout method</button> before requesting payouts.
                     </p>
                 )}
                 <div style={{ display: "flex", gap: 12 }}>
@@ -112,7 +147,7 @@ export default function PayoutsPage() {
                         />
                     </div>
                     <button
-                        onClick={requestPayout} disabled={requesting || !amount || connectStatus !== "complete"}
+                        onClick={requestPayout} disabled={requesting || !amount || !hasPayoutMethod}
                         style={{
                             padding: "12px 28px", borderRadius: 10, border: "none",
                             background: requesting ? "#d1d5db" : "linear-gradient(135deg, #f97316, #ea580c)",
