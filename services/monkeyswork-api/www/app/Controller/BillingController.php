@@ -394,6 +394,16 @@ final class BillingController
                 $pdo->prepare('UPDATE "weeklytimesheet" SET billed = true, updated_at = :now WHERE id = :id')
                     ->execute(['now' => $now, 'id' => $ts['timesheet_id']]);
 
+                // Send charge confirmation to client
+                $this->notifyChargeSuccess(
+                    $pdo,
+                    $ts['client_id'],
+                    $ts['contract_id'],
+                    $ts['contract_title'],
+                    $totalCharge,
+                    $now
+                );
+
                 $results[] = [
                     'timesheet' => $ts['timesheet_id'],
                     'charged' => $totalCharge,
@@ -445,7 +455,7 @@ final class BillingController
             // Find all freelancers with active/completed contracts who have payout set up
             // (either Stripe Connect or PayPal)
             $freelancers = $pdo->query(
-                'SELECT DISTINCT u.id, u.display_name, u.stripe_connect_account_id,
+                'SELECT DISTINCT u.id, u.email, u.display_name, u.stripe_connect_account_id,
                         u.stripe_connect_onboarded
                  FROM "user" u
                  JOIN "contract" c ON c.freelancer_id = u.id
@@ -637,6 +647,17 @@ final class BillingController
                                 'ref' => $gatewayRef,
                                 'now' => $now,
                             ]);
+
+                    // Send payout confirmation to freelancer
+                    $this->notifyPayoutSuccess(
+                        $pdo,
+                        $fl['id'],
+                        $fl['email'] ?? '',
+                        $fl['display_name'] ?? 'there',
+                        number_format($netAmount, 2, '.', ''),
+                        $payoutType,
+                        $now
+                    );
 
                     $results[] = [
                         'freelancer' => $fl['id'],
@@ -849,6 +870,161 @@ final class BillingController
             'warning',
             $now
         );
+    }
+
+    /* ─── Notify client about a successful charge ─── */
+
+    private function notifyChargeSuccess(
+        \PDO $pdo,
+        string $clientId,
+        string $contractId,
+        string $contractTitle,
+        string $amount,
+        string $now
+    ): void {
+        // 1. In-app notification
+        $notifId = $this->uuid();
+        try {
+            $pdo->prepare(
+                'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
+                 VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
+            )->execute([
+                        'id' => $notifId,
+                        'uid' => $clientId,
+                        'type' => 'billing.charge_success',
+                        'title' => '💰 Payment Processed',
+                        'body' => "A payment of \${$amount} for \"{$contractTitle}\" was processed successfully.",
+                        'data' => json_encode([
+                            'contract_id' => $contractId,
+                            'amount' => $amount,
+                            'link' => '/dashboard/billing',
+                        ]),
+                        'prio' => 'info',
+                        'chan' => 'in_app',
+                        'now' => $now,
+                    ]);
+        } catch (\Throwable $e) {
+            error_log('[BillingController] notifyChargeSuccess insert: ' . $e->getMessage());
+        }
+
+        // 2. Real-time push
+        $this->pushSocketNotification(
+            $clientId,
+            $notifId,
+            'billing.charge_success',
+            '💰 Payment Processed',
+            "\${$amount} charged for \"{$contractTitle}\"",
+            ['contract_id' => $contractId, 'link' => '/dashboard/billing'],
+            'info',
+            $now
+        );
+
+        // 3. Confirmation email
+        try {
+            $userStmt = $pdo->prepare('SELECT email, display_name FROM "user" WHERE id = :uid');
+            $userStmt->execute(['uid' => $clientId]);
+            $user = $userStmt->fetch(\PDO::FETCH_ASSOC);
+
+            if ($user && $user['email']) {
+                $frontendUrl = $_ENV['FRONTEND_URL'] ?? getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
+                $mail = new \App\Service\MonkeysMailService();
+                $mail->sendTemplate(
+                    $user['email'],
+                    'Payment Processed — MonkeysWorks',
+                    'payment-received',
+                    [
+                        'userName' => $user['display_name'] ?? 'there',
+                        'amount' => "\${$amount}",
+                        'currency' => 'USD',
+                        'contractTitle' => $contractTitle,
+                        'paymentType' => 'charged',
+                        'billingUrl' => "{$frontendUrl}/dashboard/billing",
+                    ],
+                    ['billing', 'charge-confirmation'],
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('[BillingController] notifyChargeSuccess email: ' . $e->getMessage());
+        }
+    }
+
+    /* ─── Notify freelancer about a successful payout ─── */
+
+    private function notifyPayoutSuccess(
+        \PDO $pdo,
+        string $freelancerId,
+        string $email,
+        string $displayName,
+        string $netAmount,
+        string $payoutMethod,
+        string $now
+    ): void {
+        $methodLabel = match ($payoutMethod) {
+            'paypal' => 'PayPal',
+            'wire_transfer' => 'Wire Transfer',
+            default => 'Bank Transfer',
+        };
+
+        // 1. In-app notification
+        $notifId = $this->uuid();
+        try {
+            $pdo->prepare(
+                'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
+                 VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
+            )->execute([
+                        'id' => $notifId,
+                        'uid' => $freelancerId,
+                        'type' => 'billing.payout_success',
+                        'title' => '🎉 Payout Sent!',
+                        'body' => "\${$netAmount} has been sent to your {$methodLabel} account.",
+                        'data' => json_encode([
+                            'amount' => $netAmount,
+                            'method' => $payoutMethod,
+                            'link' => '/dashboard/billing/payouts',
+                        ]),
+                        'prio' => 'info',
+                        'chan' => 'in_app',
+                        'now' => $now,
+                    ]);
+        } catch (\Throwable $e) {
+            error_log('[BillingController] notifyPayoutSuccess insert: ' . $e->getMessage());
+        }
+
+        // 2. Real-time push
+        $this->pushSocketNotification(
+            $freelancerId,
+            $notifId,
+            'billing.payout_success',
+            '🎉 Payout Sent!',
+            "\${$netAmount} via {$methodLabel}",
+            ['amount' => $netAmount, 'link' => '/dashboard/billing/payouts'],
+            'info',
+            $now
+        );
+
+        // 3. Confirmation email
+        if ($email) {
+            try {
+                $frontendUrl = $_ENV['FRONTEND_URL'] ?? getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
+                $mail = new \App\Service\MonkeysMailService();
+                $mail->sendTemplate(
+                    $email,
+                    'Payout Sent — MonkeysWorks',
+                    'payment-received',
+                    [
+                        'userName' => $displayName,
+                        'amount' => "\${$netAmount}",
+                        'currency' => 'USD',
+                        'contractTitle' => "Weekly payout via {$methodLabel}",
+                        'paymentType' => 'received',
+                        'billingUrl' => "{$frontendUrl}/dashboard/billing/payouts",
+                    ],
+                    ['billing', 'payout-confirmation'],
+                );
+            } catch (\Throwable $e) {
+                error_log('[BillingController] notifyPayoutSuccess email: ' . $e->getMessage());
+            }
+        }
     }
 
     /* ─── Push real-time notification via Redis/Socket.IO ─── */
