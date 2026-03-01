@@ -83,10 +83,35 @@ function MaskedValue({ value }: { value: string }) {
 }
 
 /* ── Main Page ──────────────────────────────────── */
+/* ── Tax ID types ───────────────────────────────── */
+const TAX_ID_TYPES = [
+    { value: "ssn", label: "SSN (Social Security Number)" },
+    { value: "itin", label: "ITIN (Individual Taxpayer ID)" },
+    { value: "ein", label: "EIN (Employer Identification)" },
+];
+
+interface TaxInfo {
+    tax_id_type: string;
+    tax_id_last4: string;
+    tax_id_full: string; // only used for input, never stored in DB
+    billing_country: string;
+    billing_state: string;
+    billing_city: string;
+    billing_address: string;
+    billing_zip: string;
+}
+
+const EMPTY_TAX: TaxInfo = {
+    tax_id_type: "", tax_id_last4: "", tax_id_full: "",
+    billing_country: "", billing_state: "", billing_city: "",
+    billing_address: "", billing_zip: "",
+};
+
 export default function PayoutMethodsPage() {
     const { token } = useAuth();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [savingTax, setSavingTax] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
     const [methods, setMethods] = useState<PayoutMethod[]>([]);
@@ -94,6 +119,8 @@ export default function PayoutMethodsPage() {
     const [selectedType, setSelectedType] = useState<string | null>(null);
     const [formData, setFormData] = useState<Record<string, string>>({});
     const [makeDefault, setMakeDefault] = useState(false);
+    const [taxInfo, setTaxInfo] = useState<TaxInfo>(EMPTY_TAX);
+    const [taxLoaded, setTaxLoaded] = useState(false);
 
     useEffect(() => {
         if (toast) {
@@ -107,12 +134,29 @@ export default function PayoutMethodsPage() {
         if (!token) return;
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/payment-methods`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
-                const { data } = await res.json();
+            const [pmRes, profRes] = await Promise.all([
+                fetch(`${API_BASE}/payment-methods`, { headers: { Authorization: `Bearer ${token}` } }),
+                fetch(`${API_BASE}/freelancers/me`, { headers: { Authorization: `Bearer ${token}` } }),
+            ]);
+            if (pmRes.ok) {
+                const { data } = await pmRes.json();
                 setMethods(data || []);
+            }
+            if (profRes.ok) {
+                const { data: prof } = await profRes.json();
+                if (prof) {
+                    setTaxInfo({
+                        tax_id_type: prof.tax_id_type || "",
+                        tax_id_last4: prof.tax_id_last4 || "",
+                        tax_id_full: "",
+                        billing_country: prof.billing_country || "",
+                        billing_state: prof.billing_state || "",
+                        billing_city: prof.billing_city || "",
+                        billing_address: prof.billing_address || "",
+                        billing_zip: prof.billing_zip || "",
+                    });
+                    setTaxLoaded(true);
+                }
             }
         } catch (err) {
             setToast({ message: (err as Error).message, type: "error" });
@@ -122,6 +166,40 @@ export default function PayoutMethodsPage() {
     }, [token]);
 
     useEffect(() => { loadData(); }, [loadData]);
+
+    /* ── Save Tax Info ───────────────────────────── */
+    const handleSaveTax = async () => {
+        if (!token) return;
+        setSavingTax(true);
+        try {
+            const payload: Record<string, string> = {
+                tax_id_type: taxInfo.tax_id_type,
+                billing_country: taxInfo.billing_country,
+                billing_state: taxInfo.billing_state,
+                billing_city: taxInfo.billing_city,
+                billing_address: taxInfo.billing_address,
+                billing_zip: taxInfo.billing_zip,
+            };
+            // Only send last4 if user entered a new full tax ID
+            if (taxInfo.tax_id_full.length >= 4) {
+                payload.tax_id_last4 = taxInfo.tax_id_full.slice(-4);
+            }
+            const res = await fetch(`${API_BASE}/freelancers/me`, {
+                method: "PUT",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error("Failed to save tax information");
+            setToast({ message: "Tax information saved!", type: "success" });
+            if (taxInfo.tax_id_full.length >= 4) {
+                setTaxInfo(prev => ({ ...prev, tax_id_last4: taxInfo.tax_id_full.slice(-4), tax_id_full: "" }));
+            }
+        } catch (err) {
+            setToast({ message: (err as Error).message, type: "error" });
+        } finally {
+            setSavingTax(false);
+        }
+    };
 
     /* ── Add ─────────────────────────────────────── */
     const handleAdd = async () => {
@@ -303,6 +381,106 @@ export default function PayoutMethodsPage() {
                     </button>
                 )}
             </div>
+
+            {/* ── Tax Information ── */}
+            <Section title="Tax & Billing Information" description="Required for payment verification. Your full tax ID is never stored — only the last 4 digits.">
+                {!taxLoaded ? (
+                    <div className="flex justify-center py-6">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-orange" />
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-medium text-brand-dark mb-1.5">Tax ID Type</label>
+                                <select
+                                    className={inputCls + " appearance-none"}
+                                    value={taxInfo.tax_id_type}
+                                    onChange={(e) => setTaxInfo(prev => ({ ...prev, tax_id_type: e.target.value }))}
+                                >
+                                    <option value="">Select type…</option>
+                                    {TAX_ID_TYPES.map(t => (
+                                        <option key={t.value} value={t.value}>{t.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-brand-dark mb-1.5">
+                                    {taxInfo.tax_id_type === "ein" ? "EIN" : taxInfo.tax_id_type === "itin" ? "ITIN" : "SSN"} Number
+                                    {taxInfo.tax_id_last4 && <span className="text-brand-muted font-normal"> (ends in ••{taxInfo.tax_id_last4})</span>}
+                                </label>
+                                <input
+                                    type="password"
+                                    className={inputCls}
+                                    placeholder={taxInfo.tax_id_last4 ? `••••••${taxInfo.tax_id_last4} (enter new to update)` : "Enter your tax ID"}
+                                    value={taxInfo.tax_id_full}
+                                    onChange={(e) => setTaxInfo(prev => ({ ...prev, tax_id_full: e.target.value }))}
+                                    autoComplete="off"
+                                />
+                            </div>
+                        </div>
+
+                        <p className="text-xs font-semibold text-brand-dark pt-2">Billing Address</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-medium text-brand-dark mb-1.5">Country</label>
+                                <input
+                                    className={inputCls}
+                                    placeholder="e.g. US"
+                                    value={taxInfo.billing_country}
+                                    onChange={(e) => setTaxInfo(prev => ({ ...prev, billing_country: e.target.value.toUpperCase().slice(0, 2) }))}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-brand-dark mb-1.5">State / Province</label>
+                                <input
+                                    className={inputCls}
+                                    placeholder="e.g. California"
+                                    value={taxInfo.billing_state}
+                                    onChange={(e) => setTaxInfo(prev => ({ ...prev, billing_state: e.target.value }))}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-brand-dark mb-1.5">City</label>
+                                <input
+                                    className={inputCls}
+                                    placeholder="e.g. San Francisco"
+                                    value={taxInfo.billing_city}
+                                    onChange={(e) => setTaxInfo(prev => ({ ...prev, billing_city: e.target.value }))}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-brand-dark mb-1.5">ZIP / Postal Code</label>
+                                <input
+                                    className={inputCls}
+                                    placeholder="e.g. 94102"
+                                    value={taxInfo.billing_zip}
+                                    onChange={(e) => setTaxInfo(prev => ({ ...prev, billing_zip: e.target.value }))}
+                                />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <label className="block text-xs font-medium text-brand-dark mb-1.5">Street Address</label>
+                                <input
+                                    className={inputCls}
+                                    placeholder="123 Main St, Apt 4"
+                                    value={taxInfo.billing_address}
+                                    onChange={(e) => setTaxInfo(prev => ({ ...prev, billing_address: e.target.value }))}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                            <button
+                                className={btnPrimary}
+                                onClick={handleSaveTax}
+                                disabled={savingTax || !taxInfo.tax_id_type}
+                            >
+                                {savingTax ? "Saving…" : "Save Tax Information"}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Section>
 
             {/* ── Existing Methods ── */}
             {methods.length > 0 && (

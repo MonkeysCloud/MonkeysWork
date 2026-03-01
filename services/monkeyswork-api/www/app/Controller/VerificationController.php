@@ -88,7 +88,9 @@ final class VerificationController
             // 1. Fetch freelancer profile
             $stmt = $pdo->prepare(
                 'SELECT portfolio_urls, certifications, experience_years, hourly_rate,
-                        education, headline, bio, website_url, github_url, linkedin_url
+                        education, headline, bio, website_url, github_url, linkedin_url,
+                        tax_id_type, tax_id_last4, billing_country, billing_state,
+                        billing_city, billing_address, billing_zip
                  FROM "freelancerprofile" WHERE user_id = :uid'
             );
             $stmt->execute(['uid' => $userId]);
@@ -98,6 +100,12 @@ final class VerificationController
                 return $this->error('No freelancer profile found', 404);
             }
 
+            // 1b. Fetch user data for Stripe Connect status
+            $userStmt = $pdo->prepare(
+                'SELECT stripe_connect_account_id FROM "user" WHERE id = :uid'
+            );
+            $userStmt->execute(['uid' => $userId]);
+            $user = $userStmt->fetch(\PDO::FETCH_ASSOC) ?: [];
             // 2. Fetch skills with names
             $skillStmt = $pdo->prepare(
                 'SELECT s.name, fs.proficiency, fs.years_experience
@@ -210,6 +218,17 @@ final class VerificationController
                     'reason' => $reasons['payment_method'] ?? '',
                     'payment_methods' => $paymentMethods,
                     'has_payment_method' => !empty($paymentMethods),
+                    'tax_id_type' => $profile['tax_id_type'] ?? null,
+                    'has_tax_id' => !empty($profile['tax_id_last4']),
+                    'tax_id_last4' => $profile['tax_id_last4'] ?? null,
+                    'billing_country' => $profile['billing_country'] ?? null,
+                    'billing_state' => $profile['billing_state'] ?? null,
+                    'billing_city' => $profile['billing_city'] ?? null,
+                    'billing_address' => $profile['billing_address'] ?? null,
+                    'billing_zip' => $profile['billing_zip'] ?? null,
+                    'has_billing_address' => !empty($profile['billing_country']) && !empty($profile['billing_city']),
+                    'stripe_connect_account_id' => $user['stripe_connect_account_id'] ?? null,
+                    'has_stripe_connect' => !empty($user['stripe_connect_account_id']),
                 ],
             ];
 

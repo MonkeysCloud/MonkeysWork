@@ -19,116 +19,117 @@ final class FreelancerController
     public function __construct(
         private ConnectionInterface $db,
         private ?PubSubPublisher $pubsub = null,
-    ) {}
+    ) {
+    }
 
     #[Route('GET', '', name: 'freelancers.index', summary: 'Search/list freelancers', tags: ['Freelancers'])]
-public function index(ServerRequestInterface $request): JsonResponse
-{
-    $query = $request->getQueryParams();
-    $p     = $this->pagination($request);
+    public function index(ServerRequestInterface $request): JsonResponse
+    {
+        $query = $request->getQueryParams();
+        $p = $this->pagination($request);
 
-    $where  = ['1=1'];
-    $params = [];
+        $where = ['1=1'];
+        $params = [];
 
-    /* ── Text search (name or email) ── */
-    if (!empty($query['search'])) {
-        $where[]           = '(u.display_name ILIKE :search OR u.email ILIKE :search)';
-        $params['search']  = '%' . $query['search'] . '%';
-    }
+        /* ── Text search (name or email) ── */
+        if (!empty($query['search'])) {
+            $where[] = '(u.display_name ILIKE :search OR u.email ILIKE :search)';
+            $params['search'] = '%' . $query['search'] . '%';
+        }
 
-    /* ── Country / Region filter (supports comma-separated codes) ── */
-    if (!empty($query['country'])) {
-        $countries = array_filter(array_map('trim', explode(',', $query['country'])));
-        if (count($countries) === 1) {
-            $where[]             = 'u.country = :country';
-            $params['country']   = $countries[0];
-        } else {
-            $cph = [];
-            foreach ($countries as $ci => $cc) {
-                $k = "country_{$ci}";
-                $cph[] = ":{$k}";
-                $params[$k] = $cc;
+        /* ── Country / Region filter (supports comma-separated codes) ── */
+        if (!empty($query['country'])) {
+            $countries = array_filter(array_map('trim', explode(',', $query['country'])));
+            if (count($countries) === 1) {
+                $where[] = 'u.country = :country';
+                $params['country'] = $countries[0];
+            } else {
+                $cph = [];
+                foreach ($countries as $ci => $cc) {
+                    $k = "country_{$ci}";
+                    $cph[] = ":{$k}";
+                    $params[$k] = $cc;
+                }
+                $where[] = 'u.country IN (' . implode(',', $cph) . ')';
             }
-            $where[] = 'u.country IN (' . implode(',', $cph) . ')';
         }
-    }
 
-    /* ── Single skill (backward compat) ── */
-    if (!empty($query['skill'])) {
-        $where[]          = 'EXISTS (SELECT 1 FROM "freelancer_skills" fs JOIN "skill" s ON s.id = fs.skill_id WHERE fs.freelancer_id = fp.user_id AND s.slug = :skill)';
-        $params['skill']  = $query['skill'];
-    }
-
-    /* ── Multi-skill: skills=react,node,figma (AND match) ── */
-    if (!empty($query['skills'])) {
-        $slugs = array_filter(array_map('trim', explode(',', $query['skills'])));
-        foreach ($slugs as $i => $slug) {
-            $key = "skill_{$i}";
-            $where[] = "EXISTS (SELECT 1 FROM \"freelancer_skills\" fs JOIN \"skill\" s ON s.id = fs.skill_id WHERE fs.freelancer_id = fp.user_id AND s.slug = :{$key})";
-            $params[$key] = $slug;
+        /* ── Single skill (backward compat) ── */
+        if (!empty($query['skill'])) {
+            $where[] = 'EXISTS (SELECT 1 FROM "freelancer_skills" fs JOIN "skill" s ON s.id = fs.skill_id WHERE fs.freelancer_id = fp.user_id AND s.slug = :skill)';
+            $params['skill'] = $query['skill'];
         }
-    }
 
-    if (!empty($query['min_rate'])) {
-        $where[]             = 'fp.hourly_rate >= :min_rate';
-        $params['min_rate']  = $query['min_rate'];
-    }
-    if (!empty($query['max_rate'])) {
-        $where[]             = 'fp.hourly_rate <= :max_rate';
-        $params['max_rate']  = $query['max_rate'];
-    }
-    if (!empty($query['availability'])) {
-        $where[]                 = 'fp.availability_status = :avail';
-        $params['avail']         = $query['availability'];
-    }
+        /* ── Multi-skill: skills=react,node,figma (AND match) ── */
+        if (!empty($query['skills'])) {
+            $slugs = array_filter(array_map('trim', explode(',', $query['skills'])));
+            foreach ($slugs as $i => $slug) {
+                $key = "skill_{$i}";
+                $where[] = "EXISTS (SELECT 1 FROM \"freelancer_skills\" fs JOIN \"skill\" s ON s.id = fs.skill_id WHERE fs.freelancer_id = fp.user_id AND s.slug = :{$key})";
+                $params[$key] = $slug;
+            }
+        }
 
-    $whereSql = implode(' AND ', $where);
-    $fromSql  = '"freelancerprofile" fp JOIN "user" u ON u.id = fp.user_id';
+        if (!empty($query['min_rate'])) {
+            $where[] = 'fp.hourly_rate >= :min_rate';
+            $params['min_rate'] = $query['min_rate'];
+        }
+        if (!empty($query['max_rate'])) {
+            $where[] = 'fp.hourly_rate <= :max_rate';
+            $params['max_rate'] = $query['max_rate'];
+        }
+        if (!empty($query['availability'])) {
+            $where[] = 'fp.availability_status = :avail';
+            $params['avail'] = $query['availability'];
+        }
 
-    $countStmt = $this->db->pdo()->prepare("SELECT COUNT(*) FROM {$fromSql} WHERE {$whereSql}");
-    $countStmt->execute($params);
-    $total = (int) $countStmt->fetchColumn();
+        $whereSql = implode(' AND ', $where);
+        $fromSql = '"freelancerprofile" fp JOIN "user" u ON u.id = fp.user_id';
 
-    /* ── Also fetch skills per freelancer ── */
-    $stmt = $this->db->pdo()->prepare(
-        "SELECT fp.*, u.display_name, u.avatar_url, u.email, u.country,
+        $countStmt = $this->db->pdo()->prepare("SELECT COUNT(*) FROM {$fromSql} WHERE {$whereSql}");
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        /* ── Also fetch skills per freelancer ── */
+        $stmt = $this->db->pdo()->prepare(
+            "SELECT fp.*, u.display_name, u.avatar_url, u.email, u.country,
                 fp.verification_level
          FROM {$fromSql}
          WHERE {$whereSql}
          ORDER BY fp.avg_rating DESC, fp.total_jobs_completed DESC
          LIMIT :limit OFFSET :offset"
-    );
-    foreach ($params as $k => $v) {
-        $stmt->bindValue($k, $v);
-    }
-    $stmt->bindValue('limit', $p['perPage'], \PDO::PARAM_INT);
-    $stmt->bindValue('offset', $p['offset'], \PDO::PARAM_INT);
-    $stmt->execute();
+        );
+        foreach ($params as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
+        $stmt->bindValue('limit', $p['perPage'], \PDO::PARAM_INT);
+        $stmt->bindValue('offset', $p['offset'], \PDO::PARAM_INT);
+        $stmt->execute();
 
-    $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
-    /* Attach skills list to each freelancer */
-    if ($rows) {
-        $ids = array_column($rows, 'user_id');
-        $ph  = implode(',', array_fill(0, count($ids), '?'));
-        $skillStmt = $this->db->pdo()->prepare(
-            "SELECT fs.freelancer_id, s.name, s.slug
+        /* Attach skills list to each freelancer */
+        if ($rows) {
+            $ids = array_column($rows, 'user_id');
+            $ph = implode(',', array_fill(0, count($ids), '?'));
+            $skillStmt = $this->db->pdo()->prepare(
+                "SELECT fs.freelancer_id, s.name, s.slug
              FROM \"freelancer_skills\" fs
              JOIN \"skill\" s ON s.id = fs.skill_id
              WHERE fs.freelancer_id IN ({$ph})"
-        );
-        $skillStmt->execute($ids);
-        $skillMap = [];
-        foreach ($skillStmt->fetchAll(\PDO::FETCH_ASSOC) as $sk) {
-            $skillMap[$sk['freelancer_id']][] = ['name' => $sk['name'], 'slug' => $sk['slug']];
+            );
+            $skillStmt->execute($ids);
+            $skillMap = [];
+            foreach ($skillStmt->fetchAll(\PDO::FETCH_ASSOC) as $sk) {
+                $skillMap[$sk['freelancer_id']][] = ['name' => $sk['name'], 'slug' => $sk['slug']];
+            }
+            foreach ($rows as &$row) {
+                $row['skills'] = $skillMap[$row['user_id']] ?? [];
+            }
         }
-        foreach ($rows as &$row) {
-            $row['skills'] = $skillMap[$row['user_id']] ?? [];
-        }
-    }
 
-    return $this->paginated($rows, $total, $p['page'], $p['perPage']);
-}
+        return $this->paginated($rows, $total, $p['page'], $p['perPage']);
+    }
     /* ------------------------------------------------------------------ */
     /*  GET /me – Current user's freelancer profile (never 404s)          */
     /* ------------------------------------------------------------------ */
@@ -163,21 +164,21 @@ public function index(ServerRequestInterface $request): JsonResponse
                 $u = $uStmt->fetch(\PDO::FETCH_ASSOC) ?: [];
 
                 $profile = array_merge($u, [
-                    'user_id'               => $userId,
-                    'headline'              => null,
-                    'bio'                   => null,
-                    'hourly_rate'           => null,
-                    'currency'              => 'USD',
-                    'experience_years'      => null,
-                    'availability_status'   => 'available',
+                    'user_id' => $userId,
+                    'headline' => null,
+                    'bio' => null,
+                    'hourly_rate' => null,
+                    'currency' => 'USD',
+                    'experience_years' => null,
+                    'availability_status' => 'available',
                     'availability_hours_week' => 40,
-                    'website_url'           => null,
-                    'github_url'            => null,
-                    'linkedin_url'          => null,
-                    'profile_completeness'  => 0,
-                    'skills'                => [],
-                    'verifications'         => [],
-                    'verification_badges'   => [],
+                    'website_url' => null,
+                    'github_url' => null,
+                    'linkedin_url' => null,
+                    'profile_completeness' => 0,
+                    'skills' => [],
+                    'verifications' => [],
+                    'verification_badges' => [],
                 ]);
 
                 error_log('[FreelancerController::me] returning defaults');
@@ -340,91 +341,110 @@ public function index(ServerRequestInterface $request): JsonResponse
     public function update(ServerRequestInterface $request): JsonResponse
     {
         try {
-        error_log('[FreelancerController::update] START');
-        $userId = $this->userId($request);
-        $data   = $this->body($request);
-        error_log('[FreelancerController::update] userId=' . $userId . ' data_keys=' . implode(',', array_keys($data)));
-        $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+            error_log('[FreelancerController::update] START');
+            $userId = $this->userId($request);
+            $data = $this->body($request);
+            error_log('[FreelancerController::update] userId=' . $userId . ' data_keys=' . implode(',', array_keys($data)));
+            $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-        // --- Update user-level fields ---
-        $userFields = ['first_name', 'last_name', 'phone', 'country', 'state', 'display_name', 'avatar_url', 'languages'];
-        $userSets   = [];
-        $userParams = ['id' => $userId];
+            // --- Update user-level fields ---
+            $userFields = ['first_name', 'last_name', 'phone', 'country', 'state', 'display_name', 'avatar_url', 'languages'];
+            $userSets = [];
+            $userParams = ['id' => $userId];
 
-        foreach ($userFields as $field) {
-            if (array_key_exists($field, $data)) {
-                $userSets[]         = "\"{$field}\" = :{$field}";
-                $userParams[$field] = $field === 'languages' ? json_encode($data[$field]) : $data[$field];
+            foreach ($userFields as $field) {
+                if (array_key_exists($field, $data)) {
+                    $userSets[] = "\"{$field}\" = :{$field}";
+                    $userParams[$field] = $field === 'languages' ? json_encode($data[$field]) : $data[$field];
+                }
             }
-        }
 
-        if (!empty($userSets)) {
-            $userSets[]        = '"updated_at" = :now';
-            $userParams['now'] = $now;
-            $sql = 'UPDATE "user" SET ' . implode(', ', $userSets) . ' WHERE id = :id';
-            $this->db->pdo()->prepare($sql)->execute($userParams);
-        }
+            if (!empty($userSets)) {
+                $userSets[] = '"updated_at" = :now';
+                $userParams['now'] = $now;
+                $sql = 'UPDATE "user" SET ' . implode(', ', $userSets) . ' WHERE id = :id';
+                $this->db->pdo()->prepare($sql)->execute($userParams);
+            }
 
-        // --- Ensure freelancer profile row exists (handles first-time or failed wizard) ---
-        $this->db->pdo()->prepare(
-            'INSERT INTO "freelancerprofile" (user_id, created_at, updated_at)
+            // --- Ensure freelancer profile row exists (handles first-time or failed wizard) ---
+            $this->db->pdo()->prepare(
+                'INSERT INTO "freelancerprofile" (user_id, created_at, updated_at)
              VALUES (:id, :now, :now)
              ON CONFLICT (user_id) DO NOTHING'
-        )->execute(['id' => $userId, 'now' => $now]);
+            )->execute(['id' => $userId, 'now' => $now]);
 
-        // --- Update profile fields ---
-        $profileFields = ['headline', 'bio', 'hourly_rate', 'currency', 'experience_years',
-                          'education', 'certifications', 'portfolio_urls', 'website_url',
-                          'github_url', 'linkedin_url', 'availability_status',
-                          'availability_hours_week', 'profile_visibility'];
-        $sets   = [];
-        $params = ['id' => $userId];
+            // --- Update profile fields ---
+            $profileFields = [
+                'headline',
+                'bio',
+                'hourly_rate',
+                'currency',
+                'experience_years',
+                'education',
+                'certifications',
+                'portfolio_urls',
+                'website_url',
+                'github_url',
+                'linkedin_url',
+                'availability_status',
+                'availability_hours_week',
+                'profile_visibility',
+                'tax_id_type',
+                'tax_id_last4',
+                'billing_country',
+                'billing_state',
+                'billing_city',
+                'billing_address',
+                'billing_zip'
+            ];
+            $sets = [];
+            $params = ['id' => $userId];
 
-        foreach ($profileFields as $field) {
-            if (array_key_exists($field, $data)) {
-                $v = in_array($field, ['education', 'certifications', 'portfolio_urls'])
-                    ? json_encode($data[$field]) : $data[$field];
-                $sets[]         = "\"{$field}\" = :{$field}";
-                $params[$field] = $v;
+            foreach ($profileFields as $field) {
+                if (array_key_exists($field, $data)) {
+                    $v = in_array($field, ['education', 'certifications', 'portfolio_urls'])
+                        ? json_encode($data[$field]) : $data[$field];
+                    $sets[] = "\"{$field}\" = :{$field}";
+                    $params[$field] = $v;
+                }
             }
-        }
 
-        if (!empty($sets)) {
-            $sets[]        = '"updated_at" = :now';
-            $params['now'] = $now;
-            $sql = 'UPDATE "freelancerprofile" SET ' . implode(', ', $sets) . ' WHERE user_id = :id';
-            $this->db->pdo()->prepare($sql)->execute($params);
-        }
-
-        // --- Mark profile as completed ---
-        $this->db->pdo()->prepare(
-            'UPDATE "user" SET profile_completed = TRUE, updated_at = :now WHERE id = :id'
-        )->execute(['now' => $now, 'id' => $userId]);
-
-        // --- Compute profile completeness + publish event ---
-        $completeness = $this->computeProfileCompleteness($userId);
-
-        // Store computed score
-        $this->db->pdo()->prepare(
-            'UPDATE "freelancerprofile" SET profile_completeness = :score, updated_at = :now WHERE user_id = :id'
-        )->execute(['score' => $completeness, 'now' => $now, 'id' => $userId]);
-
-        // Publish profile-ready event when completeness >= 60%
-        if ($completeness >= 60) {
-            $pubsub = $this->pubsub ?? new PubSubPublisher();
-            try {
-                $pubsub->profileReady($userId);
-            } catch (\Throwable) {
-                // Non-critical: don't fail update if Pub/Sub is down
+            if (!empty($sets)) {
+                $sets[] = '"updated_at" = :now';
+                $params['now'] = $now;
+                $sql = 'UPDATE "freelancerprofile" SET ' . implode(', ', $sets) . ' WHERE user_id = :id';
+                $this->db->pdo()->prepare($sql)->execute($params);
             }
-        }
 
-        error_log('[FreelancerController::update] SUCCESS completeness=' . $completeness);
-        return $this->json([
-            'message'              => 'Profile updated',
-            'profile_completed'    => true,
-            'profile_completeness' => $completeness,
-        ]);
+            // --- Mark profile as completed ---
+            $this->db->pdo()->prepare(
+                'UPDATE "user" SET profile_completed = TRUE, updated_at = :now WHERE id = :id'
+            )->execute(['now' => $now, 'id' => $userId]);
+
+            // --- Compute profile completeness + publish event ---
+            $completeness = $this->computeProfileCompleteness($userId);
+
+            // Store computed score
+            $this->db->pdo()->prepare(
+                'UPDATE "freelancerprofile" SET profile_completeness = :score, updated_at = :now WHERE user_id = :id'
+            )->execute(['score' => $completeness, 'now' => $now, 'id' => $userId]);
+
+            // Publish profile-ready event when completeness >= 60%
+            if ($completeness >= 60) {
+                $pubsub = $this->pubsub ?? new PubSubPublisher();
+                try {
+                    $pubsub->profileReady($userId);
+                } catch (\Throwable) {
+                    // Non-critical: don't fail update if Pub/Sub is down
+                }
+            }
+
+            error_log('[FreelancerController::update] SUCCESS completeness=' . $completeness);
+            return $this->json([
+                'message' => 'Profile updated',
+                'profile_completed' => true,
+                'profile_completeness' => $completeness,
+            ]);
         } catch (\Throwable $e) {
             error_log('[FreelancerController::update] ERROR: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             error_log('[FreelancerController::update] TRACE: ' . $e->getTraceAsString());
@@ -437,7 +457,7 @@ public function index(ServerRequestInterface $request): JsonResponse
     public function updateSkills(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
         $skills = $data['skills'] ?? [];
 
         $pdo = $this->db->pdo();
@@ -454,10 +474,10 @@ public function index(ServerRequestInterface $request): JsonResponse
 
             foreach ($skills as $s) {
                 $insert->execute([
-                    'fid'   => $userId,
-                    'sid'   => $s['skill_id'],
+                    'fid' => $userId,
+                    'sid' => $s['skill_id'],
                     'years' => $s['years_experience'] ?? 0,
-                    'prof'  => $s['proficiency'] ?? 'intermediate',
+                    'prof' => $s['proficiency'] ?? 'intermediate',
                 ]);
             }
 
@@ -496,7 +516,7 @@ public function index(ServerRequestInterface $request): JsonResponse
     public function reviews(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $p      = $this->pagination($request);
+        $p = $this->pagination($request);
 
         $countStmt = $this->db->pdo()->prepare(
             'SELECT COUNT(*) FROM "review" WHERE reviewee_id = :uid AND is_public = true'
@@ -558,20 +578,21 @@ public function index(ServerRequestInterface $request): JsonResponse
         $stmt->execute(['id' => $userId]);
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-        if (!$row) return 0;
+        if (!$row)
+            return 0;
 
         $score = 0;
         $checks = [
-            ['field' => 'display_name',        'weight' => 10],
-            ['field' => 'first_name',           'weight' => 5],
-            ['field' => 'last_name',            'weight' => 5],
-            ['field' => 'avatar_url',           'weight' => 10],
-            ['field' => 'country',              'weight' => 5],
-            ['field' => 'headline',             'weight' => 15],
-            ['field' => 'bio',                  'weight' => 15],
-            ['field' => 'hourly_rate',          'weight' => 10],
-            ['field' => 'experience_years',     'weight' => 5],
-            ['field' => 'availability_status',  'weight' => 5],
+            ['field' => 'display_name', 'weight' => 10],
+            ['field' => 'first_name', 'weight' => 5],
+            ['field' => 'last_name', 'weight' => 5],
+            ['field' => 'avatar_url', 'weight' => 10],
+            ['field' => 'country', 'weight' => 5],
+            ['field' => 'headline', 'weight' => 15],
+            ['field' => 'bio', 'weight' => 15],
+            ['field' => 'hourly_rate', 'weight' => 10],
+            ['field' => 'experience_years', 'weight' => 5],
+            ['field' => 'availability_status', 'weight' => 5],
         ];
 
         foreach ($checks as $c) {
@@ -583,13 +604,15 @@ public function index(ServerRequestInterface $request): JsonResponse
 
         // Portfolio bonus (up to 10)
         $portfolio = json_decode($row['portfolio_urls'] ?: '[]', true);
-        if (!empty($portfolio)) $score += 10;
+        if (!empty($portfolio))
+            $score += 10;
 
         // Skills bonus (up to 5)
         $skillStmt = $pdo->prepare('SELECT COUNT(*) FROM "freelancer_skills" WHERE freelancer_id = :id');
         $skillStmt->execute(['id' => $userId]);
         $skillCount = (int) $skillStmt->fetchColumn();
-        if ($skillCount >= 3) $score += 5;
+        if ($skillCount >= 3)
+            $score += 5;
 
         return min(100, $score);
     }
@@ -602,9 +625,9 @@ public function index(ServerRequestInterface $request): JsonResponse
      */
     private function buildVerificationBadges(array $verificationRows): array
     {
-        $allTypes  = ['identity', 'skill_assessment', 'portfolio', 'work_history', 'payment_method'];
-        $approved  = ['approved', 'auto_approved'];
-        $badges    = [];
+        $allTypes = ['identity', 'skill_assessment', 'portfolio', 'work_history', 'payment_method'];
+        $approved = ['approved', 'auto_approved'];
+        $badges = [];
         $approvedCount = 0;
 
         // Build badge map from actual verification rows
@@ -617,22 +640,23 @@ public function index(ServerRequestInterface $request): JsonResponse
             if (isset($typeMap[$type])) {
                 $row = $typeMap[$type];
                 $isApproved = in_array($row['status'], $approved);
-                if ($isApproved) $approvedCount++;
+                if ($isApproved)
+                    $approvedCount++;
 
                 $badges[] = [
-                    'type'       => $type,
-                    'label'      => $this->verificationLabel($type),
-                    'status'     => $row['status'],
-                    'verified'   => $isApproved,
+                    'type' => $type,
+                    'label' => $this->verificationLabel($type),
+                    'status' => $row['status'],
+                    'verified' => $isApproved,
                     'confidence' => $row['confidence_score'] ? (float) $row['confidence_score'] : null,
                     'verified_at' => $isApproved ? $row['updated_at'] : null,
                 ];
             } else {
                 $badges[] = [
-                    'type'       => $type,
-                    'label'      => $this->verificationLabel($type),
-                    'status'     => 'not_submitted',
-                    'verified'   => false,
+                    'type' => $type,
+                    'label' => $this->verificationLabel($type),
+                    'status' => 'not_submitted',
+                    'verified' => false,
                     'confidence' => null,
                     'verified_at' => null,
                 ];
@@ -644,26 +668,26 @@ public function index(ServerRequestInterface $request): JsonResponse
             $approvedCount >= 4 => 'premium',
             $approvedCount >= 2 => 'verified',
             $approvedCount >= 1 => 'basic',
-            default             => 'none',
+            default => 'none',
         };
 
         return [
-            'level'          => $level,
-            'badges'         => $badges,
+            'level' => $level,
+            'badges' => $badges,
             'total_approved' => $approvedCount,
-            'total_types'    => count($allTypes),
+            'total_types' => count($allTypes),
         ];
     }
 
     private function verificationLabel(string $type): string
     {
         return match ($type) {
-            'identity'         => 'Identity Verified',
+            'identity' => 'Identity Verified',
             'skill_assessment' => 'Skills Verified',
-            'portfolio'        => 'Portfolio Verified',
-            'work_history'     => 'Work History Verified',
-            'payment_method'   => 'Payment Verified',
-            default            => ucfirst(str_replace('_', ' ', $type)),
+            'portfolio' => 'Portfolio Verified',
+            'work_history' => 'Work History Verified',
+            'payment_method' => 'Payment Verified',
+            default => ucfirst(str_replace('_', ' ', $type)),
         };
     }
 }
