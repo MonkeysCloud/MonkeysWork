@@ -727,7 +727,7 @@ export default function JobManagePage() {
                             return (
                                 /* ── Submit proposal CTA ── */
                                 <div>
-                                    <div className="flex items-center justify-between gap-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                                         <div>
                                             <h2 className="text-lg font-bold text-brand-dark mb-1">Interested in this job?</h2>
                                             <p className="text-sm text-brand-muted">Submit a proposal to let the client know you&apos;re the right fit.</p>

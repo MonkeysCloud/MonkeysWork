@@ -108,9 +108,10 @@ type Stats = FreelancerStats | ClientStats;
 /* ── Period Selector ─────────────────────────── */
 function PeriodSelector({ value, onChange }: { value: PeriodKey; onChange: (p: PeriodKey) => void }) {
     return (
-        <div style={{
+        <div className="stats-period" style={{
             display: "inline-flex", gap: 4, padding: 4, borderRadius: 12,
             background: "var(--bg-secondary)", border: "1px solid var(--border)",
+            overflowX: "auto", maxWidth: "100%",
         }}>
             {PERIODS.map(p => (
                 <button
@@ -119,7 +120,7 @@ function PeriodSelector({ value, onChange }: { value: PeriodKey; onChange: (p: P
                     style={{
                         padding: "6px 14px", borderRadius: 8, border: "none",
                         fontSize: 13, fontWeight: 500, cursor: "pointer",
-                        transition: "all 0.2s",
+                        transition: "all 0.2s", whiteSpace: "nowrap",
                         background: value === p.key ? "var(--accent)" : "transparent",
                         color: value === p.key ? "#fff" : "var(--text-secondary)",
                     }}
@@ -306,7 +307,7 @@ function FreelancerDashboard({ data }: { data: FreelancerStats }) {
             </div>
 
             {/* ── Main Grid ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+            <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
 
                 {/* Earnings Chart */}
                 <Section title={`Earnings (${periodLabel})`} icon="📊">
@@ -369,7 +370,7 @@ function FreelancerDashboard({ data }: { data: FreelancerStats }) {
             </div>
 
             {/* ── Extra Info Row ── */}
-            <div style={{
+            <div className="stats-grid-3" style={{
                 display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16,
             }}>
                 <div style={{ background: "var(--card-bg)", borderRadius: 12, padding: 16, border: "1px solid var(--border)", textAlign: "center" }}>
@@ -416,7 +417,7 @@ function ClientDashboard({ data }: { data: ClientStats }) {
             </div>
 
             {/* ── Main Grid ── */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+            <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
 
                 {/* Spending Chart */}
                 <Section title={`Spending (${periodLabel})`} icon="📊">
@@ -531,6 +532,21 @@ export default function StatsPage() {
 
     return (
         <div style={{ ...cssVars as any, maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
+            {/* Mobile responsive styles */}
+            <style>{`
+                @media (max-width: 639px) {
+                    .stats-period {
+                        max-width: calc(100vw - 48px) !important;
+                        -webkit-overflow-scrolling: touch;
+                    }
+                    .stats-grid {
+                        grid-template-columns: 1fr !important;
+                    }
+                    .stats-grid-3 {
+                        grid-template-columns: 1fr !important;
+                    }
+                }
+            `}</style>
             {/* Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
                 <div>

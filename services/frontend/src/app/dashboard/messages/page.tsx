@@ -498,7 +498,33 @@ export default function MessagesPage() {
     /* ── Render ──────────────────────────────────────── */
     return (
         <>
+            {/* Mobile responsive styles */}
+            <style>{`
+                @media (max-width: 639px) {
+                    .msg-layout { flex-direction: column !important; }
+                    .msg-left-panel {
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        border-right: none !important;
+                    }
+                    .msg-right-panel {
+                        position: fixed !important;
+                        inset: 0 !important;
+                        z-index: 40 !important;
+                        width: 100% !important;
+                    }
+                    .msg-filter-tabs {
+                        overflow-x: auto !important;
+                        -webkit-overflow-scrolling: touch;
+                    }
+                    .msg-filter-tabs button {
+                        white-space: nowrap !important;
+                        min-width: max-content !important;
+                    }
+                }
+            `}</style>
             <div
+                className="msg-layout sm:!-m-6 lg:!-m-8"
                 style={{
                     display: "flex",
                     height: "calc(100vh - 64px)",
@@ -506,10 +532,10 @@ export default function MessagesPage() {
                     background: "#f8fafc",
                     margin: "-1rem",
                 }}
-                className="sm:!-m-6 lg:!-m-8"
             >
                 {/* ── Left panel: Message list ────────── */}
                 <div
+                    className="msg-left-panel"
                     style={{
                         width: selected ? 380 : "100%",
                         maxWidth: selected ? 380 : 820,
@@ -533,6 +559,7 @@ export default function MessagesPage() {
 
                     {/* Filter tabs */}
                     <div
+                        className="msg-filter-tabs"
                         style={{
                             display: "flex",
                             gap: "0.25rem",
@@ -1059,6 +1086,7 @@ export default function MessagesPage() {
                 {/* ── Right panel: Message detail ─────── */}
                 {selected ? (
                     <div
+                        className="msg-right-panel"
                         style={{
                             flex: 1,
                             display: "flex",
@@ -1581,6 +1609,7 @@ export default function MessagesPage() {
                 ) : selectedConvoId && convoDetail ? (
                     /* ── Right panel: Conversation detail ──── */
                     <div
+                        className="msg-right-panel"
                         style={{
                             flex: 1,
                             display: "flex",
