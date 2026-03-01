@@ -48,6 +48,8 @@ interface EnrichedVerification extends Verification {
         [k: string]: unknown;
     };
     skills?: Array<{ name: string; proficiency?: string; years_experience?: number }>;
+    attachments?: Array<{ id: string; file_name: string; file_url: string; mime_type: string; file_size?: number; created_at?: string }>;
+    payment_methods?: Array<{ type: string; provider: string; last_four: string; is_default: boolean; expiry?: string; verified?: boolean; created_at?: string }>;
 }
 
 const PER_PAGE = 20;
@@ -594,6 +596,70 @@ export default function AdminVerificationsPage() {
                                             <span>💰 ${detail.profile.total_earnings}</span>
                                         </div>
                                     )}
+                                </div>
+                            )}
+
+                            {/* ID Document Images */}
+                            {detail.attachments && detail.attachments.length > 0 && (
+                                <div>
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Identity Documents</p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {detail.attachments.map((att, i) => (
+                                            <a
+                                                key={att.id || i}
+                                                href={att.file_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="group block rounded-xl overflow-hidden border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all"
+                                            >
+                                                {att.mime_type?.startsWith('image/') ? (
+                                                    <img
+                                                        src={att.file_url}
+                                                        alt={att.file_name}
+                                                        className="w-full h-40 object-cover group-hover:scale-105 transition-transform"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-40 bg-gray-100 flex items-center justify-center">
+                                                        <span className="text-3xl">📄</span>
+                                                    </div>
+                                                )}
+                                                <div className="px-3 py-2 bg-white">
+                                                    <p className="text-xs font-medium text-gray-700 truncate">{att.file_name}</p>
+                                                    {att.file_size && (
+                                                        <p className="text-[10px] text-gray-400">{(Number(att.file_size) / 1024).toFixed(0)} KB</p>
+                                                    )}
+                                                </div>
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Payment Methods */}
+                            {detail.payment_methods && detail.payment_methods.length > 0 && (
+                                <div>
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Payment Methods</p>
+                                    <div className="space-y-2">
+                                        {detail.payment_methods.map((pm, i) => (
+                                            <div key={i} className="bg-gray-50 rounded-xl p-4 flex items-center gap-3">
+                                                <span className="text-2xl">{pm.type === 'card' ? '💳' : '🏦'}</span>
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-medium text-gray-800">
+                                                        {pm.provider ? pm.provider.charAt(0).toUpperCase() + pm.provider.slice(1) : pm.type} •••• {pm.last_four}
+                                                    </p>
+                                                    <div className="flex gap-2 text-xs text-gray-500">
+                                                        {pm.expiry && <span>Expires {pm.expiry}</span>}
+                                                        {pm.is_default && <span className="text-blue-600 font-medium">Default</span>}
+                                                        {pm.verified ? (
+                                                            <span className="text-emerald-600">✅ Verified</span>
+                                                        ) : (
+                                                            <span className="text-amber-600">⏳ Not verified</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
 

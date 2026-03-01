@@ -159,12 +159,32 @@ final class VerificationController
                 }
             }
 
+            // 5b. Fetch ID document attachments (uploaded during profile completion)
+            $docStmt = $pdo->prepare(
+                'SELECT file_name, file_url, mime_type FROM "attachment"
+                 WHERE entity_type = \'verification\' AND uploaded_by_id = :uid
+                 ORDER BY created_at DESC'
+            );
+            $docStmt->execute(['uid' => $userId]);
+            $idDocuments = $docStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+            // 5c. Fetch payment methods
+            $pmStmt = $pdo->prepare(
+                'SELECT type, provider, last_four, is_default, expiry, verified
+                 FROM "paymentmethod" WHERE user_id = :uid AND is_active = true
+                 ORDER BY is_default DESC, created_at DESC'
+            );
+            $pmStmt->execute(['uid' => $userId]);
+            $paymentMethods = $pmStmt->fetchAll(\PDO::FETCH_ASSOC);
+
             // 6. Build type-specific data payloads with actual user content
             $typeData = [
                 'identity' => [
                     'reason' => $reasons['identity'] ?? '',
                     'headline' => $profile['headline'] ?? null,
                     'bio' => $profile['bio'] ?? null,
+                    'document_urls' => array_map(fn($d) => $d['file_url'], $idDocuments),
+                    'documents' => $idDocuments,
                 ],
                 'skill_assessment' => [
                     'reason' => $reasons['skill_assessment'] ?? '',
@@ -188,6 +208,8 @@ final class VerificationController
                 ],
                 'payment_method' => [
                     'reason' => $reasons['payment_method'] ?? '',
+                    'payment_methods' => $paymentMethods,
+                    'has_payment_method' => !empty($paymentMethods),
                 ],
             ];
 

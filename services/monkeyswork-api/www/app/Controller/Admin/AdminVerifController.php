@@ -18,7 +18,9 @@ final class AdminVerifController
 {
     use ApiController;
 
-    public function __construct(private ConnectionInterface $db) {}
+    public function __construct(private ConnectionInterface $db)
+    {
+    }
 
     /* ------------------------------------------------------------------ */
     /*  GET /queue — items needing review                                  */
@@ -26,16 +28,16 @@ final class AdminVerifController
     #[Route('GET', '/queue', name: 'admin.verif.queue', summary: 'Review queue', tags: ['Admin'])]
     public function queue(ServerRequestInterface $request): JsonResponse
     {
-        $p      = $this->pagination($request);
+        $p = $this->pagination($request);
         $params = $request->getQueryParams();
-        $pdo    = $this->db->pdo();
+        $pdo = $this->db->pdo();
 
-        $where  = [];
-        $binds  = [];
+        $where = [];
+        $binds = [];
 
         // Status filter — default to queue statuses
         $filterStatus = $params['status'] ?? null;
-        if ($filterStatus && in_array($filterStatus, ['pending','in_review','human_review','info_requested','approved','rejected'], true)) {
+        if ($filterStatus && in_array($filterStatus, ['pending', 'in_review', 'human_review', 'info_requested', 'approved', 'rejected'], true)) {
             $where[] = 'v.status = :status';
             $binds['status'] = $filterStatus;
         } else {
@@ -135,6 +137,27 @@ final class AdminVerifController
             }
         }
 
+        // Fetch verification-related attachments (e.g. government ID photos)
+        $attStmt = $pdo->prepare(
+            'SELECT id, file_name, file_url, mime_type, file_size, created_at
+             FROM "attachment"
+             WHERE entity_type = \'verification\' AND uploaded_by_id = :uid
+             ORDER BY created_at DESC'
+        );
+        $attStmt->execute(['uid' => $row['user_id']]);
+        $row['attachments'] = $attStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        // Fetch payment methods (for payment_method verifications)
+        if ($row['type'] === 'payment_method') {
+            $pmStmt = $pdo->prepare(
+                'SELECT type, provider, last_four, is_default, expiry, verified, created_at
+                 FROM "paymentmethod" WHERE user_id = :uid AND is_active = true
+                 ORDER BY is_default DESC, created_at DESC'
+            );
+            $pmStmt->execute(['uid' => $row['user_id']]);
+            $row['payment_methods'] = $pmStmt->fetchAll(\PDO::FETCH_ASSOC);
+        }
+
         return $this->json($row);
     }
 
@@ -145,9 +168,9 @@ final class AdminVerifController
     public function approve(ServerRequestInterface $request, string $id): JsonResponse
     {
         $adminId = $this->userId($request);
-        $data    = $this->body($request);
-        $now     = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $pdo     = $this->db->pdo();
+        $data = $this->body($request);
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $pdo = $this->db->pdo();
 
         $stmt = $pdo->prepare(
             'UPDATE "verification" SET status = \'approved\', reviewed_by_id = :uid,
@@ -155,10 +178,10 @@ final class AdminVerifController
              WHERE id = :id RETURNING user_id, type'
         );
         $stmt->execute([
-            'uid'   => $adminId,
+            'uid' => $adminId,
             'notes' => $data['notes'] ?? null,
-            'now'   => $now,
-            'id'    => $id,
+            'now' => $now,
+            'id' => $id,
         ]);
 
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -178,9 +201,9 @@ final class AdminVerifController
     public function reject(ServerRequestInterface $request, string $id): JsonResponse
     {
         $adminId = $this->userId($request);
-        $data    = $this->body($request);
-        $now     = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $pdo     = $this->db->pdo();
+        $data = $this->body($request);
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $pdo = $this->db->pdo();
 
         $stmt = $pdo->prepare(
             'UPDATE "verification" SET status = \'rejected\', reviewed_by_id = :uid,
@@ -188,10 +211,10 @@ final class AdminVerifController
              WHERE id = :id RETURNING user_id, type'
         );
         $stmt->execute([
-            'uid'   => $adminId,
+            'uid' => $adminId,
             'notes' => $data['reason'] ?? $data['notes'] ?? null,
-            'now'   => $now,
-            'id'    => $id,
+            'now' => $now,
+            'id' => $id,
         ]);
 
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -199,8 +222,15 @@ final class AdminVerifController
             return $this->notFound('Verification');
         }
 
-        $this->notifyUser($row['user_id'], $id, $row['type'], 'rejected', $pdo, $now,
-            $data['reason'] ?? $data['notes'] ?? null);
+        $this->notifyUser(
+            $row['user_id'],
+            $id,
+            $row['type'],
+            'rejected',
+            $pdo,
+            $now,
+            $data['reason'] ?? $data['notes'] ?? null
+        );
 
         return $this->json(['message' => 'Verification rejected']);
     }
@@ -212,9 +242,9 @@ final class AdminVerifController
     public function requestInfo(ServerRequestInterface $request, string $id): JsonResponse
     {
         $adminId = $this->userId($request);
-        $data    = $this->body($request);
-        $now     = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $pdo     = $this->db->pdo();
+        $data = $this->body($request);
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $pdo = $this->db->pdo();
 
         if (empty($data['message'])) {
             return $this->error('Message is required');
@@ -226,10 +256,10 @@ final class AdminVerifController
              WHERE id = :id RETURNING user_id, type'
         );
         $stmt->execute([
-            'uid'   => $adminId,
+            'uid' => $adminId,
             'notes' => $data['message'],
-            'now'   => $now,
-            'id'    => $id,
+            'now' => $now,
+            'id' => $id,
         ]);
 
         $row = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -237,8 +267,15 @@ final class AdminVerifController
             return $this->notFound('Verification');
         }
 
-        $this->notifyUser($row['user_id'], $id, $row['type'], 'info_requested', $pdo, $now,
-            $data['message']);
+        $this->notifyUser(
+            $row['user_id'],
+            $id,
+            $row['type'],
+            'info_requested',
+            $pdo,
+            $now,
+            $data['message']
+        );
 
         return $this->json(['message' => 'Information requested']);
     }
@@ -271,19 +308,20 @@ final class AdminVerifController
              ORDER BY n.created_at ASC"
         );
         $nStmt->execute([
-            'uid'         => $userId,
+            'uid' => $userId,
             'vid_pattern' => '%' . $id . '%',
         ]);
 
         foreach ($nStmt->fetchAll(\PDO::FETCH_ASSOC) as $n) {
             $nData = json_decode($n['data'] ?? '{}', true);
-            if (($nData['verification_id'] ?? '') !== $id) continue;
+            if (($nData['verification_id'] ?? '') !== $id)
+                continue;
             $thread[] = [
-                'id'        => $n['id'],
-                'sender'    => 'admin',
-                'type'      => $n['type'],
-                'title'     => $n['title'],
-                'message'   => $n['body'] ?? '',
+                'id' => $n['id'],
+                'sender' => 'admin',
+                'type' => $n['type'],
+                'title' => $n['title'],
+                'message' => $n['body'] ?? '',
                 'timestamp' => $n['created_at'],
             ];
         }
@@ -303,23 +341,23 @@ final class AdminVerifController
              ORDER BY r.created_at ASC"
         );
         $rStmt->execute([
-            'uid'         => $userId,
-            'uid2'        => $userId,
+            'uid' => $userId,
+            'uid2' => $userId,
             'vid_pattern' => '%' . $id . '%',
         ]);
 
         foreach ($rStmt->fetchAll(\PDO::FETCH_ASSOC) as $r) {
             $entry = [
-                'id'        => $r['id'],
-                'sender'    => 'user',
-                'message'   => $r['message'],
+                'id' => $r['id'],
+                'sender' => 'user',
+                'message' => $r['message'],
                 'timestamp' => $r['created_at'],
             ];
             if ($r['attachment_id']) {
                 $entry['attachment'] = [
-                    'id'        => $r['attachment_id'],
+                    'id' => $r['attachment_id'],
                     'file_name' => $r['file_name'],
-                    'file_url'  => $r['file_url'],
+                    'file_url' => $r['file_url'],
                     'mime_type' => $r['mime_type'],
                     'file_size' => (int) $r['file_size'],
                 ];
@@ -340,9 +378,9 @@ final class AdminVerifController
     public function sendMessage(ServerRequestInterface $request, string $id): JsonResponse
     {
         $adminId = $this->userId($request);
-        $data    = $this->body($request);
-        $now     = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $pdo     = $this->db->pdo();
+        $data = $this->body($request);
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $pdo = $this->db->pdo();
 
         $message = trim($data['message'] ?? '');
         if ($message === '') {
@@ -358,11 +396,11 @@ final class AdminVerifController
         }
 
         $typeLabels = [
-            'identity'         => 'Identity',
+            'identity' => 'Identity',
             'skill_assessment' => 'Skill Assessment',
-            'portfolio'        => 'Portfolio',
-            'work_history'     => 'Work History',
-            'payment_method'   => 'Payment Method',
+            'portfolio' => 'Portfolio',
+            'work_history' => 'Work History',
+            'payment_method' => 'Payment Method',
         ];
         $label = $typeLabels[$verif['type']] ?? ucfirst(str_replace('_', ' ', $verif['type']));
 
@@ -372,20 +410,20 @@ final class AdminVerifController
             'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
              VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
         )->execute([
-            'id'    => $notifId,
-            'uid'   => $verif['user_id'],
-            'type'  => 'verification.admin_message',
-            'title' => "💬 {$label} — Message from Reviewer",
-            'body'  => $message,
-            'data'  => json_encode([
-                'verification_id'   => $id,
-                'verification_type' => $verif['type'],
-                'link'              => '/dashboard/messages',
-            ]),
-            'prio'  => 'info',
-            'chan'   => 'in_app',
-            'now'   => $now,
-        ]);
+                    'id' => $notifId,
+                    'uid' => $verif['user_id'],
+                    'type' => 'verification.admin_message',
+                    'title' => "💬 {$label} — Message from Reviewer",
+                    'body' => $message,
+                    'data' => json_encode([
+                        'verification_id' => $id,
+                        'verification_type' => $verif['type'],
+                        'link' => '/dashboard/messages',
+                    ]),
+                    'prio' => 'info',
+                    'chan' => 'in_app',
+                    'now' => $now,
+                ]);
 
         // Also emit via Socket.IO
         try {
@@ -396,16 +434,16 @@ final class AdminVerifController
 
             $socket = new SocketEvent($redis);
             $socket->toUser($verif['user_id'], 'notification:new', [
-                'id'         => $notifId,
-                'type'       => 'verification.admin_message',
-                'title'      => "💬 {$label} — Message from Reviewer",
-                'body'       => $message,
-                'data'       => [
-                    'verification_id'   => $id,
+                'id' => $notifId,
+                'type' => 'verification.admin_message',
+                'title' => "💬 {$label} — Message from Reviewer",
+                'body' => $message,
+                'data' => [
+                    'verification_id' => $id,
                     'verification_type' => $verif['type'],
-                    'link'              => '/dashboard/messages',
+                    'link' => '/dashboard/messages',
                 ],
-                'priority'   => 'info',
+                'priority' => 'info',
                 'created_at' => $now,
             ]);
             $redis->close();
@@ -413,11 +451,13 @@ final class AdminVerifController
             error_log("[AdminVerif] message socket emit: " . $e->getMessage());
         }
 
-        return $this->json(['data' => [
-            'id'        => $notifId,
-            'message'   => $message,
-            'timestamp' => $now,
-        ]]);
+        return $this->json([
+            'data' => [
+                'id' => $notifId,
+                'message' => $message,
+                'timestamp' => $now,
+            ]
+        ]);
     }
 
     /* ------------------------------------------------------------------ */
@@ -427,9 +467,14 @@ final class AdminVerifController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 
@@ -437,37 +482,42 @@ final class AdminVerifController
     /*  Notify user via notification table + Socket.IO                     */
     /* ------------------------------------------------------------------ */
     private function notifyUser(
-        string $userId, string $verifId, string $type, string $status,
-        \PDO $pdo, string $now, ?string $adminMessage = null
+        string $userId,
+        string $verifId,
+        string $type,
+        string $status,
+        \PDO $pdo,
+        string $now,
+        ?string $adminMessage = null
     ): void {
         $typeLabels = [
-            'identity'         => 'Identity',
+            'identity' => 'Identity',
             'skill_assessment' => 'Skill Assessment',
-            'portfolio'        => 'Portfolio',
-            'work_history'     => 'Work History',
-            'payment_method'   => 'Payment Method',
+            'portfolio' => 'Portfolio',
+            'work_history' => 'Work History',
+            'payment_method' => 'Payment Method',
         ];
         $label = $typeLabels[$type] ?? ucfirst(str_replace('_', ' ', $type));
 
         $meta = match ($status) {
             'approved' => [
-                'icon'     => '✅',
-                'title'    => "{$label} Verified",
-                'body'     => "Your {$label} verification has been approved by our review team.",
+                'icon' => '✅',
+                'title' => "{$label} Verified",
+                'body' => "Your {$label} verification has been approved by our review team.",
                 'priority' => 'success',
             ],
             'rejected' => [
-                'icon'     => '❌',
-                'title'    => "{$label} Verification Declined",
-                'body'     => $adminMessage
+                'icon' => '❌',
+                'title' => "{$label} Verification Declined",
+                'body' => $adminMessage
                     ? "Your {$label} verification was declined: {$adminMessage}"
                     : "Your {$label} verification was declined. Please review and resubmit.",
                 'priority' => 'warning',
             ],
             'info_requested' => [
-                'icon'     => '📋',
-                'title'    => "{$label} — More Info Needed",
-                'body'     => $adminMessage
+                'icon' => '📋',
+                'title' => "{$label} — More Info Needed",
+                'body' => $adminMessage
                     ? "Our team needs more information about your {$label} verification: {$adminMessage}"
                     : "Our team needs more information about your {$label} verification.",
                 'priority' => 'info',
@@ -475,7 +525,8 @@ final class AdminVerifController
             default => null,
         };
 
-        if (!$meta) return;
+        if (!$meta)
+            return;
 
         $notifId = $this->uuid();
 
@@ -484,21 +535,21 @@ final class AdminVerifController
                 'INSERT INTO "notification" (id, user_id, type, title, body, data, priority, channel, created_at)
                  VALUES (:id, :uid, :type, :title, :body, :data, :prio, :chan, :now)'
             )->execute([
-                'id'    => $notifId,
-                'uid'   => $userId,
-                'type'  => "verification.{$status}",
-                'title' => "{$meta['icon']} {$meta['title']}",
-                'body'  => $meta['body'],
-                'data'  => json_encode([
-                    'verification_id'   => $verifId,
-                    'verification_type' => $type,
-                    'status'            => $status,
-                    'link'              => '/dashboard/settings/verification',
-                ]),
-                'prio'  => $meta['priority'],
-                'chan'   => 'in_app',
-                'now'    => $now,
-            ]);
+                        'id' => $notifId,
+                        'uid' => $userId,
+                        'type' => "verification.{$status}",
+                        'title' => "{$meta['icon']} {$meta['title']}",
+                        'body' => $meta['body'],
+                        'data' => json_encode([
+                            'verification_id' => $verifId,
+                            'verification_type' => $type,
+                            'status' => $status,
+                            'link' => '/dashboard/settings/verification',
+                        ]),
+                        'prio' => $meta['priority'],
+                        'chan' => 'in_app',
+                        'now' => $now,
+                    ]);
         } catch (\Throwable $e) {
             error_log("[AdminVerif] notification insert: " . $e->getMessage());
         }
@@ -511,17 +562,17 @@ final class AdminVerifController
 
             $socket = new SocketEvent($redis);
             $socket->toUser($userId, 'notification:new', [
-                'id'         => $notifId,
-                'type'       => "verification.{$status}",
-                'title'      => "{$meta['icon']} {$meta['title']}",
-                'body'       => $meta['body'],
-                'data'       => [
-                    'verification_id'   => $verifId,
+                'id' => $notifId,
+                'type' => "verification.{$status}",
+                'title' => "{$meta['icon']} {$meta['title']}",
+                'body' => $meta['body'],
+                'data' => [
+                    'verification_id' => $verifId,
                     'verification_type' => $type,
-                    'status'            => $status,
-                    'link'              => '/dashboard/settings/verification',
+                    'status' => $status,
+                    'link' => '/dashboard/settings/verification',
                 ],
-                'priority'   => $meta['priority'],
+                'priority' => $meta['priority'],
                 'created_at' => $now,
             ]);
 
