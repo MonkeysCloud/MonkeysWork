@@ -277,6 +277,26 @@ final class VerificationController
             // ── Inline AI scoring (works in both dev and prod) ──
             $scorer = new VertexAiScorer();
             foreach ($created as &$item) {
+                // ── Data completeness gate: skip AI scoring if no real data ──
+                $data = $typeData[$item['type']] ?? [];
+                $hasData = match ($item['type']) {
+                    'identity' => !empty($data['documents']) || !empty($data['document_urls']),
+                    'payment_method' => !empty($data['payment_methods']) || !empty($data['stripe_connect_account_id']),
+                    'skill_assessment' => !empty($data['skills']),
+                    'portfolio' => !empty($data['portfolio_items']) || !empty($data['certifications']),
+                    'work_history' => ($data['experience_years'] ?? 0) > 0 && !empty($data['bio']),
+                    default => true,
+                };
+
+                if (!$hasData) {
+                    // Leave as 'pending' — user still needs to upload data
+                    $item['status'] = 'pending';
+                    $item['confidence'] = null;
+                    $item['skipped_reason'] = 'Insufficient data — please upload required documents';
+                    error_log("[VerificationController] skipping AI scoring for {$item['type']}: no substantive data uploaded");
+                    continue;
+                }
+
                 try {
                     $aiResult = $scorer->scoreVerification(
                         $item['type'],
