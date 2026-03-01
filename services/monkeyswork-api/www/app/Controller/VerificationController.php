@@ -153,10 +153,10 @@ final class VerificationController
             $applicable[] = 'payment_method';
             $reasons['payment_method'] = 'Payment method verification';
 
-            // 5. Get existing verifications to skip duplicates
+            // 5. Get existing verifications — only skip actively processing ones
             $existingStmt = $pdo->prepare(
                 'SELECT type, status FROM "verification"
-                 WHERE user_id = :uid AND status IN (\'pending\', \'in_review\', \'approved\', \'auto_approved\')
+                 WHERE user_id = :uid AND status IN (\'pending\', \'in_review\')
                  ORDER BY created_at DESC'
             );
             $existingStmt->execute(['uid' => $userId]);
