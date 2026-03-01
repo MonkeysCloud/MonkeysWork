@@ -37,7 +37,9 @@ final class AdminVerifController
 
         // Status filter — default to queue statuses
         $filterStatus = $params['status'] ?? null;
-        if ($filterStatus && in_array($filterStatus, ['pending', 'in_review', 'human_review', 'info_requested', 'approved', 'rejected'], true)) {
+        if ($filterStatus === 'all') {
+            // No status filter — show everything
+        } elseif ($filterStatus && in_array($filterStatus, ['pending', 'in_review', 'human_review', 'info_requested', 'approved', 'auto_approved', 'rejected'], true)) {
             $where[] = 'v.status = :status';
             $binds['status'] = $filterStatus;
         } else {
@@ -192,6 +194,47 @@ final class AdminVerifController
         $this->notifyUser($row['user_id'], $id, $row['type'], 'approved', $pdo, $now);
 
         return $this->json(['message' => 'Verification approved']);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  PATCH /{id}/status — change status directly                        */
+    /* ------------------------------------------------------------------ */
+    #[Route('PATCH', '/{id}/status', name: 'admin.verif.setStatus', summary: 'Change verification status', tags: ['Admin'])]
+    public function setStatus(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $adminId = $this->userId($request);
+        $data = $this->body($request);
+        $newStatus = $data['status'] ?? null;
+        $validStatuses = ['pending', 'in_review', 'human_review', 'info_requested', 'approved', 'auto_approved', 'rejected'];
+
+        if (!$newStatus || !in_array($newStatus, $validStatuses, true)) {
+            return $this->error('Invalid status. Must be one of: ' . implode(', ', $validStatuses), 422);
+        }
+
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $pdo = $this->db->pdo();
+
+        $stmt = $pdo->prepare(
+            'UPDATE "verification" SET status = :status, reviewed_by_id = :uid,
+                    reviewer_notes = :notes, reviewed_at = :now, updated_at = :now
+             WHERE id = :id RETURNING user_id, type'
+        );
+        $stmt->execute([
+            'status' => $newStatus,
+            'uid' => $adminId,
+            'notes' => $data['notes'] ?? null,
+            'now' => $now,
+            'id' => $id,
+        ]);
+
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        if (!$row) {
+            return $this->notFound('Verification');
+        }
+
+        $this->notifyUser($row['user_id'], $id, $row['type'], $newStatus, $pdo, $now, $data['notes'] ?? null);
+
+        return $this->json(['message' => "Verification status changed to {$newStatus}"]);
     }
 
     /* ------------------------------------------------------------------ */

@@ -65,11 +65,13 @@ const TYPE_OPTIONS = [
 
 const STATUS_OPTIONS = [
     { value: "", label: "Queue (default)" },
+    { value: "all", label: "All Statuses" },
     { value: "pending", label: "Pending" },
     { value: "in_review", label: "In Review" },
     { value: "human_review", label: "Human Review" },
     { value: "info_requested", label: "Info Requested" },
     { value: "approved", label: "Approved" },
+    { value: "auto_approved", label: "Auto Approved" },
     { value: "rejected", label: "Rejected" },
 ];
 
@@ -296,6 +298,26 @@ export default function AdminVerificationsPage() {
         setSelected(v);
         setAction(act);
         setReason("");
+    };
+
+    /* ── Direct status change ─────────────────────── */
+    const handleStatusChange = async (verifId: string, newStatus: string) => {
+        if (!token) return;
+        try {
+            const res = await fetch(`${API}/admin/verifications/${verifId}/status`, {
+                method: "PATCH",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ status: newStatus }),
+            });
+            if (!res.ok) throw new Error("Failed to update status");
+            // Update detail and list
+            if (detail && detail.id === verifId) {
+                setDetail({ ...detail, status: newStatus });
+            }
+            fetchQueue();
+        } catch (e) {
+            console.error(e);
+        }
     };
 
     /* ── Table columns ──────────────────────────────── */
@@ -547,7 +569,22 @@ export default function AdminVerificationsPage() {
                                 </div>
                                 <div>
                                     <p className="text-xs text-gray-400 mb-0.5">Status</p>
-                                    <StatusBadge status={detail.status} />
+                                    <div className="flex items-center gap-2">
+                                        <StatusBadge status={detail.status} />
+                                        <select
+                                            value={detail.status}
+                                            onChange={(e) => handleStatusChange(detail.id, e.target.value)}
+                                            className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                                        >
+                                            <option value="pending">Pending</option>
+                                            <option value="in_review">In Review</option>
+                                            <option value="human_review">Human Review</option>
+                                            <option value="info_requested">Info Requested</option>
+                                            <option value="approved">Approved</option>
+                                            <option value="auto_approved">Auto Approved</option>
+                                            <option value="rejected">Rejected</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <div>
                                     <p className="text-xs text-gray-400 mb-0.5">Submitted</p>
