@@ -214,6 +214,7 @@ final class BillingController
     {
         $pdo = $this->db->pdo();
         $results = [];
+        $chargesByClient = []; // Collect successful charges per client for summary email
 
         // Find approved timesheets not yet billed (from the last 7 days)
         $stmt = $pdo->prepare(
@@ -394,15 +395,17 @@ final class BillingController
                 $pdo->prepare('UPDATE "weeklytimesheet" SET billed = true, updated_at = :now WHERE id = :id')
                     ->execute(['now' => $now, 'id' => $ts['timesheet_id']]);
 
-                // Send charge confirmation to client
-                $this->notifyChargeSuccess(
-                    $pdo,
-                    $ts['client_id'],
-                    $ts['contract_id'],
-                    $ts['contract_title'],
-                    $totalCharge,
-                    $now
-                );
+                // Collect successful charge for summary email
+                $clientId = $ts['client_id'];
+                if (!isset($chargesByClient[$clientId])) {
+                    $chargesByClient[$clientId] = ['charges' => [], 'total' => 0.0];
+                }
+                $chargesByClient[$clientId]['charges'][] = [
+                    'contractTitle' => $ts['contract_title'],
+                    'amount' => '$' . $totalCharge,
+                    'hours' => $ts['total_hours'] . 'h',
+                ];
+                $chargesByClient[$clientId]['total'] += (float) $totalCharge;
 
                 $results[] = [
                     'timesheet' => $ts['timesheet_id'],
@@ -433,6 +436,18 @@ final class BillingController
                 $results[] = ['timesheet' => $ts['timesheet_id'], 'error' => $e->getMessage()];
                 error_log('[BillingController] chargeWeekly ERROR: ' . $e->getMessage());
             }
+        }
+
+        // Send ONE summary email per client
+        foreach ($chargesByClient as $cid => $data) {
+            $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+            $this->notifyChargeSuccess(
+                $pdo,
+                $cid,
+                $data['charges'],
+                number_format($data['total'], 2, '.', ''),
+                $now
+            );
         }
 
         return $this->json([
@@ -648,6 +663,25 @@ final class BillingController
                                 'now' => $now,
                             ]);
 
+                    // Get per-contract earnings breakdown for the email
+                    $breakdownStmt = $pdo->prepare(
+                        'SELECT c.title,
+                                SUM(CASE WHEN et.type = \'release\' AND et.status = \'completed\' THEN et.amount ELSE 0 END)
+                                - SUM(CASE WHEN et.type = \'platform_fee\' AND et.status = \'completed\' THEN et.amount ELSE 0 END) AS earned
+                         FROM "escrowtransaction" et
+                         JOIN "contract" c ON c.id = et.contract_id
+                         WHERE c.freelancer_id = :uid
+                         GROUP BY c.id, c.title
+                         HAVING SUM(CASE WHEN et.type = \'release\' AND et.status = \'completed\' THEN et.amount ELSE 0 END) > 0'
+                    );
+                    $breakdownStmt->execute(['uid' => $fl['id']]);
+                    $contracts = array_map(function ($row) {
+                        return [
+                            'title' => $row['title'],
+                            'earned' => '$' . number_format((float) $row['earned'], 2),
+                        ];
+                    }, $breakdownStmt->fetchAll(\PDO::FETCH_ASSOC));
+
                     // Send payout confirmation to freelancer
                     $this->notifyPayoutSuccess(
                         $pdo,
@@ -655,7 +689,9 @@ final class BillingController
                         $fl['email'] ?? '',
                         $fl['display_name'] ?? 'there',
                         number_format($netAmount, 2, '.', ''),
+                        $fee,
                         $payoutType,
+                        $contracts,
                         $now
                     );
 
@@ -877,11 +913,13 @@ final class BillingController
     private function notifyChargeSuccess(
         \PDO $pdo,
         string $clientId,
-        string $contractId,
-        string $contractTitle,
-        string $amount,
+        array $charges,
+        string $totalAmount,
         string $now
     ): void {
+        $chargeCount = count($charges);
+        $contractNames = implode(', ', array_column($charges, 'contractTitle'));
+
         // 1. In-app notification
         $notifId = $this->uuid();
         try {
@@ -892,11 +930,11 @@ final class BillingController
                         'id' => $notifId,
                         'uid' => $clientId,
                         'type' => 'billing.charge_success',
-                        'title' => '💰 Payment Processed',
-                        'body' => "A payment of \${$amount} for \"{$contractTitle}\" was processed successfully.",
+                        'title' => '💰 Weekly Billing Processed',
+                        'body' => "\${$totalAmount} charged across {$chargeCount} contract" . ($chargeCount !== 1 ? 's' : '') . ".",
                         'data' => json_encode([
-                            'contract_id' => $contractId,
-                            'amount' => $amount,
+                            'amount' => $totalAmount,
+                            'contracts' => $contractNames,
                             'link' => '/dashboard/billing',
                         ]),
                         'prio' => 'info',
@@ -912,14 +950,14 @@ final class BillingController
             $clientId,
             $notifId,
             'billing.charge_success',
-            '💰 Payment Processed',
-            "\${$amount} charged for \"{$contractTitle}\"",
-            ['contract_id' => $contractId, 'link' => '/dashboard/billing'],
+            '💰 Weekly Billing Processed',
+            "\${$totalAmount} across {$chargeCount} contract" . ($chargeCount !== 1 ? 's' : ''),
+            ['amount' => $totalAmount, 'link' => '/dashboard/billing'],
             'info',
             $now
         );
 
-        // 3. Confirmation email
+        // 3. Summary email
         try {
             $userStmt = $pdo->prepare('SELECT email, display_name FROM "user" WHERE id = :uid');
             $userStmt->execute(['uid' => $clientId]);
@@ -930,17 +968,15 @@ final class BillingController
                 $mail = new \App\Service\MonkeysMailService();
                 $mail->sendTemplate(
                     $user['email'],
-                    'Payment Processed — MonkeysWorks',
-                    'payment-received',
+                    'Weekly Billing Summary — MonkeysWorks',
+                    'charge-summary',
                     [
                         'userName' => $user['display_name'] ?? 'there',
-                        'amount' => "\${$amount}",
-                        'currency' => 'USD',
-                        'contractTitle' => $contractTitle,
-                        'paymentType' => 'charged',
+                        'totalAmount' => "\${$totalAmount}",
+                        'charges' => $charges,
                         'billingUrl' => "{$frontendUrl}/dashboard/billing",
                     ],
-                    ['billing', 'charge-confirmation'],
+                    ['billing', 'charge-summary'],
                 );
             }
         } catch (\Throwable $e) {
@@ -956,7 +992,9 @@ final class BillingController
         string $email,
         string $displayName,
         string $netAmount,
+        string $fee,
         string $payoutMethod,
+        array $contracts,
         string $now
     ): void {
         $methodLabel = match ($payoutMethod) {
@@ -1002,7 +1040,7 @@ final class BillingController
             $now
         );
 
-        // 3. Confirmation email
+        // 3. Summary email with per-contract breakdown
         if ($email) {
             try {
                 $frontendUrl = $_ENV['FRONTEND_URL'] ?? getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
@@ -1010,16 +1048,16 @@ final class BillingController
                 $mail->sendTemplate(
                     $email,
                     'Payout Sent — MonkeysWorks',
-                    'payment-received',
+                    'payout-summary',
                     [
                         'userName' => $displayName,
-                        'amount' => "\${$netAmount}",
-                        'currency' => 'USD',
-                        'contractTitle' => "Weekly payout via {$methodLabel}",
-                        'paymentType' => 'received',
-                        'billingUrl' => "{$frontendUrl}/dashboard/billing/payouts",
+                        'netAmount' => "\${$netAmount}",
+                        'fee' => $fee,
+                        'methodLabel' => $methodLabel,
+                        'contracts' => $contracts,
+                        'payoutsUrl' => "{$frontendUrl}/dashboard/billing/payouts",
                     ],
-                    ['billing', 'payout-confirmation'],
+                    ['billing', 'payout-summary'],
                 );
             } catch (\Throwable $e) {
                 error_log('[BillingController] notifyPayoutSuccess email: ' . $e->getMessage());
