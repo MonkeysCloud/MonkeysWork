@@ -398,14 +398,17 @@ final class BillingController
                 // Collect successful charge for summary email
                 $clientId = $ts['client_id'];
                 if (!isset($chargesByClient[$clientId])) {
-                    $chargesByClient[$clientId] = ['charges' => [], 'total' => 0.0];
+                    $chargesByClient[$clientId] = ['charges' => [], 'total' => 0.0, 'totalFees' => 0.0];
                 }
                 $chargesByClient[$clientId]['charges'][] = [
                     'contractTitle' => $ts['contract_title'],
+                    'subtotal' => '$' . number_format((float) $ts['total_amount'], 2),
+                    'fee' => '$' . $clientFee,
                     'amount' => '$' . $totalCharge,
                     'hours' => $ts['total_hours'] . 'h',
                 ];
                 $chargesByClient[$clientId]['total'] += (float) $totalCharge;
+                $chargesByClient[$clientId]['totalFees'] += (float) $clientFee;
 
                 $results[] = [
                     'timesheet' => $ts['timesheet_id'],
@@ -446,6 +449,7 @@ final class BillingController
                 $cid,
                 $data['charges'],
                 number_format($data['total'], 2, '.', ''),
+                number_format($data['totalFees'], 2, '.', ''),
                 $now
             );
         }
@@ -666,8 +670,8 @@ final class BillingController
                     // Get per-contract earnings breakdown for the email
                     $breakdownStmt = $pdo->prepare(
                         'SELECT c.title,
-                                SUM(CASE WHEN et.type = \'release\' AND et.status = \'completed\' THEN et.amount ELSE 0 END)
-                                - SUM(CASE WHEN et.type = \'platform_fee\' AND et.status = \'completed\' THEN et.amount ELSE 0 END) AS earned
+                                SUM(CASE WHEN et.type = \'release\' AND et.status = \'completed\' THEN et.amount ELSE 0 END) AS gross,
+                                SUM(CASE WHEN et.type = \'platform_fee\' AND et.status = \'completed\' THEN et.amount ELSE 0 END) AS commission
                          FROM "escrowtransaction" et
                          JOIN "contract" c ON c.id = et.contract_id
                          WHERE c.freelancer_id = :uid
@@ -676,9 +680,15 @@ final class BillingController
                     );
                     $breakdownStmt->execute(['uid' => $fl['id']]);
                     $contracts = array_map(function ($row) {
+                        $gross = (float) $row['gross'];
+                        $commission = (float) $row['commission'];
+                        $rate = $gross > 0 ? round(($commission / $gross) * 100) : 0;
                         return [
                             'title' => $row['title'],
-                            'earned' => '$' . number_format((float) $row['earned'], 2),
+                            'gross' => '$' . number_format($gross, 2),
+                            'commission' => '−$' . number_format($commission, 2),
+                            'rate' => $rate . '%',
+                            'earned' => '$' . number_format($gross - $commission, 2),
                         ];
                     }, $breakdownStmt->fetchAll(\PDO::FETCH_ASSOC));
 
@@ -915,6 +925,7 @@ final class BillingController
         string $clientId,
         array $charges,
         string $totalAmount,
+        string $totalFees,
         string $now
     ): void {
         $chargeCount = count($charges);
@@ -964,6 +975,7 @@ final class BillingController
             $user = $userStmt->fetch(\PDO::FETCH_ASSOC);
 
             if ($user && $user['email']) {
+                $subtotal = number_format((float) $totalAmount - (float) $totalFees, 2);
                 $frontendUrl = $_ENV['FRONTEND_URL'] ?? getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
                 $mail = new \App\Service\MonkeysMailService();
                 $mail->sendTemplate(
@@ -973,6 +985,8 @@ final class BillingController
                     [
                         'userName' => $user['display_name'] ?? 'there',
                         'totalAmount' => "\${$totalAmount}",
+                        'totalFees' => "\${$totalFees}",
+                        'subtotal' => "\${$subtotal}",
                         'charges' => $charges,
                         'billingUrl' => "{$frontendUrl}/dashboard/billing",
                     ],

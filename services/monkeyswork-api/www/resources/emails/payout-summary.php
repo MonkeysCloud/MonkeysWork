@@ -3,10 +3,10 @@
  * Weekly payout summary email for freelancers.
  *
  * @var string $userName
- * @var string $netAmount       e.g. "$1,200.00"
- * @var string $fee             e.g. "$12.00"
+ * @var string $netAmount       e.g. "$891.00"
+ * @var string $fee             e.g. "9.00" (processing fee)
  * @var string $methodLabel     e.g. "Bank Transfer", "PayPal"
- * @var array  $contracts       [{title, earned}]
+ * @var array  $contracts       [{title, gross, commission, rate, earned}]
  * @var string $payoutsUrl
  */
 ?>
@@ -16,17 +16,12 @@
 </h1>
 
 <p style="margin:0 0 12px;font-size:15px;color:#374151;line-height:1.6;">
-    Hi
-    <?= htmlspecialchars($userName ?? 'there') ?>,
+    Hi <?= htmlspecialchars($userName ?? 'there') ?>,
 </p>
 
 <p style="margin:0 0 20px;font-size:15px;color:#374151;line-height:1.6;">
-    We've sent <strong>
-        <?= htmlspecialchars($netAmount ?? '$0.00') ?>
-    </strong>
-    to your <strong>
-        <?= htmlspecialchars($methodLabel ?? 'account') ?>
-    </strong>.
+    We've sent <strong><?= htmlspecialchars($netAmount ?? '$0.00') ?></strong>
+    to your <strong><?= htmlspecialchars($methodLabel ?? 'account') ?></strong>.
     <?php if (($methodLabel ?? '') === 'PayPal'): ?>
         It should arrive within a few minutes.
     <?php else: ?>
@@ -34,7 +29,7 @@
     <?php endif; ?>
 </p>
 
-<!-- Per-contract breakdown -->
+<!-- Per-contract breakdown with commission -->
 <?php if (!empty($contracts)): ?>
     <div style="background:#f9fafb;border-radius:8px;padding:16px;margin:0 0 20px;border:1px solid #e5e7eb;">
         <p
@@ -42,15 +37,25 @@
             Earnings breakdown
         </p>
         <table width="100%" cellpadding="6" cellspacing="0" style="font-size:14px;color:#374151;">
+            <thead>
+                <tr style="border-bottom:2px solid #e5e7eb;">
+                    <th align="left" style="font-weight:600;color:#6b7280;padding-bottom:8px;">Contract</th>
+                    <th align="right" style="font-weight:600;color:#6b7280;padding-bottom:8px;">Gross</th>
+                    <th align="right" style="font-weight:600;color:#6b7280;padding-bottom:8px;">Commission</th>
+                    <th align="right" style="font-weight:600;color:#6b7280;padding-bottom:8px;">Net</th>
+                </tr>
+            </thead>
             <tbody>
                 <?php foreach ($contracts as $contract): ?>
                     <tr style="border-bottom:1px solid #f3f4f6;">
-                        <td style="padding:8px 0;">
-                            <?= htmlspecialchars($contract['title'] ?? '—') ?>
+                        <td style="padding:8px 0;"><?= htmlspecialchars($contract['title'] ?? '—') ?></td>
+                        <td align="right" style="padding:8px 0;"><?= htmlspecialchars($contract['gross'] ?? '$0.00') ?></td>
+                        <td align="right" style="padding:8px 0;color:#9ca3af;">
+                            <?= htmlspecialchars($contract['commission'] ?? '$0.00') ?>
+                            <span style="font-size:12px;">(<?= htmlspecialchars($contract['rate'] ?? '0%') ?>)</span>
                         </td>
                         <td align="right" style="font-weight:600;padding:8px 0;">
-                            <?= htmlspecialchars($contract['earned'] ?? '$0.00') ?>
-                        </td>
+                            <?= htmlspecialchars($contract['earned'] ?? '$0.00') ?></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -63,10 +68,8 @@
     <table width="100%" cellpadding="4" cellspacing="0" style="font-size:14px;color:#374151;">
         <?php if (($fee ?? '0.00') !== '0.00'): ?>
             <tr>
-                <td style="color:#6b7280;">Processing fee</td>
-                <td align="right">−
-                    <?= htmlspecialchars($fee ?? '$0.00') ?>
-                </td>
+                <td style="color:#6b7280;">Processing fee (<?= htmlspecialchars($methodLabel ?? '') ?>)</td>
+                <td align="right" style="color:#9ca3af;">−$<?= htmlspecialchars($fee ?? '0.00') ?></td>
             </tr>
         <?php endif; ?>
         <tr>
@@ -76,15 +79,15 @@
             </td>
         </tr>
         <tr>
-            <td style="color:#9ca3af;font-size:13px;">via
-                <?= htmlspecialchars($methodLabel ?? 'Bank Transfer') ?>
-            </td>
-            <td align="right" style="color:#9ca3af;font-size:13px;">
-                <?= date('M j, Y') ?>
-            </td>
+            <td style="color:#9ca3af;font-size:13px;">via <?= htmlspecialchars($methodLabel ?? 'Bank Transfer') ?></td>
+            <td align="right" style="color:#9ca3af;font-size:13px;"><?= date('M j, Y') ?></td>
         </tr>
     </table>
 </div>
+
+<p style="margin:0 0 20px;font-size:13px;color:#9ca3af;line-height:1.5;">
+    Commission rates: 10% on the first $10,000 billed per client, 5% thereafter.
+</p>
 
 <table width="100%" cellpadding="0" cellspacing="0">
     <tr>
