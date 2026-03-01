@@ -60,7 +60,7 @@ final class AdminVerifController
             $binds['search'] = "%{$search}%";
         }
 
-        $whereClause = implode(' AND ', $where);
+        $whereClause = !empty($where) ? implode(' AND ', $where) : '1=1';
 
         $cnt = $pdo->prepare("SELECT COUNT(*) FROM \"verification\" v JOIN \"user\" u ON u.id = v.user_id WHERE {$whereClause}");
         $cnt->execute($binds);
