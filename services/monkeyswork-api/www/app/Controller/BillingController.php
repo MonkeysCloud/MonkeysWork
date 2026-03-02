@@ -1244,6 +1244,201 @@ final class BillingController
         }
     }
 
+    /* ── Automatic retry for failed charges (runs daily via cron) ── */
+
+    // Retry schedule (days after initial failure):
+    //   Cards:  Day 1, Day 3, Day 5  → max 3 retries
+    //   ACH:    Day 3, Day 5, Day 7  → max 3 retries (ACH takes longer to settle)
+    private const RETRY_SCHEDULE_CARD = [1, 3, 5];
+    private const RETRY_SCHEDULE_ACH = [3, 5, 7];
+    private const MAX_RETRIES = 3;
+
+    #[Route('POST', '/retry-failed-charges', name: 'billing.retryFailedCharges', summary: 'Auto-retry failed charges (daily cron)', tags: ['Billing'])]
+    public function retryFailedCharges(ServerRequestInterface $request): JsonResponse
+    {
+        $pdo = $this->db->pdo();
+        $now = new \DateTimeImmutable();
+        $nowStr = $now->format('Y-m-d H:i:s');
+        $results = ['retried' => 0, 'succeeded' => 0, 'failed_again' => 0, 'delinquent' => 0, 'skipped' => 0];
+
+        // Find approved, unbilled timesheets that have had at least one failed charge
+        $stmt = $pdo->prepare(
+            'SELECT DISTINCT ON (wt.id)
+                    wt.id AS timesheet_id, wt.contract_id, wt.total_amount,
+                    wt.retry_count, wt.last_retry_at,
+                    c.client_id, c.title AS contract_title,
+                    et.created_at AS first_failure_at
+             FROM "weeklytimesheet" wt
+             JOIN "contract" c ON c.id = wt.contract_id
+             JOIN "escrowtransaction" et ON et.contract_id = wt.contract_id
+                AND et.type = \'fund_failed\' AND et.status = \'failed\'
+             WHERE wt.status = \'approved\'
+               AND wt.billed = false
+               AND COALESCE(wt.retry_count, 0) < :max_retries
+             ORDER BY wt.id, et.created_at ASC'
+        );
+        $stmt->execute(['max_retries' => self::MAX_RETRIES]);
+        $timesheets = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        error_log("[BillingController] retryFailedCharges: found " . count($timesheets) . " candidates");
+
+        foreach ($timesheets as $ts) {
+            $retryCount = (int) ($ts['retry_count'] ?? 0);
+            $firstFailure = new \DateTimeImmutable($ts['first_failure_at']);
+            $daysSinceFailure = (int) $now->diff($firstFailure)->days;
+
+            // Determine payment method type for this client (card vs ACH)
+            $pms = $this->getVerifiedPaymentMethods($ts['client_id'], $pdo);
+            $pmType = 'card';
+            if (!empty($pms)) {
+                try {
+                    $pmObj = $this->stripe()->retrievePaymentMethod($pms[0]['stripe_payment_method_id']);
+                    $pmType = $pmObj->type ?? 'card';
+                } catch (\Throwable) {
+                    // keep default
+                }
+            }
+
+            // Pick the right retry schedule based on payment type
+            $schedule = in_array($pmType, ['us_bank_account', 'ach_debit', 'sepa_debit'], true)
+                ? self::RETRY_SCHEDULE_ACH
+                : self::RETRY_SCHEDULE_CARD;
+
+            // Check if it's time for the next retry
+            $nextRetryDay = $schedule[$retryCount] ?? null;
+            if ($nextRetryDay === null) {
+                // Exceeded max retries → mark delinquent
+                $pdo->prepare(
+                    'UPDATE "weeklytimesheet" SET retry_count = :rc, last_retry_at = :now, updated_at = :now WHERE id = :id'
+                )->execute(['rc' => $retryCount, 'now' => $nowStr, 'id' => $ts['timesheet_id']]);
+                $this->notifyChargeFailed(
+                    $pdo,
+                    $ts['client_id'],
+                    $ts['contract_id'],
+                    $ts['contract_title'],
+                    'Payment failed after ' . self::MAX_RETRIES . ' retry attempts. Please update your payment method.',
+                    $nowStr
+                );
+                $results['delinquent']++;
+                continue;
+            }
+
+            if ($daysSinceFailure < $nextRetryDay) {
+                $results['skipped']++;
+                continue;
+            }
+
+            // Attempt retry
+            $results['retried']++;
+            $clientFee = $this->fees()->calculateClientFee($ts['total_amount']);
+            $totalCharge = $this->fees()->totalClientCharge($ts['total_amount']);
+            $amountCents = $this->fees()->toCents($totalCharge);
+
+            if (empty($pms)) {
+                $pdo->prepare(
+                    'UPDATE "weeklytimesheet" SET retry_count = :rc, last_retry_at = :now, updated_at = :now WHERE id = :id'
+                )->execute(['rc' => $retryCount + 1, 'now' => $nowStr, 'id' => $ts['timesheet_id']]);
+                $results['failed_again']++;
+                continue;
+            }
+
+            $customerStmt = $pdo->prepare('SELECT stripe_customer_id FROM "user" WHERE id = :uid');
+            $customerStmt->execute(['uid' => $ts['client_id']]);
+            $customerId = $customerStmt->fetchColumn();
+
+            if (!$customerId) {
+                $pdo->prepare(
+                    'UPDATE "weeklytimesheet" SET retry_count = :rc, last_retry_at = :now, updated_at = :now WHERE id = :id'
+                )->execute(['rc' => $retryCount + 1, 'now' => $nowStr, 'id' => $ts['timesheet_id']]);
+                $results['failed_again']++;
+                continue;
+            }
+
+            // Try each payment method
+            $pi = null;
+            $lastError = '';
+            foreach ($pms as $pm) {
+                try {
+                    $pmObj = $this->stripe()->retrievePaymentMethod($pm['stripe_payment_method_id']);
+                    if (!$pmObj->customer) {
+                        $this->stripe()->attachPaymentMethod($pm['stripe_payment_method_id'], $customerId);
+                    }
+                    $pmActualType = $pmObj->type ?? 'card';
+
+                    $pi = $this->stripe()->getClient()->paymentIntents->create([
+                        'amount' => $amountCents,
+                        'currency' => 'usd',
+                        'customer' => $customerId,
+                        'payment_method' => $pm['stripe_payment_method_id'],
+                        'payment_method_types' => [$pmActualType],
+                        'off_session' => true,
+                        'confirm' => true,
+                        'metadata' => [
+                            'mw_type' => 'auto_retry',
+                            'mw_timesheet' => $ts['timesheet_id'],
+                            'mw_contract' => $ts['contract_id'],
+                            'mw_retry_attempt' => $retryCount + 1,
+                        ],
+                    ]);
+                    break;
+                } catch (\Throwable $e) {
+                    $lastError = $e->getMessage();
+                    error_log("[BillingController] retryFailedCharges PM {$pm['stripe_payment_method_id']} failed: {$lastError}");
+                    $pi = null;
+                }
+            }
+
+            if (!$pi) {
+                // Still failing
+                $pdo->prepare(
+                    'UPDATE "weeklytimesheet" SET retry_count = :rc, last_retry_at = :now, updated_at = :now WHERE id = :id'
+                )->execute(['rc' => $retryCount + 1, 'now' => $nowStr, 'id' => $ts['timesheet_id']]);
+                $this->insertEscrowTransaction(
+                    $pdo,
+                    $ts['contract_id'],
+                    null,
+                    'fund_failed',
+                    $ts['total_amount'],
+                    'failed',
+                    null,
+                    $nowStr,
+                    ['error' => $lastError, 'retry_attempt' => $retryCount + 1]
+                );
+                $this->notifyChargeFailed(
+                    $pdo,
+                    $ts['client_id'],
+                    $ts['contract_id'],
+                    $ts['contract_title'],
+                    "Retry attempt " . ($retryCount + 1) . " of " . self::MAX_RETRIES . " failed: {$lastError}",
+                    $nowStr
+                );
+                $results['failed_again']++;
+                continue;
+            }
+
+            // Success!
+            $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'fund', $ts['total_amount'], 'completed', $pi->id, $nowStr);
+            $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'client_fee', $clientFee, 'completed', $pi->id, $nowStr);
+            $this->autoGenerateInvoice($pdo, $ts['contract_id'], $ts['total_amount'], $clientFee, $ts['contract_title'] . ' — Retry charge', $nowStr);
+
+            $pdo->prepare('UPDATE "weeklytimesheet" SET billed = true, retry_count = :rc, last_retry_at = :now, updated_at = :now WHERE id = :id')
+                ->execute(['rc' => $retryCount + 1, 'now' => $nowStr, 'id' => $ts['timesheet_id']]);
+
+            // Clear delayed payouts
+            $pdo->prepare(
+                'UPDATE "payout" SET status = \'pending\', failure_reason = NULL
+                 WHERE freelancer_id = (SELECT freelancer_id FROM "contract" WHERE id = :cid LIMIT 1)
+                   AND status = \'delayed\''
+            )->execute(['cid' => $ts['contract_id']]);
+
+            $results['succeeded']++;
+            error_log("[BillingController] retryFailedCharges: retry #{$retryCount} SUCCEEDED for timesheet {$ts['timesheet_id']}");
+        }
+
+        error_log("[BillingController] retryFailedCharges complete: " . json_encode($results));
+        return $this->json(['data' => $results]);
+    }
+
     /**
      * Get the total amount held in dispute for contracts involving this user.
      */

@@ -263,3 +263,67 @@ spec:
                 limits:
                   cpu: 100m
                   memory: 64Mi
+---
+# ── Daily 10:00 AM UTC: Retry failed payment charges ─────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cron-retry-charges
+  namespace: monkeyswork
+  labels:
+    app: monkeyswork-cron
+    task: retry-charges
+spec:
+  schedule: "0 10 * * *"          # Daily at 10:00 UTC
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 600  # Max 10 min
+      template:
+        metadata:
+          labels:
+            app: monkeyswork-cron
+            task: retry-charges
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: cron-runner
+              image: curlimages/curl:8.5.0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "[$(date -u)] Retrying failed payment charges..."
+                  HTTP_CODE=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
+                    -X POST \
+                    -H "X-Internal-Token: ${INTERNAL_API_TOKEN}" \
+                    -H "Content-Type: application/json" \
+                    "http://monkeyswork-api.monkeyswork.svc.cluster.local/api/v1/cron/retry-failed-charges")
+                  echo "HTTP ${HTTP_CODE}:"
+                  cat /tmp/response.txt
+                  echo ""
+                  if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                    echo "[$(date -u)] Done ✓"
+                    exit 0
+                  else
+                    echo "[$(date -u)] FAILED ✗"
+                    exit 1
+                  fi
+              env:
+                - name: INTERNAL_API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: internal-api-token
+                      key: token
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi

@@ -86,6 +86,18 @@ final class CronController
         return $disputes->checkDeadlines($request);
     }
 
+    /* ── Daily: retry failed payment charges ──────────────────────── */
+
+    #[Route('POST', '/retry-failed-charges', name: 'cron.retryFailedCharges', summary: 'Daily: retry failed charges with smart schedule', tags: ['Cron'])]
+    public function retryFailedCharges(ServerRequestInterface $request): JsonResponse
+    {
+        if ($err = $this->authorizeInternal($request))
+            return $err;
+
+        $billing = new BillingController($this->db);
+        return $billing->retryFailedCharges($request);
+    }
+
     /* ── Daily: recommend jobs for freelancers (batch processed) ────── */
 
     #[Route('POST', '/recommend-jobs', name: 'cron.recommendJobs', summary: 'Daily: send job recommendations to freelancers', tags: ['Cron'])]
