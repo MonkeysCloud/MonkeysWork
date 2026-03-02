@@ -498,9 +498,9 @@ export default function MessagesPage() {
     /* ── Render ──────────────────────────────────────── */
     return (
         <>
-            {/* Mobile responsive styles */}
+            {/* Mobile / tablet / desktop responsive styles */}
             <style>{`
-                @media (max-width: 639px) {
+                @media (max-width: 767px) {
                     .msg-layout { flex-direction: column !important; }
                     .msg-left-panel {
                         width: 100% !important;
@@ -510,8 +510,9 @@ export default function MessagesPage() {
                     .msg-right-panel {
                         position: fixed !important;
                         inset: 0 !important;
-                        z-index: 40 !important;
+                        z-index: 50 !important;
                         width: 100% !important;
+                        background: #f8fafc !important;
                     }
                     .msg-filter-tabs {
                         overflow-x: auto !important;
@@ -520,6 +521,13 @@ export default function MessagesPage() {
                     .msg-filter-tabs button {
                         white-space: nowrap !important;
                         min-width: max-content !important;
+                    }
+                }
+                @media (min-width: 768px) and (max-width: 1023px) {
+                    .msg-left-panel {
+                        width: 320px !important;
+                        max-width: 320px !important;
+                        min-width: 320px !important;
                     }
                 }
             `}</style>
@@ -537,10 +545,10 @@ export default function MessagesPage() {
                 <div
                     className="msg-left-panel"
                     style={{
-                        width: selected ? 380 : "100%",
-                        maxWidth: selected ? 380 : 820,
-                        margin: selected ? 0 : "0 auto",
-                        borderRight: selected ? "1px solid #e2e8f0" : "none",
+                        width: (selected || (selectedConvoId && convoDetail)) ? 380 : "100%",
+                        maxWidth: (selected || (selectedConvoId && convoDetail)) ? 380 : 820,
+                        margin: (selected || (selectedConvoId && convoDetail)) ? 0 : "0 auto",
+                        borderRight: (selected || (selectedConvoId && convoDetail)) ? "1px solid #e2e8f0" : "none",
                         display: "flex",
                         flexDirection: "column",
                         transition: "all 0.3s ease",
@@ -654,6 +662,7 @@ export default function MessagesPage() {
                                 <div
                                     key={c.id}
                                     onClick={() => {
+                                        setSelectedId(null);
                                         setSelectedConvoId(c.id);
                                         fetchConvoDetail(c.id);
                                     }}
@@ -751,6 +760,7 @@ export default function MessagesPage() {
                                     <div
                                         key={`convo-${c.id}`}
                                         onClick={() => {
+                                            setSelectedId(null);
                                             setSelectedConvoId(c.id);
                                             fetchConvoDetail(c.id);
                                         }}
@@ -847,6 +857,8 @@ export default function MessagesPage() {
                                 <div
                                     key={`msg-${m.id}`}
                                     onClick={() => {
+                                        setSelectedConvoId(null);
+                                        setConvoDetail(null);
                                         setSelectedId(m.id);
                                         markRead(m);
                                     }}
@@ -968,6 +980,8 @@ export default function MessagesPage() {
                                 <div
                                     key={m.id}
                                     onClick={() => {
+                                        setSelectedConvoId(null);
+                                        setConvoDetail(null);
                                         setSelectedId(m.id);
                                         markRead(m);
                                     }}
