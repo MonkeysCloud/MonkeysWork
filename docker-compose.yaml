@@ -172,6 +172,7 @@ services:
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_51RG4ZIB6hBd009cxqOg4bBKnSbKl00rd0Hrkr1xVnDTnqESDBYn4KaJ22tjyaX45hMNJDsGdnu6AZSxxo4jFnqrL00QyR9QEvj
       NEXT_PUBLIC_GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      NEXT_PUBLIC_GA_ID: G-YY5CGPCHJM
     depends_on:
       - monkeyswork-api
       - socket-server
