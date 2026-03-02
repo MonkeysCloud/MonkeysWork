@@ -218,12 +218,12 @@ final class BillingController
 
         // Find approved timesheets not yet billed (from the last 7 days)
         $stmt = $pdo->prepare(
-            'SELECT wt.id AS timesheet_id, wt.contract_id, wt.total_hours, wt.total_amount,
+            'SELECT wt.id AS timesheet_id, wt.contract_id, wt.total_minutes, wt.total_amount,
                     c.client_id, c.freelancer_id, c.hourly_rate, c.title AS contract_title
              FROM "weeklytimesheet" wt
              JOIN "contract" c ON c.id = wt.contract_id
              WHERE wt.status = \'approved\'
-               AND wt.billed = false
+               AND wt.invoice_id IS NULL
              ORDER BY wt.week_start ASC'
         );
         $stmt->execute();
@@ -392,8 +392,8 @@ final class BillingController
                 );
 
                 // Mark timesheet as billed
-                $pdo->prepare('UPDATE "weeklytimesheet" SET billed = true, updated_at = :now WHERE id = :id')
-                    ->execute(['now' => $now, 'id' => $ts['timesheet_id']]);
+                $pdo->prepare('UPDATE "weeklytimesheet" SET invoice_id = :iid, status = \'billed\', updated_at = :now WHERE id = :id')
+                    ->execute(['iid' => $this->uuid(), 'now' => $now, 'id' => $ts['timesheet_id']]);
 
                 // Collect successful charge for summary email
                 $clientId = $ts['client_id'];
@@ -405,7 +405,7 @@ final class BillingController
                     'subtotal' => '$' . number_format((float) $ts['total_amount'], 2),
                     'fee' => '$' . $clientFee,
                     'amount' => '$' . $totalCharge,
-                    'hours' => $ts['total_hours'] . 'h',
+                    'hours' => round(((int) $ts['total_minutes']) / 60, 1) . 'h',
                 ];
                 $chargesByClient[$clientId]['total'] += (float) $totalCharge;
                 $chargesByClient[$clientId]['totalFees'] += (float) $clientFee;
@@ -524,7 +524,7 @@ final class BillingController
                          JOIN "contract" c ON c.id = wt.contract_id
                          WHERE c.freelancer_id = :uid
                            AND wt.status = \'approved\'
-                           AND wt.billed = false'
+                           AND wt.invoice_id IS NULL'
                     );
                     $unbilledStmt->execute(['uid' => $fl['id']]);
                     $unbilled = $unbilledStmt->fetchAll(\PDO::FETCH_ASSOC);
@@ -1128,7 +1128,7 @@ final class BillingController
                         c.client_id, c.title AS contract_title
                  FROM "weeklytimesheet" wt
                  JOIN "contract" c ON c.id = wt.contract_id
-                 WHERE wt.id = :id AND wt.billed = false AND wt.status = \'approved\''
+                 WHERE wt.id = :id AND wt.invoice_id IS NULL AND wt.status = \'approved\''
             );
             $stmt->execute(['id' => $timesheetId]);
             $ts = $stmt->fetch(\PDO::FETCH_ASSOC);
@@ -1223,8 +1223,8 @@ final class BillingController
                 $now
             );
 
-            $pdo->prepare('UPDATE "weeklytimesheet" SET billed = true, updated_at = :now WHERE id = :id')
-                ->execute(['now' => $now, 'id' => $timesheetId]);
+            $pdo->prepare('UPDATE "weeklytimesheet" SET invoice_id = :iid, status = \'billed\', updated_at = :now WHERE id = :id')
+                ->execute(['iid' => $this->uuid(), 'now' => $now, 'id' => $timesheetId]);
 
             // Clear any delayed payouts for the freelancer (they'll be picked up next Friday)
             $pdo->prepare(
@@ -1273,7 +1273,7 @@ final class BillingController
              JOIN "escrowtransaction" et ON et.contract_id = wt.contract_id
                 AND et.type = \'fund_failed\' AND et.status = \'failed\'
              WHERE wt.status = \'approved\'
-               AND wt.billed = false
+               AND wt.invoice_id IS NULL
                AND COALESCE(wt.retry_count, 0) < :max_retries
              ORDER BY wt.id, et.created_at ASC'
         );
@@ -1421,8 +1421,8 @@ final class BillingController
             $this->insertEscrowTransaction($pdo, $ts['contract_id'], null, 'client_fee', $clientFee, 'completed', $pi->id, $nowStr);
             $this->autoGenerateInvoice($pdo, $ts['contract_id'], $ts['total_amount'], $clientFee, $ts['contract_title'] . ' — Retry charge', $nowStr);
 
-            $pdo->prepare('UPDATE "weeklytimesheet" SET billed = true, retry_count = :rc, last_retry_at = :now, updated_at = :now WHERE id = :id')
-                ->execute(['rc' => $retryCount + 1, 'now' => $nowStr, 'id' => $ts['timesheet_id']]);
+            $pdo->prepare('UPDATE "weeklytimesheet" SET invoice_id = :iid, status = \'billed\', retry_count = :rc, last_retry_at = :now, updated_at = :now WHERE id = :id')
+                ->execute(['iid' => $this->uuid(), 'rc' => $retryCount + 1, 'now' => $nowStr, 'id' => $ts['timesheet_id']]);
 
             // Clear delayed payouts
             $pdo->prepare(
