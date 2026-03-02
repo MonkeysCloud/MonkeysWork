@@ -5,6 +5,7 @@ namespace App\Controller\Admin;
 
 use App\Controller\ApiController;
 use App\Service\GcsStorage;
+use App\Service\MonkeysMailService;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -369,6 +370,118 @@ final class AdminBlogController
     {
         $this->db->pdo()->prepare('DELETE FROM blog_tag WHERE id = :id')->execute(['id' => $id]);
         return $this->json(['message' => 'Tag deleted']);
+    }
+
+    /* ── Promote post via email ──────────────────────── */
+
+    #[Route('GET', '/{id}/promote/count', name: 'admin.blog.promote.count', summary: 'Get audience counts for promotion', tags: ['Admin', 'Blog'])]
+    public function promoteCount(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $pdo = $this->db->pdo();
+
+        $counts = [];
+        foreach (['freelancer', 'client'] as $role) {
+            $stmt = $pdo->prepare('SELECT COUNT(*) FROM "user" WHERE role = :role AND email IS NOT NULL AND email != \'\'');
+            $stmt->execute(['role' => $role]);
+            $counts[$role] = (int) $stmt->fetchColumn();
+        }
+
+        return $this->json([
+            'data' => [
+                'freelancers' => $counts['freelancer'],
+                'clients' => $counts['client'],
+                'all' => $counts['freelancer'] + $counts['client'],
+            ],
+        ]);
+    }
+
+    #[Route('POST', '/{id}/promote', name: 'admin.blog.promote', summary: 'Send promotion emails for a blog post', tags: ['Admin', 'Blog'])]
+    public function promote(ServerRequestInterface $request, string $id): JsonResponse
+    {
+        $data = $this->body($request);
+        $audience = $data['audience'] ?? 'all';
+
+        if (!in_array($audience, ['freelancers', 'clients', 'all'], true)) {
+            return $this->error('audience must be freelancers, clients, or all');
+        }
+
+        $pdo = $this->db->pdo();
+
+        // Fetch blog post
+        $stmt = $pdo->prepare('SELECT title, slug, excerpt, cover_image FROM blog_post WHERE id = :id');
+        $stmt->execute(['id' => $id]);
+        $post = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$post) {
+            return $this->notFound('Blog post');
+        }
+
+        // Build user query by audience
+        $roleFilter = match ($audience) {
+            'freelancers' => "role = 'freelancer'",
+            'clients' => "role = 'client'",
+            default => "role IN ('freelancer', 'client')",
+        };
+
+        $userStmt = $pdo->prepare(
+            "SELECT email, display_name FROM \"user\" WHERE {$roleFilter} AND email IS NOT NULL AND email != '' ORDER BY created_at"
+        );
+        $userStmt->execute();
+        $users = $userStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        if (empty($users)) {
+            return $this->json(['data' => ['sent' => 0, 'audience' => $audience, 'message' => 'No recipients found']]);
+        }
+
+        // Build email data
+        $frontendUrl = $_ENV['FRONTEND_URL'] ?? getenv('FRONTEND_URL') ?: 'https://monkeysworks.com';
+        $postUrl = "{$frontendUrl}/blog/{$post['slug']}";
+        $subject = $post['title'] . ' — MonkeysWorks Blog';
+
+        $mail = new MonkeysMailService();
+        $sent = 0;
+        $failed = 0;
+
+        // Send in batches of 50
+        $batches = array_chunk($users, 50);
+        foreach ($batches as $batch) {
+            foreach ($batch as $user) {
+                try {
+                    $ok = $mail->sendTemplate(
+                        $user['email'],
+                        $subject,
+                        'blog-promotion',
+                        [
+                            'userName' => $user['display_name'] ?? 'there',
+                            'postTitle' => $post['title'],
+                            'postExcerpt' => $post['excerpt'] ?? '',
+                            'coverImage' => $post['cover_image'] ?? '',
+                            'postUrl' => $postUrl,
+                        ],
+                        ['blog', 'promotion'],
+                    );
+                    if ($ok) {
+                        $sent++;
+                    } else {
+                        $failed++;
+                    }
+                } catch (\Throwable $e) {
+                    error_log("[AdminBlog] promote email failed for {$user['email']}: " . $e->getMessage());
+                    $failed++;
+                }
+            }
+        }
+
+        error_log("[AdminBlog] Promotion sent for post '{$post['title']}': sent={$sent}, failed={$failed}, audience={$audience}");
+
+        return $this->json([
+            'data' => [
+                'sent' => $sent,
+                'failed' => $failed,
+                'total' => count($users),
+                'audience' => $audience,
+            ],
+        ]);
     }
 
     /* ── Helpers ──────────────────────────────────────── */

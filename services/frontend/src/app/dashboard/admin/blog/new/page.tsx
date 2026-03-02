@@ -35,6 +35,13 @@ export default function BlogEditorPage() {
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(!isNew);
 
+    // Promote modal state
+    const [showPromote, setShowPromote] = useState(false);
+    const [promoteAudience, setPromoteAudience] = useState<"freelancers" | "clients" | "all">("all");
+    const [promoteCounts, setPromoteCounts] = useState<{ freelancers: number; clients: number; all: number } | null>(null);
+    const [promoting, setPromoting] = useState(false);
+    const [promoteResult, setPromoteResult] = useState<{ sent: number; failed: number } | null>(null);
+
     // Auto-generate slug from date + title
     useEffect(() => {
         if (isNew && title) {
@@ -187,6 +194,42 @@ export default function BlogEditorPage() {
         );
     };
 
+    const openPromoteModal = async () => {
+        setShowPromote(true);
+        setPromoteResult(null);
+        setPromoteAudience("all");
+        try {
+            const res = await fetch(`${API}/admin/blog/${postId}/promote/count`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const json = await res.json();
+            setPromoteCounts(json.data ?? null);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handlePromote = async () => {
+        setPromoting(true);
+        setPromoteResult(null);
+        try {
+            const res = await fetch(`${API}/admin/blog/${postId}/promote`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ audience: promoteAudience }),
+            });
+            const json = await res.json();
+            setPromoteResult(json.data ?? null);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setPromoting(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center py-20">
@@ -208,6 +251,14 @@ export default function BlogEditorPage() {
                     </p>
                 </div>
                 <div className="flex gap-2">
+                    {!isNew && (
+                        <button
+                            onClick={openPromoteModal}
+                            className="px-4 py-2 text-sm font-medium text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors"
+                        >
+                            📧 Promote
+                        </button>
+                    )}
                     <button
                         onClick={() => router.push("/dashboard/admin/blog")}
                         className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
@@ -418,6 +469,90 @@ export default function BlogEditorPage() {
                     </p>
                 </div>
             </div>
+
+            {/* Promote Modal */}
+            {showPromote && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5 animate-in fade-in">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-bold text-brand-text">📧 Promote Post</h2>
+                            <button
+                                onClick={() => setShowPromote(false)}
+                                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <p className="text-sm text-gray-500">
+                            Send a promotional email about <strong>&quot;{title}&quot;</strong> to your users.
+                        </p>
+
+                        {/* Audience selection */}
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700">Send to:</label>
+                            {(["freelancers", "clients", "all"] as const).map((opt) => (
+                                <label
+                                    key={opt}
+                                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                                        promoteAudience === opt
+                                            ? "border-brand-orange bg-brand-orange-light/20"
+                                            : "border-gray-200 hover:border-gray-300"
+                                    }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="audience"
+                                        value={opt}
+                                        checked={promoteAudience === opt}
+                                        onChange={() => setPromoteAudience(opt)}
+                                        className="accent-brand-orange"
+                                    />
+                                    <span className="text-sm font-medium text-gray-700 capitalize">{opt === "all" ? "Everyone" : opt}</span>
+                                    {promoteCounts && (
+                                        <span className="ml-auto text-xs text-gray-400">
+                                            {promoteCounts[opt]} user{promoteCounts[opt] !== 1 ? "s" : ""}
+                                        </span>
+                                    )}
+                                </label>
+                            ))}
+                        </div>
+
+                        {/* Result feedback */}
+                        {promoteResult && (
+                            <div className={`p-3 rounded-lg text-sm ${
+                                promoteResult.failed === 0
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}>
+                                ✅ Sent <strong>{promoteResult.sent}</strong> email{promoteResult.sent !== 1 ? "s" : ""}
+                                {promoteResult.failed > 0 && (
+                                    <> · <span className="text-red-600">{promoteResult.failed} failed</span></>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex gap-2 justify-end">
+                            <button
+                                onClick={() => setShowPromote(false)}
+                                className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                {promoteResult ? "Close" : "Cancel"}
+                            </button>
+                            {!promoteResult && (
+                                <button
+                                    onClick={handlePromote}
+                                    disabled={promoting}
+                                    className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                                >
+                                    {promoting ? "Sending…" : `Send to ${promoteAudience === "all" ? "everyone" : promoteAudience}`}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
