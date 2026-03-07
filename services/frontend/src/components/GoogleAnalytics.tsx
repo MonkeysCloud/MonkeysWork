@@ -80,6 +80,7 @@ export default function GoogleAnalytics() {
                             anonymize_ip: true,
                             cookie_flags: 'SameSite=None;Secure',
                         });
+                        gtag('config', 'AW-17909098681');
                     `,
                 }}
             />
