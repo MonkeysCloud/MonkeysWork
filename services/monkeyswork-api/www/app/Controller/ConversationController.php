@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Service\SocketEvent;
+use App\Service\PushNotificationService;
 use MonkeysLegion\Database\Contracts\ConnectionInterface;
 use MonkeysLegion\Http\Message\JsonResponse;
 use MonkeysLegion\Router\Attributes\Middleware;
@@ -17,13 +18,18 @@ final class ConversationController
 {
     use ApiController;
 
-    public function __construct(private ConnectionInterface $db) {}
+    public function __construct(
+        private ConnectionInterface $db,
+        private ?PushNotificationService $push = null,
+    ) {
+        $this->push ??= new PushNotificationService($db);
+    }
 
     #[Route('GET', '', name: 'conv.index', summary: 'My conversations', tags: ['Messaging'])]
     public function index(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $p      = $this->pagination($request);
+        $p = $this->pagination($request);
 
         $cnt = $this->db->pdo()->prepare(
             'SELECT COUNT(DISTINCT cp.conversation_id) FROM "conversation_participants" cp
@@ -53,13 +59,13 @@ final class ConversationController
     public function create(ServerRequestInterface $request): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         if (empty($data['participant_ids'])) {
             return $this->error('participant_ids are required');
         }
 
-        $id  = $this->uuid();
+        $id = $this->uuid();
         $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $pdo = $this->db->pdo();
@@ -69,11 +75,11 @@ final class ConversationController
                 'INSERT INTO "conversation" (id, contract_id, title, created_at, updated_at)
                  VALUES (:id, :cid, :title, :now, :now)'
             )->execute([
-                'id'    => $id,
-                'cid'   => $data['contract_id'] ?? null,
-                'title' => $data['subject'] ?? $data['title'] ?? null,
-                'now'   => $now,
-            ]);
+                        'id' => $id,
+                        'cid' => $data['contract_id'] ?? null,
+                        'title' => $data['subject'] ?? $data['title'] ?? null,
+                        'now' => $now,
+                    ]);
 
             // Add participants (including self)
             $participants = array_unique(array_merge([$userId], $data['participant_ids']));
@@ -100,7 +106,7 @@ final class ConversationController
     public function show(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $p      = $this->pagination($request, 50);
+        $p = $this->pagination($request, 50);
 
         // Verify participant
         $check = $this->db->pdo()->prepare(
@@ -148,7 +154,7 @@ final class ConversationController
     public function sendMessage(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $data   = $this->body($request);
+        $data = $this->body($request);
 
         $body = $data['body'] ?? $data['content'] ?? '';
         if (empty($body)) {
@@ -165,8 +171,8 @@ final class ConversationController
         }
 
         $msgId = $this->uuid();
-        $now   = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
-        $pdo   = $this->db->pdo();
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $pdo = $this->db->pdo();
 
         $pdo->beginTransaction();
         try {
@@ -175,14 +181,14 @@ final class ConversationController
                                         attachments, created_at)
                  VALUES (:id, :cid, :uid, :content, :type, :att, :now)'
             )->execute([
-                'id'      => $msgId,
-                'cid'     => $id,
-                'uid'     => $userId,
-                'content' => $body,
-                'type'    => $data['message_type'] ?? 'text',
-                'att'     => $attachments,
-                'now'     => $now,
-            ]);
+                        'id' => $msgId,
+                        'cid' => $id,
+                        'uid' => $userId,
+                        'content' => $body,
+                        'type' => $data['message_type'] ?? 'text',
+                        'att' => $attachments,
+                        'now' => $now,
+                    ]);
 
             // Update conversation timestamp
             $pdo->prepare(
@@ -216,19 +222,44 @@ final class ConversationController
 
             $socket = new SocketEvent($redis);
             $socket->toConversation($id, 'message:new', [
-                'id'              => $msgId,
+                'id' => $msgId,
                 'conversation_id' => $id,
-                'sender_id'       => $userId,
-                'sender_name'     => $senderName,
-                'content'         => $body,
-                'message_type'    => $data['message_type'] ?? 'text',
-                'attachments'     => json_decode($attachments, true),
-                'created_at'      => $now,
+                'sender_id' => $userId,
+                'sender_name' => $senderName,
+                'content' => $body,
+                'message_type' => $data['message_type'] ?? 'text',
+                'attachments' => json_decode($attachments, true),
+                'created_at' => $now,
             ]);
 
             $redis->close();
         } catch (\Throwable $e) {
             error_log('[ConversationController::sendMessage] socket emit: ' . $e->getMessage());
+        }
+
+        // Push FCM notifications to other participants
+        try {
+            $partStmt = $pdo->prepare(
+                'SELECT user_id FROM "conversation_participants" WHERE conversation_id = :cid AND user_id != :uid'
+            );
+            $partStmt->execute(['cid' => $id, 'uid' => $userId]);
+            $otherUserIds = array_column($partStmt->fetchAll(\PDO::FETCH_ASSOC), 'user_id');
+
+            if (!empty($otherUserIds)) {
+                $preview = mb_strlen($body) > 80 ? mb_substr($body, 0, 80) . '...' : $body;
+                $this->push->sendToUsers(
+                    $otherUserIds,
+                    "Message from {$senderName}",
+                    $preview,
+                    [
+                        'type' => 'message',
+                        'conversation_id' => $id,
+                        'sender_id' => $userId,
+                    ]
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('[ConversationController::sendMessage] push error: ' . $e->getMessage());
         }
 
         return $this->created(['data' => ['id' => $msgId]]);
@@ -238,7 +269,7 @@ final class ConversationController
     public function markRead(ServerRequestInterface $request, string $id): JsonResponse
     {
         $userId = $this->userId($request);
-        $now    = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+        $now = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         $this->db->pdo()->prepare(
             'UPDATE "conversation_participants" SET unread_count = 0, last_read_at = :now
@@ -258,9 +289,14 @@ final class ConversationController
     {
         return sprintf(
             '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
-            mt_rand(0, 0x0fff) | 0x4000, mt_rand(0, 0x3fff) | 0x8000,
-            mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0x0fff) | 0x4000,
+            mt_rand(0, 0x3fff) | 0x8000,
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff),
+            mt_rand(0, 0xffff)
         );
     }
 }
