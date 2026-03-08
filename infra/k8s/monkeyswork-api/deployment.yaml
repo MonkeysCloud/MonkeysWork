@@ -165,6 +165,8 @@ spec:
               value: MonkeysWorks
             - name: FRONTEND_URL
               value: https://monkeysworks.com
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /etc/firebase/sa-key.json
           resources:
             requests:
               cpu: 250m
@@ -187,6 +189,9 @@ spec:
           volumeMounts:
             - name: uploaded-files
               mountPath: /app/www/public/files
+            - name: firebase-sa
+              mountPath: /etc/firebase
+              readOnly: true
 
         # ── Sidecar: continuously sync local files TO GCS ──
         - name: file-sync-sidecar
@@ -213,3 +218,6 @@ spec:
       volumes:
         - name: uploaded-files
           emptyDir: {}
+        - name: firebase-sa
+          secret:
+            secretName: firebase-sa-key
