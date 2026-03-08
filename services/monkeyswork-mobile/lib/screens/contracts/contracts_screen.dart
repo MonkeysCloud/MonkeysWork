@@ -4,6 +4,7 @@ import '../../config/theme.dart';
 import '../../services/api_service.dart';
 import '../../config/api_config.dart';
 import '../../models/contract.dart';
+import 'contract_detail_screen.dart';
 
 class ContractsScreen extends StatefulWidget {
   const ContractsScreen({super.key});
@@ -188,7 +189,16 @@ class _ContractsScreenState extends State<ContractsScreen> {
                   contract: _contracts[index],
                   statusColor: _statusColor(_contracts[index].status),
                   statusBg: _statusBg(_contracts[index].status),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ContractDetailScreen(
+                          contract: _contracts[index],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

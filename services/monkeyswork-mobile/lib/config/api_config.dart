@@ -3,18 +3,26 @@ class ApiConfig {
 
   /// Base URL for the MonkeysWorks API
   /// In production, this should come from environment config
-  static const String baseUrl = 'http://localhost:8086/api/v1';
+  static const String baseUrl = 'https://api.monkeysworks.com/api/v1';
 
   // ── Auth ──
   static const String login = '/auth/login';
   static const String register = '/auth/register';
   static const String me = '/auth/me';
   static const String refreshToken = '/auth/refresh';
+  static String oauth(String provider) => '/auth/oauth/$provider';
 
   // ── Contracts ──
   static const String contracts = '/contracts';
   static String contractDetail(String id) => '/contracts/$id';
   static String contractMilestones(String id) => '/contracts/$id/milestones';
+  static String contractComplete(String id) => '/contracts/$id/complete';
+  static String contractCancel(String id) => '/contracts/$id/cancel';
+
+  // ── Milestones ──
+  static String milestoneSubmit(String id) => '/milestones/$id/submit';
+  static String milestoneAccept(String id) => '/milestones/$id/accept';
+  static String milestoneRevision(String id) => '/milestones/$id/request-revision';
 
   // ── Conversations / Messages ──
   static const String conversations = '/conversations';
@@ -33,4 +41,8 @@ class ApiConfig {
   // ── Notifications ──
   static const String notifications = '/notifications';
   static String markRead(String id) => '/notifications/$id/read';
+
+  // ── Devices ──
+  static const String deviceRegister = '/devices/register';
+  static const String deviceUnregister = '/devices/unregister';
 }

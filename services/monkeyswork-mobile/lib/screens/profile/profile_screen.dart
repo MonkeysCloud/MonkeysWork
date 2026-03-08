@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../config/theme.dart';
+import '../../services/auth_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthService>();
+    final displayName = auth.user?['display_name'] ?? 'User';
+    final userRole = auth.role;
+    final avatarUrl = auth.user?['avatar_url'] as String?;
     return Scaffold(
       backgroundColor: BrandColors.surface,
       body: CustomScrollView(
@@ -32,7 +38,9 @@ class ProfileScreen extends StatelessWidget {
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
-                      gradient: BrandColors.orangeGradient,
+                      gradient: avatarUrl == null
+                          ? BrandColors.orangeGradient
+                          : null,
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
@@ -42,12 +50,27 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.person_rounded,
+                    child: avatarUrl != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: Image.network(
+                              avatarUrl,
+                              width: 80,
+                              height: 80,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.person_rounded,
+                                size: 40,
+                                color: Colors.white,
+                              ),
+                            ),
+                          )
+                        : const Icon(Icons.person_rounded,
                         size: 40, color: Colors.white),
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'Jorge Peraza',
+                    displayName,
                     style: GoogleFonts.inter(
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
@@ -64,7 +87,7 @@ class ProfileScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      'Client',
+                      userRole[0].toUpperCase() + userRole.substring(1),
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -178,7 +201,7 @@ class ProfileScreen extends StatelessWidget {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   child: InkWell(
-                    onTap: () {},
+                    onTap: () => auth.signOut(),
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
                       padding: const EdgeInsets.all(16),

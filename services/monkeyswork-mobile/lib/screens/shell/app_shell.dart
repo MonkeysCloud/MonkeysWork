@@ -17,6 +17,8 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
+  final GlobalKey<ConversationsScreenState> _conversationsKey =
+      GlobalKey<ConversationsScreenState>();
 
   static const _tabs = [
     _TabConfig(
@@ -41,12 +43,20 @@ class _AppShellState extends State<AppShell> {
     ),
   ];
 
-  static const _screens = [
-    ContractsScreen(),
-    ConversationsScreen(),
-    ReportsScreen(),
-    ProfileScreen(),
+  late final List<Widget> _screens = [
+    const ContractsScreen(),
+    ConversationsScreen(key: _conversationsKey),
+    const ReportsScreen(),
+    const ProfileScreen(),
   ];
+
+  void _onTabChanged(int index) {
+    setState(() => _selectedIndex = index);
+    // Refresh conversations when switching to Messages tab
+    if (index == 1) {
+      _conversationsKey.currentState?.refresh();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +96,7 @@ class _AppShellState extends State<AppShell> {
                 final selected = i == _selectedIndex;
 
                 return GestureDetector(
-                  onTap: () => setState(() => _selectedIndex = i),
+                  onTap: () => _onTabChanged(i),
                   behavior: HitTestBehavior.opaque,
                   child: SizedBox(
                     width: 64,
@@ -174,8 +184,7 @@ class _AppShellState extends State<AppShell> {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: GestureDetector(
-                        onTap: () =>
-                            setState(() => _selectedIndex = i),
+                        onTap: () => _onTabChanged(i),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           width: 52,

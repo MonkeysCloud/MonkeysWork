@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "559418104290",
+    "project_id": "monkeysworks-e3145",
+    "storage_bucket": "monkeysworks-e3145.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:559418104290:android:704b691f286cee4d42c1bb",
+        "android_client_info": {
+          "package_name": "com.monkeyswork.monkeyswork_mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "559418104290-g8lqi3js9cov8ent9786p8r7afi2cs2l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAp2t0hyYr4NAjFFUjJlULP914BjASpY0s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "559418104290-g8lqi3js9cov8ent9786p8r7afi2cs2l.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "559418104290-tk38nu25vv0n2c1s5ridc6vms0sv0t3r.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.monkeyswork.monkeysworkMobile"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

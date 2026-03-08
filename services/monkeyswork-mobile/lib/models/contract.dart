@@ -13,8 +13,10 @@ class Contract {
   final String? completedAt;
   final String? cancelledAt;
   final String createdAt;
+  final String? clientId;
   final String? clientName;
   final String? clientAvatar;
+  final String? freelancerId;
   final String? freelancerName;
   final String? freelancerAvatar;
   final String? jobTitle;
@@ -36,8 +38,10 @@ class Contract {
     this.completedAt,
     this.cancelledAt,
     required this.createdAt,
+    this.clientId,
     this.clientName,
     this.clientAvatar,
+    this.freelancerId,
     this.freelancerName,
     this.freelancerAvatar,
     this.jobTitle,
@@ -61,8 +65,10 @@ class Contract {
       completedAt: json['completed_at'],
       cancelledAt: json['cancelled_at'],
       createdAt: json['created_at'] ?? '',
+      clientId: json['client_id']?.toString(),
       clientName: json['client_name'],
       clientAvatar: json['client_avatar'],
+      freelancerId: json['freelancer_id']?.toString(),
       freelancerName: json['freelancer_name'],
       freelancerAvatar: json['freelancer_avatar'],
       jobTitle: json['job_title'],

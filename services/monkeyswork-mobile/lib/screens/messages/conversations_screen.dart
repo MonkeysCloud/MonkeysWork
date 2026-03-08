@@ -4,34 +4,57 @@ import '../../config/theme.dart';
 import '../../services/api_service.dart';
 import '../../config/api_config.dart';
 import '../../models/message.dart';
+import 'chat_detail_screen.dart';
 
 class ConversationsScreen extends StatefulWidget {
   const ConversationsScreen({super.key});
 
   @override
-  State<ConversationsScreen> createState() => _ConversationsScreenState();
+  ConversationsScreenState createState() => ConversationsScreenState();
 }
 
-class _ConversationsScreenState extends State<ConversationsScreen> {
+class ConversationsScreenState extends State<ConversationsScreen>
+    with WidgetsBindingObserver {
   final ApiService _api = ApiService();
   List<Conversation> _conversations = [];
   bool _loading = true;
 
+  /// Public method to refresh conversations from outside.
+  void refresh() => _fetchConversations();
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fetchConversations();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _fetchConversations();
+    }
+  }
+
   Future<void> _fetchConversations() async {
-    setState(() => _loading = true);
+    if (!_loading) {
+      // Don't show full loading spinner on refresh, just fetch silently
+    } else {
+      setState(() => _loading = true);
+    }
     try {
       final response = await _api.get(ApiConfig.conversations);
       final items = (response.data['data'] as List?)
               ?.map((e) => Conversation.fromJson(e))
               .toList() ??
           [];
-      setState(() => _conversations = items);
+      if (mounted) setState(() => _conversations = items);
     } catch (e) {
       debugPrint('Error fetching conversations: $e');
     } finally {
@@ -155,7 +178,16 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                 return _ConversationTile(
                   conversation: conv,
                   timeAgo: _timeAgo(conv.lastMessageAt),
-                  onTap: () {},
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChatDetailScreen(conversation: conv),
+                      ),
+                    );
+                    // Refresh after returning from chat
+                    _fetchConversations();
+                  },
                 );
               },
             ),
@@ -197,28 +229,8 @@ class _ConversationTile extends StatelessWidget {
           child: Row(
             children: [
               // ── Avatar ──
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  gradient: hasUnread
-                      ? BrandColors.orangeGradient
-                      : BrandColors.darkGradient,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                  child: Text(
-                    conversation.otherPartyName.isNotEmpty
-                        ? conversation.otherPartyName[0].toUpperCase()
-                        : '?',
-                    style: GoogleFonts.inter(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
+              _buildAvatar(conversation.otherPartyName,
+                  conversation.otherPartyAvatar, hasUnread),
               const SizedBox(width: 14),
 
               // ── Name + Message ──
@@ -319,6 +331,45 @@ class _ConversationTile extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatar(String name, String? avatarUrl, bool hasUnread) {
+    if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.network(
+          avatarUrl,
+          width: 52,
+          height: 52,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _initialAvatar(name, hasUnread),
+        ),
+      );
+    }
+    return _initialAvatar(name, hasUnread);
+  }
+
+  Widget _initialAvatar(String name, bool hasUnread) {
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        gradient: hasUnread
+            ? BrandColors.orangeGradient
+            : BrandColors.darkGradient,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Center(
+        child: Text(
+          name.isNotEmpty ? name[0].toUpperCase() : '?',
+          style: GoogleFonts.inter(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
           ),
         ),
       ),
