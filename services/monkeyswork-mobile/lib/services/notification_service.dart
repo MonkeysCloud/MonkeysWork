@@ -55,13 +55,9 @@ class NotificationService {
         }
       }
 
-      // Force a token refresh during this debugging phase
-      debugPrint('[NotificationService] Deleting cached FCM token...');
-      await _messaging.deleteToken();
-      
-      // Get the fresh FCM token
+      // Get the FCM token
       final token = await _messaging.getToken();
-      debugPrint('[NotificationService] NEW FCM Token: ${token != null ? '${token.substring(0, 30)}...' : 'NULL'}');
+      debugPrint('[NotificationService] FCM Token: ${token != null ? '${token.substring(0, 30)}...' : 'NULL'}');
       _currentToken = token;
       // Don't send to backend here — user isn't authenticated yet.
       // Token will be sent after login via registerTokenWithBackend().

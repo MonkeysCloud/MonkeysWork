@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../config/api_config.dart';
 import 'notification_service.dart';
+import 'socket_service.dart';
 import 'api_service.dart';
 
 /// Manages authentication against the MonkeysWorks PHP backend.
@@ -33,6 +34,10 @@ class AuthService extends ChangeNotifier {
       final token = await _api.getToken();
       if (token != null) {
         await fetchCurrentUser();
+        // Connect Socket.IO for real-time messaging on session restore
+        if (_user != null) {
+          SocketService().connect(token);
+        }
       }
     } catch (_) {}
     _loading = false;
@@ -57,6 +62,12 @@ class AuthService extends ChangeNotifier {
 
     // Re-register FCM token with backend now that we're authenticated
     NotificationService.registerTokenWithBackend();
+
+    // Connect Socket.IO for real-time messaging
+    final token = await _api.getToken();
+    if (token != null) {
+      SocketService().connect(token);
+    }
   }
 
   // ── Email / Password ──
@@ -253,6 +264,7 @@ class AuthService extends ChangeNotifier {
   // ── Sign Out ──
 
   Future<void> signOut() async {
+    SocketService().disconnect();
     await _api.clearTokens();
     _user = null;
     notifyListeners();

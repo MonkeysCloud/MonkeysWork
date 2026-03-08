@@ -36,7 +36,7 @@ spec:
                   name: jwt-secret
                   key: secret
             - name: CORS_ORIGIN
-              value: "https://monkeysworks.com"
+              value: "https://monkeysworks.com,https://www.monkeysworks.com"
           resources:
             requests:
               cpu: 100m

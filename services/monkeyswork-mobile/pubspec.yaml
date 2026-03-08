@@ -57,6 +57,7 @@ dependencies:
   flutter_web_auth_2: ^5.0.1
   flutter_svg: ^2.2.4
   file_picker: ^10.3.10
+  socket_io_client: ^3.0.2
 
 dev_dependencies:
   flutter_test:

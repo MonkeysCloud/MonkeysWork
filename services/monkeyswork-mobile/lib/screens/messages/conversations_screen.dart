@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../config/theme.dart';
@@ -18,6 +19,7 @@ class ConversationsScreenState extends State<ConversationsScreen>
   final ApiService _api = ApiService();
   List<Conversation> _conversations = [];
   bool _loading = true;
+  Timer? _refreshTimer;
 
   /// Public method to refresh conversations from outside.
   void refresh() => _fetchConversations();
@@ -27,10 +29,16 @@ class ConversationsScreenState extends State<ConversationsScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _fetchConversations();
+    // Poll every 10 seconds for new conversations/messages
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _fetchConversations(),
+    );
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -39,6 +47,15 @@ class ConversationsScreenState extends State<ConversationsScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _fetchConversations();
+      // Restart polling timer
+      _refreshTimer?.cancel();
+      _refreshTimer = Timer.periodic(
+        const Duration(seconds: 10),
+        (_) => _fetchConversations(),
+      );
+    } else if (state == AppLifecycleState.paused) {
+      // Stop polling when app is in background
+      _refreshTimer?.cancel();
     }
   }
 

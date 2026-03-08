@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +6,7 @@ import '../../config/theme.dart';
 import '../../config/api_config.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/socket_service.dart';
 import '../../models/message.dart';
 
 class ChatDetailScreen extends StatefulWidget {
@@ -18,12 +20,14 @@ class ChatDetailScreen extends StatefulWidget {
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final ApiService _api = ApiService();
+  final SocketService _socket = SocketService();
   final TextEditingController _msgController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   List<Map<String, dynamic>> _messages = [];
   bool _loading = true;
   bool _sending = false;
   String _myUserId = '';
+  StreamSubscription<Map<String, dynamic>>? _messageSub;
 
   @override
   void initState() {
@@ -31,13 +35,42 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _myUserId = context.read<AuthService>().user?['id']?.toString() ?? '';
     _fetchMessages();
     _markRead();
+
+    // Join Socket.IO room for this conversation
+    _socket.joinConversation(widget.conversation.id);
+
+    // Listen for real-time messages
+    _messageSub = _socket.onNewMessage.listen((data) {
+      // Only add if it belongs to this conversation
+      final convId = data['conversation_id']?.toString();
+      if (convId == widget.conversation.id && mounted) {
+        setState(() {
+          _messages.add(data);
+        });
+        _scrollToBottom();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _messageSub?.cancel();
+    _socket.leaveConversation(widget.conversation.id);
     _msgController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   Future<void> _fetchMessages() async {
@@ -82,16 +115,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         data: {'body': text},
       );
       await _fetchMessages();
-      // Scroll to bottom
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+      _scrollToBottom();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

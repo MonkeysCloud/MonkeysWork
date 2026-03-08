@@ -5,6 +5,9 @@ class ApiConfig {
   /// In production, this should come from environment config
   static const String baseUrl = 'https://api.monkeysworks.com/api/v1';
 
+  /// WebSocket server URL for real-time messaging
+  static const String socketUrl = 'https://ws.monkeysworks.com';
+
   // ── Auth ──
   static const String login = '/auth/login';
   static const String register = '/auth/register';
