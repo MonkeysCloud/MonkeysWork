@@ -8,14 +8,14 @@ use MonkeysLegion\Database\Contracts\ConnectionInterface;
 /**
  * Sends push notifications via Firebase Cloud Messaging HTTP v1 API.
  *
- * Requires:
- * - GOOGLE_APPLICATION_CREDENTIALS env var pointing to the Firebase service account JSON file
- *   OR FIREBASE_SERVER_KEY env var for the legacy API.
- * - FCM_PROJECT_ID env var for the v1 API.
+ * Requires the GOOGLE_APPLICATION_CREDENTIALS_JSON env var containing
+ * the Firebase service account JSON key content.
  */
 class PushNotificationService
 {
     private ConnectionInterface $db;
+    private ?string $accessToken = null;
+    private int $tokenExpiry = 0;
 
     public function __construct(ConnectionInterface $db)
     {
@@ -60,35 +60,65 @@ class PushNotificationService
     }
 
     /**
-     * Send an FCM message using the legacy HTTP API (simpler, no OAuth).
-     * For production, consider migrating to the v1 API with service account.
+     * Send an FCM message using the v1 HTTP API with OAuth2.
      */
     private function sendFcmMessage(string $token, string $title, string $body, array $data): void
     {
-        $serverKey = getenv('FIREBASE_SERVER_KEY');
-        if (!$serverKey) {
-            error_log('[PushNotificationService] FIREBASE_SERVER_KEY not set, skipping push');
+        $saJson = $this->getServiceAccountJson();
+        if (!$saJson) {
+            error_log('[PushNotificationService] No service account credentials configured');
             return;
         }
 
+        $sa = json_decode($saJson, true);
+        if (!$sa || !isset($sa['project_id'])) {
+            error_log('[PushNotificationService] Invalid service account JSON');
+            return;
+        }
+
+        $accessToken = $this->getOAuth2Token($sa);
+        if (!$accessToken) {
+            error_log('[PushNotificationService] Failed to get OAuth2 token');
+            return;
+        }
+
+        $projectId = $sa['project_id'];
+        $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
+
+        // Convert data values to strings (FCM v1 requires string values in data)
+        $stringData = [];
+        foreach ($data as $k => $v) {
+            $stringData[$k] = (string) $v;
+        }
+
         $payload = [
-            'to' => $token,
-            'notification' => [
-                'title' => $title,
-                'body' => $body,
-                'sound' => 'default',
-                'badge' => 1,
+            'message' => [
+                'token' => $token,
+                'notification' => [
+                    'title' => $title,
+                    'body' => $body,
+                ],
+                'data' => $stringData ?: (object) [],
+                'apns' => [
+                    'headers' => [
+                        'apns-priority' => '10',
+                    ],
+                    'payload' => [
+                        'aps' => [
+                            'sound' => 'default',
+                            'badge' => 1,
+                            'content-available' => 1,
+                        ],
+                    ],
+                ],
             ],
-            'data' => $data,
-            'priority' => 'high',
-            'content_available' => true, // iOS background delivery
         ];
 
-        $ch = curl_init('https://fcm.googleapis.com/fcm/send');
+        $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => [
-                'Authorization: key=' . $serverKey,
+                'Authorization: Bearer ' . $accessToken,
                 'Content-Type: application/json',
             ],
             CURLOPT_POSTFIELDS => json_encode($payload),
@@ -101,20 +131,107 @@ class PushNotificationService
         curl_close($ch);
 
         if ($httpCode !== 200) {
-            error_log("[PushNotificationService] FCM send failed (HTTP $httpCode): $result");
-        }
+            error_log("[PushNotificationService] FCM v1 send failed (HTTP $httpCode): $result");
 
-        // Handle invalid/expired tokens
-        $decoded = json_decode($result, true);
-        if (isset($decoded['results'][0]['error'])) {
-            $error = $decoded['results'][0]['error'];
-            if (in_array($error, ['NotRegistered', 'InvalidRegistration'])) {
-                // Remove stale token
+            // Handle invalid/expired tokens
+            $decoded = json_decode($result, true);
+            $errorCode = $decoded['error']['details'][0]['errorCode'] ?? '';
+            if (in_array($errorCode, ['UNREGISTERED', 'INVALID_ARGUMENT'])) {
                 $this->db->pdo()->prepare(
                     'DELETE FROM "device_token" WHERE token = :token'
                 )->execute(['token' => $token]);
-                error_log("[PushNotificationService] Removed stale token: $error");
+                error_log("[PushNotificationService] Removed stale token: $errorCode");
             }
+        } else {
+            error_log("[PushNotificationService] Push sent OK to " . substr($token, 0, 20) . "...");
         }
+    }
+
+    /**
+     * Get the service account JSON from environment.
+     */
+    private function getServiceAccountJson(): ?string
+    {
+        // Option 1: JSON content directly in env var
+        $json = getenv('GOOGLE_APPLICATION_CREDENTIALS_JSON');
+        if ($json && $json !== '') {
+            return $json;
+        }
+
+        // Option 2: Path to file
+        $path = getenv('GOOGLE_APPLICATION_CREDENTIALS');
+        if ($path && file_exists($path)) {
+            return file_get_contents($path);
+        }
+
+        return null;
+    }
+
+    /**
+     * Generate an OAuth2 access token using the service account's private key.
+     * Uses a self-signed JWT to exchange for an access token.
+     */
+    private function getOAuth2Token(array $sa): ?string
+    {
+        // Return cached token if still valid
+        if ($this->accessToken && time() < $this->tokenExpiry - 60) {
+            return $this->accessToken;
+        }
+
+        $now = time();
+        $header = base64_encode(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+
+        $claims = [
+            'iss' => $sa['client_email'],
+            'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+            'aud' => 'https://oauth2.googleapis.com/token',
+            'iat' => $now,
+            'exp' => $now + 3600,
+        ];
+        $payload = base64_encode(json_encode($claims));
+
+        // Fix base64url encoding
+        $header = str_replace(['+', '/', '='], ['-', '_', ''], $header);
+        $payload = str_replace(['+', '/', '='], ['-', '_', ''], $payload);
+
+        $toSign = "$header.$payload";
+        $signature = '';
+
+        $privateKey = openssl_pkey_get_private($sa['private_key']);
+        if (!$privateKey) {
+            error_log('[PushNotificationService] Invalid private key in service account');
+            return null;
+        }
+        openssl_sign($toSign, $signature, $privateKey, OPENSSL_ALGO_SHA256);
+        $signature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
+
+        $jwt = "$toSign.$signature";
+
+        // Exchange JWT for access token
+        $ch = curl_init('https://oauth2.googleapis.com/token');
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query([
+                'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                'assertion' => $jwt,
+            ]),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 10,
+        ]);
+
+        $result = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200) {
+            error_log("[PushNotificationService] OAuth2 token exchange failed: $result");
+            return null;
+        }
+
+        $tokenData = json_decode($result, true);
+        $this->accessToken = $tokenData['access_token'] ?? null;
+        $this->tokenExpiry = $now + ($tokenData['expires_in'] ?? 3600);
+
+        return $this->accessToken;
     }
 }
