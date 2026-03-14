@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Encryption export compliance (no custom encryption) -->
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
+
+  <!-- App category -->
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.business</string>
+
+  <!-- Minimum macOS version -->
+  <key>LSMinimumSystemVersion</key>
+  <string>11.0</string>
+
+  <!-- Accessibility usage description (required for CGEventTap) -->
+  <key>NSAppleEventsUsageDescription</key>
+  <string>MonkeysWorks needs accessibility access to monitor your activity while working.</string>
+
+  <!-- Screen recording usage description (required for xcap) -->
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>MonkeysWorks needs screen recording access to capture screenshots of your work.</string>
+
+  <!-- Notification usage -->
+  <key>NSUserNotificationUsageDescription</key>
+  <string>MonkeysWorks sends notifications when you receive new messages.</string>
+</dict>
+</plist>
