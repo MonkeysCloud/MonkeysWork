@@ -1,0 +1,168 @@
+# Build Desktop — Tauri cross-platform builds
+# Builds macOS (signed + notarized), Windows (NSIS), and Linux (AppImage + deb)
+# Triggered on push to main when desktop code changes
+name: Build Desktop
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/desktop/**"
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: services/desktop
+
+jobs:
+  # ── macOS (universal: ARM + Intel) ────────────────────────────────────
+  build-macos:
+    name: macOS → Signed DMG
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/desktop/package-lock.json
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: services/desktop/src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Import Apple certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import certificate.p12 -k build.keychain \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+          rm certificate.p12
+
+      - name: Build macOS (aarch64)
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run tauri build -- --target aarch64-apple-darwin
+
+      - name: Build macOS (x86_64)
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run tauri build -- --target x86_64-apple-darwin
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos
+          path: |
+            services/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            services/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+
+  # ── Windows (NSIS installer) ──────────────────────────────────────────
+  build-windows:
+    name: Windows → NSIS Installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/desktop/package-lock.json
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: services/desktop/src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Windows
+        run: npm run tauri build
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: services/desktop/src-tauri/target/release/bundle/nsis/*.exe
+
+  # ── Linux (AppImage + deb) ────────────────────────────────────────────
+  build-linux:
+    name: Linux → AppImage + deb
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxcb-randr0-dev \
+            libxcb-shm0-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/desktop/package-lock.json
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: services/desktop/src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Linux
+        run: npm run tauri build
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: |
+            services/desktop/src-tauri/target/release/bundle/deb/*.deb
+            services/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
